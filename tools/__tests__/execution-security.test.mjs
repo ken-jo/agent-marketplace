@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
@@ -30,7 +30,9 @@ function write(root, path, bytes) {
   writeFileSync(join(root, path), bytes);
 }
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "marketplace-execution-"));
+  // Module imports canonicalize paths, including macOS's /var symlink.
+  // Match that spelling so CLI guards behave the same here and on Linux.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "marketplace-execution-")));
   scratch.push(root);
   for (const path of [...ARTIFACTS, ...INVENTORIES, "tools/check.mjs", "tools/repo.mjs", "tools/release.mjs", "tools/vendor.mjs"]) write(root, path, source(path));
   if (!BASELINE) write(root, "tools/verified-import.mjs", source("tools/verified-import.mjs"));
@@ -238,9 +240,11 @@ it("a successful resident build prints only its hash while child logs remain on 
     import assert from "node:assert/strict";
     import { execFileSync } from "node:child_process";
     import { readFileSync, realpathSync, statSync } from "node:fs";
-    process.argv = [process.execPath, ${JSON.stringify(join(root, "tools/release.mjs"))}, "build", "alpha", "unused.zip", "--publish"];
+    // Exercise the function API with its signed runtime and injected executor.
+    // CLI argv would execute a second build during the module import below.
     ${initialization(root, bundle)}
     const m = await import(${JSON.stringify(join(root, "tools/release.mjs"))});
+    let checkedContract = false;
     const result = await m.build("alpha", ${JSON.stringify(join(root, "alpha.zip"))}, { execute: (program, args, options) => {
       execFileSync(process.execPath, ["-e", "console.log('third-party build log')"], options);
       if (args[0] === "run") {
@@ -248,8 +252,10 @@ it("a successful resident build prints only its hash while child logs remain on 
         assert.ok(!path.startsWith(${JSON.stringify(root + "/")}));
         assert.equal(statSync(path).mode & 0o222, 0);
         assert.deepEqual(readFileSync(path), readFileSync(${JSON.stringify(join(root, "contract/public-contract.ts"))}));
+        checkedContract = true;
       }
     } });
+    assert.equal(checkedContract, true, "build must exercise the verified contract snapshot");
     console.log(result);`;
   const env = { ...process.env }; delete env.MARKETPLACE_ROOT;
   const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
