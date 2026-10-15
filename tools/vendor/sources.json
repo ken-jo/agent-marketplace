@@ -1,7 +1,8 @@
 {
-  "comment": "Pre-release pin of ken-jo/ave main for host protocol 3 (Ave 0.14.0), the same ref as contract/. The checker and agent-plugin component extractor are built from it with the recorded Bun recipe. Publication refuses this ref until it is re-synced to the annotated v0.14.0 tag with `node tools/vendor.mjs sync tools/vendor --ref v0.14.0 --app <checkout at tag>`; never edit a bundle.",
+  "comment": "Development pin of ken-jo/ave main, the same ref as contract/. The checker and agent-plugin component extractor were built from it with the recorded Bun recipe. A commit has no contract bundle, so publication refuses it. Once the v0.14.0 tag build publishes its signed bundle, `node tools/vendor.mjs sync --ref v0.14.0` replaces these bundles with its bytes; never edit a bundle.",
   "repository": "ken-jo/ave",
   "ref": "8079fca60d03397f91e5a3fe46f05334ba73a605",
+  "bundle": null,
   "files": {
     "agent-plugin-components.js": {
       "build": {

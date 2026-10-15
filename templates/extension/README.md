@@ -321,10 +321,11 @@ rule 4.
 
 ## 8. Updating the contract
 
-The contract follows ave releases. From the repository root:
+The contract follows Ave releases. From the repository root, sync both
+vendored directories from the signed contract bundle of an Ave release tag:
 
 ```bash
-node tools/vendor.mjs sync contract --ref <ave tag> --app <ave checkout>
+node tools/vendor.mjs sync --ref <ave tag>
 ```
 
 An extension that uses a member first shipped in release X sets

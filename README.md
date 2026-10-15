@@ -27,8 +27,8 @@ their first release pins merge.
 | `policy/revocations-by-app.json` | Optional. App-version-scoped revocations. |
 | `tools/withdrawn.json` | Optional. Packages taken out of the catalog whole, published versions included, each with its reason. Any other published version that leaves the index fails the checks. |
 | `templates/extension/` | Starting point for a new extension. |
-| `contract/` | The public types, manifest schema, and protocol-3 schema vendored from `ken-jo/ave` main at the commit in `contract/sources.json`, ahead of the Ave 0.14.0 tag. Re-sync to the annotated `v0.14.0` tag with `node tools/vendor.mjs sync contract --ref v0.14.0 --app <ave checkout>` before publishing. |
-| `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, bundled from the same `ken-jo/ave` commit as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. Re-sync to `v0.14.0` with `node tools/vendor.mjs sync tools/vendor --ref v0.14.0 --app <ave checkout>`. |
+| `contract/` | The public types, manifest schema, and protocol-3 schema vendored from Ave at the ref in `contract/sources.json`. Today that ref is a development commit of Ave main, ahead of the Ave 0.14.0 tag. Once the tag build publishes its signed contract bundle, `node tools/vendor.mjs sync --ref v0.14.0` replaces both vendored directories with the bundle's bytes. |
+| `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, at the same ref as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. |
 | `tools/` | Validator, index generator, release tooling, extension build helper, vendoring. |
 | `tools/import/` | The one-time conversion of the server marketplace (seed packages, field pins). Kept as a record; not run again. |
 
@@ -47,9 +47,10 @@ A merge to `main` is the publish. Nothing is signed. Users are protected by:
    Declare the host protocol of the oldest app it supports: `requires.hostProtocol: "2"`
    for `minAppVersion` 0.12.x–0.13.x, `"3"` for Ave 0.14.0 and later.
 2. After the merge, the release workflow:
-   - refuses publication until the contract and checker pin app tag `v0.12.0`,
-     the protocol-2 schema is vendored with its matching hash and identity,
-     and the vendored files verify against that tag;
+   - refuses publication until the contract and checker pin an Ave release
+     tag (the `ref` in both `sources.json` files, never a commit), the
+     protocol-3 schema for that tag is vendored, and every vendored byte
+     equals the tag's signed contract bundle (see [Contract bundle](#contract-bundle));
    - builds `<name>-<version>.zip` from the merge commit;
    - tags `<name>-v<version>` and uploads the zip to that release;
    - opens a pull request that pins the zip's sha256 in the descriptor.
@@ -63,7 +64,7 @@ publishes from a job that never runs extension code. Nothing the build job hands
 over is trusted: `release:verify`, which the pin pull request's check runs,
 holds each released `plugin.json` to the source committed at its tag, and that
 tag must point into `main`'s history. A daily run re-downloads every published
-release and rebuilds the vendored app check, so a replaced asset fails there
+release and the signed contract bundle, so a replaced asset fails there
 before an install meets it.
 
 The pin pull request is opened with the workflow's token, so the repository
@@ -90,9 +91,27 @@ refuses any other version: a new format needs an app that reads it first.
 Until the move to one file, the format-2 catalog was `marketplace.2.json` beside
 a frozen format-1 `marketplace.json`; checks against a base from before the
 move read both of that base's files as published.
-The release job verifies the annotated `refs/tags/v0.12.0` object, its checked-out
-commit, and the vendored bytes from that commit. Publication commands reject
-`MARKETPLACE_ROOT`; that override is only for tooling fixtures.
+Publication commands reject `MARKETPLACE_ROOT`; that override is only for
+tooling fixtures.
+
+### Contract bundle
+
+This repository never reads the Ave source. Ave's tag build publishes the
+files vendored here under `https://downloads.agent-connector.ai/contract/<tag>/`
+with `bundle.json`, `SHA256SUMS`, and `SHA256SUMS.sigstore.json`, a Sigstore
+keyless signature over `SHA256SUMS`. `node tools/vendor.mjs verify` (and
+`sync --ref <tag>`) downloads the bundle of the pinned tag and refuses unless:
+
+- the signature names exactly the workflow
+  `https://github.com/ken-jo/ave/.github/workflows/build-installers.yml@refs/tags/<tag>`
+  and the issuer `https://token.actions.githubusercontent.com`;
+- every file hashes to its line in `SHA256SUMS`, and `bundle.json` agrees with it;
+- every vendored file is byte-identical to the bundle's copy.
+
+The release and daily workflows run it with a cosign release pinned by
+version and sha256 (`tools/install-cosign.sh`). A commit pin has no bundle,
+so `verify` and publication refuse it; it exists only for development, synced
+from a local Ave checkout with `node tools/vendor.mjs sync <dir> --ref <commit> --app <checkout>`.
 
 Rules for the extension manifest:
 

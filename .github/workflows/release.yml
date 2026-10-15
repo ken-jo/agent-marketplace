@@ -41,25 +41,13 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - id: app-source
+      - name: Install the pinned cosign
         run: |
-          repository="$(jq -er .repository tools/vendor/sources.json)"
-          echo "repository=$repository" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ steps.app-source.outputs.repository }}
-          ref: refs/tags/v0.12.0
-          fetch-depth: 0
-          path: app
-          persist-credentials: false
-      - name: Install app dependencies for vendored checker verification
-        working-directory: app
-        run: bun install --frozen-lockfile
-      - name: Hold contract, checker and protocol schema to the app tag
-        run: node tools/vendor.mjs verify --app app --release-tag v0.12.0
+          tools/install-cosign.sh "$RUNNER_TEMP/cosign"
+          echo "$RUNNER_TEMP/cosign" >> "$GITHUB_PATH"
+      # The tag is the `ref` in sources.json; a commit pin has no bundle and is refused.
+      - name: Hold contract, checker and protocol schema to the signed Ave contract bundle
+        run: node tools/vendor.mjs verify
       - id: plan
         run: |
           set -euo pipefail

@@ -7,9 +7,10 @@ name: validate
 # with GITHUB_TOKEN does not trigger workflows, so it dispatches this one on
 # the pin branch, and the check runs are attached to that branch's head.
 #
-# The daily run re-downloads every published release and rebuilds the
-# vendored app check (design §5.6): a replaced release asset or a vendored
-# file its ref no longer produces fails here before an install meets it.
+# The daily run re-downloads every published release and the signed Ave
+# contract bundle of the pinned tag (design §5.6): a replaced release asset or
+# a vendored file that differs from the bundle fails here before an install
+# meets it. No job checks out the Ave source.
 on:
   pull_request:
   push:
@@ -175,20 +176,16 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install the pinned cosign
+        run: |
+          tools/install-cosign.sh "$RUNNER_TEMP/cosign"
+          echo "$RUNNER_TEMP/cosign" >> "$GITHUB_PATH"
+      # Fails closed while sources.json pins a development commit: only a
+      # release tag has a signed bundle.
+      - name: The vendored contract and checker are the signed Ave contract bundle's bytes
+        run: node tools/vendor.mjs verify
       - name: Every published release still hashes to its pin and matches its source
+        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/release.mjs verify --publish
-      - name: The vendored app check is what its ave commit builds
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-        run: |
-          ref="$(jq -er .ref tools/vendor/sources.json)"
-          repository="$(jq -er .repository tools/vendor/sources.json)"
-          git clone --quiet --filter=blob:none "https://github.com/${repository}.git" "$RUNNER_TEMP/ave"
-          git -C "$RUNNER_TEMP/ave" checkout --quiet "$ref"
-          (cd "$RUNNER_TEMP/ave" && bun install --frozen-lockfile --ignore-scripts)
-          node tools/vendor.mjs verify --app "$RUNNER_TEMP/ave"

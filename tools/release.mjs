@@ -4,8 +4,9 @@
  *
  *   node tools/release.mjs plan [--publish]
  *       JSON list of plugins whose source version has no <name>-v<version>
- *       tag yet. --publish holds the contract, checker and protocol schema
- *       to the app release tag before the workflow builds any release.
+ *       tag yet. --publish requires the contract, checker and protocol schema
+ *       to pin an Ave release tag (never a commit) before the workflow builds
+ *       any release; `vendor.mjs verify` holds their bytes to its signed bundle.
  *   node tools/release.mjs pack <name> <out.zip>
  *       Zip a built plugin: plugin.json and the paths its package.json
  *       `files` lists, never node_modules, source maps or credential files.
@@ -36,7 +37,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkRepository, releasedManifestsNeeded } from "./check.mjs";
-import { checkVendored } from "./vendor.mjs";
+import { checkVendored, isCommitPin, isReleaseTag } from "./vendor.mjs";
 import { DESCRIPTOR, INDEX_PATH, Ave, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson } from "./repo.mjs";
 
 const GLOB = /[*?[\]]/u;
@@ -53,10 +54,17 @@ const SENSITIVE = [
 ];
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const APP_RELEASE_TAG = "v0.12.0";
-const PROTOCOL_SCHEMA_SOURCE = "schemas/plugin-host-protocol/2/protocol.schema.json";
+/** The host protocol the vendored contract must describe; the release tag itself is `ref` in sources.json. */
+const HOST_PROTOCOL = 3;
+const PROTOCOL_SCHEMA_SOURCE = `schemas/plugin-host-protocol/${HOST_PROTOCOL}/protocol.schema.json`;
+const protocolSchemaId = (tag) => `https://ave.agent-connector.ai/schemas/plugin-host-protocol/${HOST_PROTOCOL}/${tag}/protocol.schema.json`;
+const PROTOCOL_SCHEMA_TITLE = `Ave plugin host protocol ${HOST_PROTOCOL}`;
 
-/** Offline publication prerequisites; the workflow also verifies these bytes at the app tag. */
+/**
+ * Offline publication prerequisites. The release tag is the `ref` both
+ * sources.json files pin; the workflow runs `vendor.mjs verify` first, which
+ * holds every vendored byte to that tag's signed contract bundle.
+ */
 export function publicationProblems() {
   if (process.env.MARKETPLACE_ROOT !== undefined) {
     return ["publication requires this checked-out marketplace; MARKETPLACE_ROOT is for tests only"];
@@ -64,16 +72,21 @@ export function publicationProblems() {
   const problems = [];
   const contract = readJson("contract/sources.json");
   const checker = readJson("tools/vendor/sources.json");
-  if (contract.ref !== APP_RELEASE_TAG) problems.push(`contract/sources.json: publication requires app release tag ${APP_RELEASE_TAG}, not ${contract.ref}`);
-  if (checker.ref !== APP_RELEASE_TAG) problems.push(`tools/vendor/sources.json: publication requires app release tag ${APP_RELEASE_TAG}, not ${checker.ref}`);
+  for (const [path, sources] of [["contract/sources.json", contract], ["tools/vendor/sources.json", checker]]) {
+    if (!isReleaseTag(sources.ref)) {
+      const kind = isCommitPin(sources.ref) ? "a development commit pin, which has no contract bundle" : "not an Ave release tag";
+      problems.push(`${path}: publication requires an Ave release tag with a signed contract bundle; ${sources.ref} is ${kind}`);
+    }
+  }
+  const tag = contract.ref;
   const source = contract.files?.["protocol.schema.json"];
   const manifestSchema = readJson("contract/plugin-manifest.schema.json");
   const extension = manifestSchema.properties?.extensions?.properties?.[Ave];
   if (!Object.hasOwn(extension?.properties?.requires?.properties ?? {}, "hostProtocol")) {
-    problems.push("contract/plugin-manifest.schema.json: publication requires requires.hostProtocol in the app 0.12.0 schema");
+    problems.push("contract/plugin-manifest.schema.json: publication requires requires.hostProtocol in the vendored manifest schema");
   }
   if (!Object.hasOwn(extension?.properties ?? {}, "sandbox")) {
-    problems.push("contract/plugin-manifest.schema.json: publication requires sandbox in the app 0.12.0 schema");
+    problems.push("contract/plugin-manifest.schema.json: publication requires sandbox in the vendored manifest schema");
   }
   if (source?.from !== PROTOCOL_SCHEMA_SOURCE || typeof source.sha256 !== "string") {
     problems.push(`contract/sources.json: publication requires ${PROTOCOL_SCHEMA_SOURCE} with its sha256`);
@@ -85,9 +98,8 @@ export function publicationProblems() {
       if (sha256(bytes) !== source.sha256) problems.push("contract/protocol.schema.json: bytes differ from sources.json");
       try {
         const schema = JSON.parse(bytes.toString("utf8"));
-        const expectedId = `https://former-site.invalid/schemas/plugin-host-protocol/2/${APP_RELEASE_TAG}/protocol.schema.json`;
-        if (schema.$id !== expectedId || schema.title !== "Ave plugin host protocol 2") {
-          problems.push(`contract/protocol.schema.json: expected protocol 2 schema for ${APP_RELEASE_TAG}`);
+        if (schema.$id !== protocolSchemaId(tag) || schema.title !== PROTOCOL_SCHEMA_TITLE) {
+          problems.push(`contract/protocol.schema.json: expected the protocol ${HOST_PROTOCOL} schema for ${tag} ($id ${protocolSchemaId(tag)}, title "${PROTOCOL_SCHEMA_TITLE}"), not ${JSON.stringify(schema.$id)}`);
         }
       } catch {
         problems.push("contract/protocol.schema.json: invalid JSON");
