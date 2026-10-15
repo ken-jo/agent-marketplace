@@ -1,7 +1,8 @@
 {
-  "comment": "Pre-release pin of ken-jo/ave main for host protocol 3 (Ave 0.14.0). Publication refuses this ref until it is re-synced to the annotated v0.14.0 tag with `node tools/vendor.mjs sync contract --ref v0.14.0 --app <checkout at tag>`; never edit a copy.",
+  "comment": "Development pin of ken-jo/ave main for host protocol 3 (Ave 0.14.0). A commit has no contract bundle, so publication refuses it. Once the v0.14.0 tag build publishes its signed bundle, `node tools/vendor.mjs sync --ref v0.14.0` replaces these copies with the bundle bytes; never edit a copy.",
   "repository": "ken-jo/ave",
   "ref": "8079fca60d03397f91e5a3fe46f05334ba73a605",
+  "bundle": null,
   "files": {
     "public-contract.ts": {
       "from": "src/plugins/public-contract.ts",

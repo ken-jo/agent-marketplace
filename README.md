@@ -8,11 +8,7 @@ Code packages are called **extensions** in user-facing text. Their existing
 `plugin` kind and `plugins/` paths remain unchanged. The separate `agent-plugin`
 kind contains Agent Plugins without an Ave runtime entry.
 
-This repository starts from a single public import commit. Its catalog lists
-every content package without explicit versions, so the app reads each
-descriptor at the fetched commit; the first release run pins them
-(`node tools/index.mjs --pin-versions`). Extensions become installable after
-their first release pins merge.
+This repository starts from a single public import commit. Its initial catalog lists content packages without explicit versions, so the app reads each descriptor at the fetched commit. The first release workflow's publish job runs `node tools/index.mjs --pin-versions` automatically and includes those content-version pins in the same pull request as the extension release pins. Extensions become installable when that pull request merges.
 
 ## Layout
 
@@ -27,14 +23,14 @@ their first release pins merge.
 | `policy/revocations-by-app.json` | Optional. App-version-scoped revocations. |
 | `tools/withdrawn.json` | Optional. Packages taken out of the catalog whole, published versions included, each with its reason. Any other published version that leaves the index fails the checks. |
 | `templates/extension/` | Starting point for a new extension. |
-| `contract/` | The public types, manifest schema, and protocol-3 schema vendored from `ken-jo/ave` main at the commit in `contract/sources.json`, ahead of the Ave 0.14.0 tag. Re-sync to the annotated `v0.14.0` tag with `node tools/vendor.mjs sync contract --ref v0.14.0 --app <ave checkout>` before publishing. |
-| `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, bundled from the same `ken-jo/ave` commit as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. Re-sync to `v0.14.0` with `node tools/vendor.mjs sync tools/vendor --ref v0.14.0 --app <ave checkout>`. |
+| `contract/` | The public types, manifest schema, and protocol-3 schema vendored from Ave at the ref in `contract/sources.json`. Development commit pins support review; publication requires an Ave release tag and its signed [contract bundle](#contract-bundle). |
+| `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, at the same ref as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. |
 | `tools/` | Validator, index generator, release tooling, extension build helper, vendoring. |
 | `tools/import/` | The one-time conversion of the server marketplace (seed packages, field pins). Kept as a record; not run again. |
 
 ## Publishing
 
-A merge to `main` is the publish. Nothing is signed. Users are protected by:
+A merge to `main` publishes catalog changes. Marketplace packages are unsigned; the Ave contract bundle has a separate signature gate. Users are protected by:
 
 - the review on this repository;
 - the history rule in the app, which refuses rewritten history;
@@ -47,9 +43,10 @@ A merge to `main` is the publish. Nothing is signed. Users are protected by:
    Declare the host protocol of the oldest app it supports: `requires.hostProtocol: "2"`
    for `minAppVersion` 0.12.x–0.13.x, `"3"` for Ave 0.14.0 and later.
 2. After the merge, the release workflow:
-   - refuses publication until the contract and checker pin app tag `v0.12.0`,
-     the protocol-2 schema is vendored with its matching hash and identity,
-     and the vendored files verify against that tag;
+   - refuses publication until the contract and checker pin an Ave release
+     tag (the `ref` in both `sources.json` files, never a commit), the
+     protocol-3 schema for that tag is vendored, and every vendored byte
+     equals the tag's signed contract bundle (see [Contract bundle](#contract-bundle));
    - builds `<name>-<version>.zip` from the merge commit;
    - tags `<name>-v<version>` and uploads the zip to that release;
    - opens a pull request that pins the zip's sha256 in the descriptor.
@@ -58,13 +55,11 @@ A merge to `main` is the publish. Nothing is signed. Users are protected by:
    version, and `index:check` refuses an entry whose commit is not in
    `main`'s history.
 
-The release workflow builds and tests in a job with a read-only token, and
-publishes from a job that never runs extension code. Nothing the build job hands
-over is trusted: `release:verify`, which the pin pull request's check runs,
-holds each released `plugin.json` to the source committed at its tag, and that
-tag must point into `main`'s history. A daily run re-downloads every published
-release and rebuilds the vendored app check, so a replaced asset fails there
-before an install meets it.
+The release workflow builds and tests in a job with a read-only token, and publishes from a job that never runs extension code. Each job verifies the vendored files it consumes in its own checkout. The build job runs `node tools/release.mjs build <name> <out.zip> --publish`: it verifies and loads the signed checker before running extension scripts, supplies a separate verified contract package, then checks that vendored files and inventories still match its captured bytes before packing with the already-loaded tooling.
+
+`release:verify`, which the pin pull request's check runs, holds each released `plugin.json` to the source committed at its tag, and that tag must point into `main`'s history.
+
+A daily run re-downloads every published release and the signed contract bundle, so a replaced asset fails the check. The release workflow and daily published-release check require an Ave release tag; a development commit pin blocks them.
 
 The pin pull request is opened with the workflow's token, so the repository
 must allow it: Settings → Actions → General → "Allow GitHub Actions to create
@@ -75,7 +70,7 @@ that branch by hand.
 
 If the release workflow fails after a release was created but before the pin
 branch was pushed, the tag exists and it will not rebuild that version.
-Download the asset and pin it by hand:
+Start a recovery branch from the latest `main`, download and pin the asset with the commands below, then push the branch and open a pin pull request for merging into `main`:
 
 ```
 gh release download <name>-v<version> --pattern '*.zip' --dir /tmp/rel
@@ -84,15 +79,42 @@ git commit -am "Pin <name> <version> to its release asset"
 bun run index && git commit -am "Index <name> <version>"
 ```
 
-`release.mjs pin` applies the same offline tag and schema gate. Index
-generation writes `marketplace.json` at `schemaVersion: 2`, and `validate`
-refuses any other version: a new format needs an app that reads it first.
-Until the move to one file, the format-2 catalog was `marketplace.2.json` beside
-a frozen format-1 `marketplace.json`; checks against a base from before the
-move read both of that base's files as published.
-The release job verifies the annotated `refs/tags/v0.12.0` object, its checked-out
-commit, and the vendored bytes from that commit. Publication commands reject
-`MARKETPLACE_ROOT`; that override is only for tooling fixtures.
+`release.mjs pin` requires signed bundle verification as well as the tag and schema gate. Index generation writes `marketplace.json` at `schemaVersion: 2`, and `validate` refuses any other version: a new format needs an app that reads it first. Until the move to one file, the format-2 catalog was `marketplace.2.json` beside a frozen format-1 `marketplace.json`; checks against a base from before the move read both of that base's files as published.
+
+Publication commands reject `MARKETPLACE_ROOT`; that override is only for
+tooling fixtures.
+
+### Contract bundle
+
+Release verification reads Ave's public contract bundle at `https://downloads.agent-connector.ai/contract/<tag>/`. It contains `bundle.json`, `SHA256SUMS`, and `SHA256SUMS.sigstore.json`, a Sigstore keyless signature over `SHA256SUMS`, alongside these fixed artifacts:
+
+| Bundle file | Repository destination |
+|---|---|
+| `public-contract.ts` | `contract/public-contract.ts` |
+| `plugin-manifest.schema.json` | `contract/plugin-manifest.schema.json` |
+| `protocol.schema.json` | `contract/protocol.schema.json` |
+| `marketplace-check.js` | `tools/vendor/marketplace-check.js` |
+| `agent-plugin-components.js` | `tools/vendor/agent-plugin-components.js` |
+
+The verifier owns this list independently of `sources.json`. Each inventory must contain exactly its assigned files and valid sha256 hashes. `bundle.json` must describe exactly this set; `SHA256SUMS` must list the same set plus `bundle.json`. Inventories cannot change required coverage or destinations.
+
+`node tools/vendor.mjs verify` and `node tools/vendor.mjs sync --ref <tag>` require:
+
+- a signature naming exactly `https://github.com/ken-jo/ave/.github/workflows/build-installers.yml@refs/tags/<tag>`, with issuer `https://token.actions.githubusercontent.com`;
+- every file's hash to agree with `bundle.json` and the signed `SHA256SUMS`, and its byte length to match `bundle.json`;
+- for `verify`, every vendored file and inventory hash to agree with the signed bundle.
+
+Downloads allow at most three redirects, all within HTTPS at `downloads.agent-connector.ai`. The transport rejects excessive `Content-Length` and streamed bytes before assembling the body: each artifact is limited to 8 MiB, `bundle.json` and `SHA256SUMS` to 64 KiB each, the signature to 1 MiB, and the complete download to 20 MiB including metadata.
+
+Sync validates all bytes before replacing files. It stages artifacts and final inventories on the destination filesystem, renames individual files with inventories last, and restores originals in reverse order if a replacement fails. Signed bundle sync covers both directories; checkout sync applies the same staged replacement to the selected directory. This provides rollback on a failed write; the whole set is not one crash-atomic rename.
+
+The current Ave commit pin has no contract bundle. Required PR checks use development integrity mode: they trust the sha256 values in the reviewed, committed `sources.json` files. This establishes consistency with those inventories, not signed upstream authenticity. The signature tests use fixtures; they do not establish successful cosign verification against a real published Ave bundle.
+
+Release tags always require the signed bundle, even when development mode is allowed. Repository tools import temporary modules written from the verified bytes, so the bytes checked are the bytes evaluated. The release and daily workflows require signed release trust; all consuming jobs verify locally. Workflows install cosign pinned by version and sha256 with `tools/install-cosign.sh`; tagged local checks also need cosign on `PATH`.
+
+Once Ave publishes a signed bundle for a release tag, run `node tools/vendor.mjs sync --ref <tag>`, commit the five artifacts in the table and both `sources.json` inventories, then run `bun run contract:verify` before starting the release workflow.
+
+`node tools/vendor.mjs verify` and publication reject commit pins. Development copies can be synced from a local Ave checkout with `node tools/vendor.mjs sync <dir> --ref <commit> --app <checkout>`. Run it for both `contract` and `tools/vendor` at the same commit; changes belong in Ave and arrive here through sync.
 
 Rules for the extension manifest:
 
@@ -109,13 +131,20 @@ a published version never moves to another commit.
 
 ## Checks
 
+Use a Node version allowed by [`package.json` engines](package.json) and the Bun version pinned in the [validation workflow's `env`](.github/workflows/validate.yml).
+
 ```
 bun install
-bun run release:verify -- --base origin/main   # the check CI runs: downloads releases, then runs validate's checks with them
-bun run validate          # offline: schemas, naming, limits, versions, authority, secrets
+bun run release:verify -- --base origin/main   # downloads releases, then runs validate's checks with them
+bun run validate          # schemas, naming, limits, versions, authority, secrets
 bun run index:check       # committed index equals the regenerated one
-bun run contract:check    # vendored contract and schemas match their recorded hashes
+bun run contract:check    # offline: fixed vendored files match their recorded hashes
+node tools/verified-import.mjs check --allow-development  # commit-pin integrity, or signed verification for a tag
 ```
+
+With the current development pin, `validate`, `index:check`, and ordinary `release:verify` without `--publish` use offline inventory integrity for vendored code. `release:verify` remains usable with this pin and still downloads extension release assets. `bun run release:verify -- --publish`, publication commands, and `bun run contract:verify` require an Ave release tag and its signed bundle.
+
+With a release tag, tools verify the signed bundle before importing vendored code, so even `validate` and `index:check` need network access and cosign. `contract:check` remains an offline inventory check and does not establish upstream authenticity.
 
 `release:verify` downloads the release asset of every plugin version new
 against `--base` (every pinned one without it) and holds it to its descriptor
@@ -123,12 +152,13 @@ and its tagged source. It also downloads each plugin's descriptor version
 when its `plugin.json` exists only in that asset and its descriptor declares
 `minAppVersion` of 0.11.0 or later. The repository check needs those released
 manifests even when the base already lists the version.
-`validate` runs the repository checks offline, including the supplied release
-manifests. Pass each required `plugin.json` with
-`--released <plugin>@<version>=<path>`. If any are missing, it exits with a
-copyable `node tools/release.mjs verify` command.
 
-Each extension keeps its own lockfile and is built and tested in its own
-directory: `bun install && bun run build && bun run test`. Install the build
-helper once first, `(cd tools/plugin-build && bun install)`: an extension reaches
-it through a link, and it resolves its own imports from its own directory.
+`validate` checks the repository with the supplied release manifests. Pass each required `plugin.json` with `--released <plugin>@<version>=<path>`. If any are missing, it exits with a copyable `node tools/release.mjs verify` command.
+
+Each extension keeps its own lockfile. Run its install, typecheck, build, tests, and declared manifest checks through the verified supervisor:
+
+```
+node tools/verified-import.mjs plugin plugins/<name>/source --allow-development
+```
+
+For the build helper's own typecheck and tests, run `node tools/verified-import.mjs plugin tools/plugin-build --allow-development --helper`. These commands supply a separate package containing the verified contract bytes and restore existing dependency links afterward. Omit `--allow-development` to require an Ave release tag and its signed bundle.

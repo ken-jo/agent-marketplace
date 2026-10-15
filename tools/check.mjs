@@ -18,7 +18,7 @@
  *
  *   node tools/check.mjs [--base <ref>] [--released <plugin>@<version>=<plugin.json path>]…
  *
- * Offline: a plugin version whose plugin.json lives only in its release asset
+ * A plugin version whose plugin.json lives only in its release asset
  * (see releasedManifestsNeeded) needs --released, or `release.mjs verify`,
  * which downloads each asset and runs this check with it. Without either the
  * check fails and names the versions; it never passes without them.
@@ -26,8 +26,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkMarketplaceRepository } from "./vendor/marketplace-check.js";
 import { checkVendored } from "./vendor.mjs";
+import { verifiedRuntime } from "./verified-import.mjs";
 import {
   ALERTS_RELEASE_VERSION,
   DESCRIPTOR,
@@ -49,6 +49,8 @@ import {
   withdrawnPackages,
   workingTree,
 } from "./repo.mjs";
+
+const { marketplace: { checkMarketplaceRepository } } = await verifiedRuntime();
 
 /** Fields a version may change after it is published: withdrawing it, or widening its rollout. */
 const CREDENTIALS = [
@@ -242,7 +244,7 @@ export function checkRepository({ base, releasedManifests = new Map() } = {}) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const base = option("--base");
   const releasedManifests = released();
-  // Keep this entry point offline. Replace only the pinned checker's internal
+  // This entry point does not download plugin releases. Replace only the pinned checker's internal
   // releasedManifests diagnostic; still report every other validation error.
   const unheld = releasedManifestsNeeded()
     .filter(({ name, version }) => !releasedManifests.has(`${name}@${version}`));
@@ -253,7 +255,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (unheld.length > 0) {
     const baseArg = base ? ` --base '${base.replaceAll("'", "'\\''")}'` : "";
     console.error(
-      `${unheld.map(({ name, version }) => `${name}@${version}`).join(", ")}: tools/check.mjs is offline and needs the released plugin.json files. `
+      `${unheld.map(({ name, version }) => `${name}@${version}`).join(", ")}: tools/check.mjs needs the released plugin.json files. `
       + `Run \`node tools/release.mjs verify${baseArg}\`, which downloads and re-hashes the required releases and runs this check, `
       + "or pass --released <plugin>@<version>=<plugin.json path>.",
     );
