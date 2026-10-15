@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "hicap",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "HiCap Provider",
+  "description": "Adds HiCap as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

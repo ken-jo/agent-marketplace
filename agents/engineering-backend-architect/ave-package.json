@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-backend-architect",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Backend Architect",
+  "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

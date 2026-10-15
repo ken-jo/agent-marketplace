@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "wandb",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "W&B by CoreWeave Provider",
+  "description": "Adds W&B by CoreWeave as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

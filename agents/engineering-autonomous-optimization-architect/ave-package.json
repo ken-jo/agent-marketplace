@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-autonomous-optimization-architect",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Autonomous Optimization Architect",
+  "description": "Intelligent system governor that continuously shadow-tests APIs for performance while enforcing strict financial and security guardrails against runaway costs.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "language-translator",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Language Translator",
+  "description": "Real-time Spanish English translation specialist with cultural context, regional dialect awareness, travel phrase guidance, and tone-appropriate communication for everyday, business, and emergency situations",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

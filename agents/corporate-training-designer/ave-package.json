@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "corporate-training-designer",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Corporate Training Designer",
+  "description": "Expert in enterprise training system design and curriculum development proficient in training needs analysis, instructional design methodology, blended learning program design, internal trainer development, leadership programs, and training effectiveness...",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

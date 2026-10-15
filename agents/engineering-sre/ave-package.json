@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-sre",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "SRE (Site Reliability Engineer)",
+  "description": "Expert site reliability engineer specializing in SLOs, error budgets, observability, chaos engineering, and toil reduction for production systems at scale.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

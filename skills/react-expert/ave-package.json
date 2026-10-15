@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "react-expert",
+  "version": "1.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "React Expert",
+  "description": "Use when building React 18+ applications in .jsx or .tsx files, Next.js App Router projects, or create-react-app setups. Creates components, implements custom hooks, debugs rendering issues, migrates class components to functional, and implements state...",
+  "author": {
+    "name": "Jeffallan/claude-skills",
+    "url": "https://github.com/Jeffallan/claude-skills"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jeffallan/claude-skills",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

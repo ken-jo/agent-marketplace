@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "cherry-blossom",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Cherry Blossom",
+  "description": "Light shell + cherry blossom palette + vivid interaction lines",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

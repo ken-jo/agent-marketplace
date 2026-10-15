@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "kbl-results",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "KBL Results",
+  "description": "KBL 한국프로농구 경기 결과와 현재 팀 순위를 날짜/팀 기준으로 조회한다. 공식 JSON 엔드포인트와 kbl-results npm 패키지를 사용한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/kbl-results"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/kbl-results",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

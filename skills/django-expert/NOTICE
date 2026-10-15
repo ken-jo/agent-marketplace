@@ -1,0 +1,3 @@
+Source: https://github.com/Jeffallan/claude-skills
+License: MIT, Copyright (c) 2025
+This Ave package is a compact adaptation of the public skill. It intentionally omits long references and any environment-specific configuration.

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "automation-governance-architect",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Automation Governance Architect",
+  "description": "Governance-first architect for business automations (n8n-first) who audits value, risk, and maintainability before implementation.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "specialized-workflow-architect",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Workflow Architect",
+  "description": "Workflow design specialist who maps complete workflow trees for every system, user journey, and agent interaction covering happy paths, all branch conditions, failure modes, recovery paths, handoff contracts, and observable states to produce build-ready...",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "ktx-booking",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "KTX Booking",
+  "description": "Search, reserve, inspect, and cancel KTX or Korail tickets in Korea with the korail2 + pycryptodome Python packages. Use when the user asks for KTX seats, Korail bookings, train changes, or reservation status.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/ktx-booking"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/ktx-booking",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

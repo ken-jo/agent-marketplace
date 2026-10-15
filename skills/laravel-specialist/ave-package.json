@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "laravel-specialist",
+  "version": "1.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Laravel Specialist",
+  "description": "Build and configure Laravel 10+ applications, including creating Eloquent models and relationships, implementing Sanctum authentication, configuring Horizon queues, designing RESTful APIs with API resources, and building reactive interfaces with Livewire...",
+  "author": {
+    "name": "Jeffallan/claude-skills",
+    "url": "https://github.com/Jeffallan/claude-skills"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jeffallan/claude-skills",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "vue-expert-js",
+  "version": "1.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Vue Expert Js",
+  "description": "Creates Vue 3 components, builds vanilla JS composables, configures Vite projects, and sets up routing and state management using JavaScript only no TypeScript. Generates JSDoc-typed code with @typedef, @param, and @returns annotations for full type...",
+  "author": {
+    "name": "Jeffallan/claude-skills",
+    "url": "https://github.com/Jeffallan/claude-skills"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jeffallan/claude-skills",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "cheap-gas-nearby",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Cheap Gas Nearby",
+  "description": "Use when the user asks for nearby cheapest gas stations or 근처 가장 싼 주유소. Always ask the user's current location first, then use Kakao Map anchor resolution plus official Opinet fuel-price APIs.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/cheap-gas-nearby"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/cheap-gas-nearby",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

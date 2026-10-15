@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "used-car-price-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Used Car Price Search",
+  "description": "주요 한국 렌터카 업체를 비교한 뒤 SK렌터카 다이렉트 타고BUY inventory snapshot 으로 중고차 가격/인수가를 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/used-car-price-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/used-car-price-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

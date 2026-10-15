@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "test-master",
+  "version": "1.1.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "Test Master",
+  "description": "Generates test files, creates mocking strategies, analyzes code coverage, designs test architectures, and produces test plans and defect reports across functional, performance, and security testing disciplines. Use when writing unit tests, integration...",
+  "author": {
+    "name": "Jeffallan/claude-skills",
+    "url": "https://github.com/Jeffallan/claude-skills"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jeffallan/claude-skills",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

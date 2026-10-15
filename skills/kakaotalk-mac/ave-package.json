@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "kakaotalk-mac",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "KakaoTalk Mac CLI",
+  "description": "Use kakaocli on macOS to read KakaoTalk chats, search messages, send replies after explicit confirmation, and delete sent messages with explicit operator intent.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/kakaotalk-mac"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/kakaotalk-mac",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

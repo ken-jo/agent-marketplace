@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "rhwp-edit",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "rhwp-edit",
+  "description": "Edit HWP documents — insert/delete text, replace-all, create tables, set cell text — with the k-skill-rhwp CLI that wraps the @rhwp/core WASM engine (rhwp by Edward Kim).",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/rhwp-edit"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/rhwp-edit",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

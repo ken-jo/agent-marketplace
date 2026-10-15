@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "sambanova",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "SambaNova Provider",
+  "description": "Adds SambaNova as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

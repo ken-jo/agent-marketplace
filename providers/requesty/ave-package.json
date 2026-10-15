@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "requesty",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Requesty Provider",
+  "description": "Adds Requesty as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "fine-dust-location",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Fine Dust By Location",
+  "description": "에어코리아 기반 미세먼지/초미세먼지를 지역명 또는 위치 힌트로 조회한다. 기본 경로는 k-skill-proxy의 report endpoint다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/fine-dust-location"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/fine-dust-location",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

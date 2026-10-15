@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "playwright-mcp",
+  "version": "0.0.76",
+  "minAppVersion": "0.14.0",
+  "displayName": "Playwright MCP",
+  "description": "Adds Microsoft Playwright MCP for local browser automation through a stdio subprocess. No LLM API key is required.",
+  "author": {
+    "name": "Microsoft",
+    "url": "https://github.com/microsoft/playwright-mcp"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/microsoft/playwright-mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.75"
+      ],
+      "auth": "none"
+    }
+  }
+}

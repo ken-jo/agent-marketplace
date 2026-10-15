@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "chaos-engineer",
+  "version": "1.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Chaos Engineer",
+  "description": "Designs chaos experiments, creates failure injection frameworks, and facilitates game day exercises for distributed systems producing runbooks, experiment manifests, rollback procedures, and post-mortem templates. Use when designing chaos experiments...",
+  "author": {
+    "name": "Jeffallan/claude-skills",
+    "url": "https://github.com/Jeffallan/claude-skills"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jeffallan/claude-skills",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

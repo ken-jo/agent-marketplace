@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "k-schoollunch-menu",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Korean School Lunch Menu (NEIS)",
+  "description": "Use when the user asks for Korean school meal menus (급식 식단) by natural-language education office and school name, via k-skill-proxy NEIS school-search and school-meal routes.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/k-schoollunch-menu"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/k-schoollunch-menu",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

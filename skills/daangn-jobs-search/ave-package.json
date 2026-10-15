@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "daangn-jobs-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Daangn Jobs Search",
+  "description": "당근알바 공개 웹 데이터 표면으로 키워드·지역 기반 알바 공고 검색과 상세 조회를 수행한다. 지원/채팅 자동화는 제외한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/daangn-jobs-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/daangn-jobs-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

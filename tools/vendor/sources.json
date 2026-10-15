@@ -1,0 +1,23 @@
+{
+  "comment": "Pre-release pin of ken-jo/ave main for host protocol 3 (Ave 0.14.0), the same ref as contract/. The checker and agent-plugin component extractor are built from it with the recorded Bun recipe. Publication refuses this ref until it is re-synced to the annotated v0.14.0 tag with `node tools/vendor.mjs sync tools/vendor --ref v0.14.0 --app <checkout at tag>`; never edit a bundle.",
+  "repository": "ken-jo/ave",
+  "ref": "8079fca60d03397f91e5a3fe46f05334ba73a605",
+  "files": {
+    "agent-plugin-components.js": {
+      "build": {
+        "entry": "src/marketplace/content/agent-plugin-components.ts",
+        "bun": "1.3.14",
+        "logger": "stub-app-logger"
+      },
+      "sha256": "7d23065db6a62ab1266f7501b9b8ead54b4e7d84f28774fc1281efd2b2ae55ac"
+    },
+    "marketplace-check.js": {
+      "build": {
+        "entry": "src/marketplace/repository-check.ts",
+        "bun": "1.3.14",
+        "logger": "stub-app-logger"
+      },
+      "sha256": "9a56935e2491fef7c4b065842e09b5be865994fd7057915423125d2402587d79"
+    }
+  }
+}

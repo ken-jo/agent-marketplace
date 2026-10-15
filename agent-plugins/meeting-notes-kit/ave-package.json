@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent-plugin",
+  "name": "meeting-notes-kit",
+  "displayName": "Meeting Notes Kit",
+  "description": "Reusable instructions and templates for meeting notes.",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "payload": {
+    "manifest": "plugin.json",
+    "components": {
+      "skills": [
+        {
+          "name": "meeting-notes",
+          "hasScripts": false,
+          "digest": "54ee9eeebaa091a0de8385cdabd4b51f89db9f744f07b706fb29bae8c0b449c0"
+        }
+      ],
+      "mcpServers": {},
+      "prompts": [
+        {
+          "name": "meeting-notes",
+          "kind": "template",
+          "digest": "6df6afefa9a89a3d7e4d7841351d632d1a9f52626293281a9c0163128009c67e"
+        }
+      ],
+      "agents": [],
+      "routineTemplates": [
+        {
+          "id": "weekly-notes-review",
+          "title": "Weekly meeting notes review",
+          "trigger": "schedule",
+          "execution": "llm-session",
+          "schedule": {
+            "repeat": {
+              "kind": "cron",
+              "expression": "0 18 * * 5"
+            }
+          },
+          "digest": "c3b248f3df0615608beb4d6f82630762a231e72984036c1cf381a48d19199102"
+        }
+      ],
+      "hooks": []
+    }
+  }
+}

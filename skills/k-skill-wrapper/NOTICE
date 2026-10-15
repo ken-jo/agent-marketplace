@@ -1,0 +1,10 @@
+k-skill wrapper marketplace package
+
+This Ave marketplace package provides the bundle-level catalog entry and setup
+guidance for the upstream k-skill bundle:
+
+https://github.com/NomaDamas/k-skill
+
+The upstream project is licensed under the MIT License. Individual upstream
+skills are published as separate Ave marketplace packages. This wrapper was
+updated from upstream commit 34a0928eddd21e157a19befe292f70e097fc9de3.

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-transit-route",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "korean-transit-route",
+  "description": "Korean door-to-door public transit routing (subway + bus + walking) via ODsay LIVE API with Kakao geocoding for address-to-address queries. Use when the user asks for 지하철/버스/대중교통 길찾기, 환승 경로, 소요시간, or transit directions between two places in Korea.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-transit-route"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-transit-route",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

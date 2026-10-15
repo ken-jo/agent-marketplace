@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "context-mode-mcp",
+  "version": "1.0.137",
+  "minAppVersion": "0.14.0",
+  "displayName": "Context Mode MCP",
+  "description": "Adds Context Mode for context-window optimization — sandboxes large tool output (Bash / Read / web_fetch) into an indexed cache so AI coding agents do not blow their context window.",
+  "author": {
+    "name": "mksglu",
+    "url": "https://github.com/mksglu/context-mode"
+  },
+  "license": "Elastic-2.0",
+  "homepage": "https://github.com/mksglu/context-mode",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "context-mode@1.0.136"
+      ],
+      "auth": "none"
+    }
+  }
+}

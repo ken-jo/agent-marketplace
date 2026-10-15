@@ -1,0 +1,23 @@
+{
+  "name": "@ave/plugin-hello-world",
+  "version": "0.3.0",
+  "description": "Ave extension — a hello_world tool and a sidebar panel that calls it, for checking extension install and dynamic UI load end to end.",
+  "type": "module",
+  "files": [
+    "dist",
+    "plugin.json"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@ave/plugin-build": "file:../../../tools/plugin-build",
+    "@ave/plugin-contract": "file:../../../contract",
+    "@types/node": "^26.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

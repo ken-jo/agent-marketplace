@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "gitlab-mcp",
+  "version": "2025.4.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "GitLab MCP",
+  "description": "Adds the GitLab MCP server for project, repository, issue, and merge request workflows.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-gitlab@2025.4.25"
+      ],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "",
+        "GITLAB_API_URL": "https://gitlab.com/api/v4"
+      },
+      "auth": "none"
+    }
+  }
+}

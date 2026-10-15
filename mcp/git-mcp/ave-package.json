@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "git-mcp",
+  "version": "2026.1.15",
+  "minAppVersion": "0.14.0",
+  "displayName": "Git MCP",
+  "description": "Adds the official Git MCP server for repository inspection and Git workflow automation.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-git==2026.1.14"
+      ],
+      "auth": "none"
+    }
+  }
+}

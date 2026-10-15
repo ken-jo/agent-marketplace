@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "subway-lost-property",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Subway Lost Property",
+  "description": "Use when the user asks how to look up 지하철 분실물 or 유실물 by 역명/물품명. v1 is an 안내형/하이브리드 skill that structures the official LOST112 + 서울교통공사 flow conservatively.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/subway-lost-property"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/subway-lost-property",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

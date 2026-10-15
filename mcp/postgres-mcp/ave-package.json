@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "postgres-mcp",
+  "version": "0.6.3",
+  "minAppVersion": "0.14.0",
+  "displayName": "PostgreSQL MCP",
+  "description": "Adds the official PostgreSQL MCP server for read-only schema inspection and SQL queries.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres@0.6.2",
+        "postgresql://localhost/postgres"
+      ],
+      "auth": "none"
+    }
+  }
+}

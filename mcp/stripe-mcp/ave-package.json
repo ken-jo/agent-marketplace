@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "stripe-mcp",
+  "version": "0.3.4",
+  "minAppVersion": "0.14.0",
+  "displayName": "Stripe MCP",
+  "description": "Adds Stripe's MCP server for interacting with Stripe APIs through a restricted API key.",
+  "author": {
+    "name": "Stripe",
+    "url": "https://github.com/stripe/ai/tree/main/tools/modelcontextprotocol"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/stripe/ai/tree/main/tools/modelcontextprotocol",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@stripe/mcp@0.3.3"
+      ],
+      "env": {
+        "STRIPE_SECRET_KEY": ""
+      },
+      "auth": "none"
+    }
+  }
+}

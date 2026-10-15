@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "gruvbox-dark-hard",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Gruvbox Dark Hard",
+  "description": "Dark shell + warm orange accent + retro Vim palette",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

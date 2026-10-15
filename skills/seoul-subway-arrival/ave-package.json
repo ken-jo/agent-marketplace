@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "seoul-subway-arrival",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Seoul Subway Arrival",
+  "description": "Look up Seoul real-time subway arrival information with the official Seoul Open Data API. Use when the user asks when a train arrives, which trains are approaching a station, or how crowded Seoul subway timing looks right now.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/seoul-subway-arrival"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/seoul-subway-arrival",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

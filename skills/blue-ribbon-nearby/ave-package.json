@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "blue-ribbon-nearby",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Blue Ribbon Nearby",
+  "description": "Use when the user asks for nearby restaurants or 근처 맛집 and wants 블루리본 picks. Always ask the user's current location first, then search official Blue Ribbon nearby restaurants via k-skill-proxy.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/blue-ribbon-nearby"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/blue-ribbon-nearby",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

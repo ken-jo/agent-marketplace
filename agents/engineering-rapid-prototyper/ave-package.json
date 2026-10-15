@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-rapid-prototyper",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Rapid Prototyper",
+  "description": "Specialized in ultra-fast proof-of-concept development and MVP creation using efficient tools and frameworks",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

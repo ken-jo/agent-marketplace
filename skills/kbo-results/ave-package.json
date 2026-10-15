@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "kbo-results",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "KBO Results",
+  "description": "Fetch KBO game schedules and results for a specific date with the kbo-game npm package. Use when the user asks for today's KBO games, yesterday's scores, or a date-specific scoreboard.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/kbo-results"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/kbo-results",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

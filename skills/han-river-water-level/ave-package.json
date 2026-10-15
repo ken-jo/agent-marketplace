@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "han-river-water-level",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Han River Water Level",
+  "description": "한강홍수통제소 기반 현재 수위/유량을 관측소명 또는 관측소코드로 조회한다. 기본 경로는 k-skill-proxy의 han-river water-level endpoint다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/han-river-water-level"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/han-river-water-level",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

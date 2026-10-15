@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "sh-notice-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "SH Notice Search",
+  "description": "서울주택도시개발공사(SH) 공개 공고/공지 게시판에서 청약·주택 공고 목록, 상세 본문, 첨부 미리보기 메타데이터를 직접 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/sh-notice-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/sh-notice-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

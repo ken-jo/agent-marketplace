@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "secure-code-guardian",
+  "version": "1.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Secure Code Guardian",
+  "description": "Use when implementing authentication/authorization, securing user input, or preventing OWASP Top 10 vulnerabilities including custom security implementations such as hashing passwords with bcrypt/argon2, sanitizing SQL queries with parameterized...",
+  "author": {
+    "name": "Jeffallan/claude-skills",
+    "url": "https://github.com/Jeffallan/claude-skills"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Jeffallan/claude-skills",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "legal-document-review",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Legal Document Review",
+  "description": "Comprehensive legal document review specialist for contracts, litigation documents, and real estate agreements summarizing documents, flagging risk clauses, comparing contract versions, and checking compliance across any law firm size or practice area",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "midnight",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Midnight",
+  "description": "Dark shell + magenta accent + dark code",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

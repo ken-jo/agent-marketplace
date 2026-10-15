@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-marathon-schedule",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Korean Marathon Schedule",
+  "description": "고러닝과 대한철인3종협회 공개 표면으로 한국 마라톤·철인3종 경기 일정, 장소, 신청 마감일, 종목을 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-marathon-schedule"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-marathon-schedule",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

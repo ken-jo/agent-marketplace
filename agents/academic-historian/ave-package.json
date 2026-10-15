@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "academic-historian",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Historian",
+  "description": "Expert in historical analysis, periodization, material culture, and historiography validates historical coherence and enriches settings with authentic period detail grounded in primary and secondary sources",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "flight-ticket-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Flight Ticket Search",
+  "description": "Google Flights 공개 검색 표면을 무료로 조회해 항공권 후보, 예약 검색 링크, 날짜/월/연도별 최저가·평균가 비교를 보수적으로 제공한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/flight-ticket-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/flight-ticket-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

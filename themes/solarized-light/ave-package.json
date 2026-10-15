@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "solarized-light",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Solarized Light",
+  "description": "Light shell + Solarized classic + warm beige surface",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "nous-research",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Nous Research Provider",
+  "description": "Adds Nous Research as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

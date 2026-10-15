@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "notion-mcp",
+  "version": "2.2.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "Notion MCP",
+  "description": "Adds Notion's MCP server for searching, reading, and updating Notion workspace content.",
+  "author": {
+    "name": "Notion",
+    "url": "https://github.com/makenotion/notion-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/makenotion/notion-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@notionhq/notion-mcp-server@2.2.1"
+      ],
+      "env": {
+        "NOTION_TOKEN": ""
+      },
+      "auth": "none"
+    }
+  }
+}

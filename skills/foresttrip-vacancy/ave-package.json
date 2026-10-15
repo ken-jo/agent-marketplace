@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "foresttrip-vacancy",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Foresttrip Vacancy",
+  "description": "Look up available Korean national forest recreation lodging or camping slots on foresttrip.go.kr. Use when the user asks for 숲나들e or 자연휴양림 빈 객실/빈자리 조회, not for booking.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/foresttrip-vacancy"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/foresttrip-vacancy",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

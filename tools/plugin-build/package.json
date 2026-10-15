@@ -1,0 +1,25 @@
+{
+  "name": "@ave/plugin-build",
+  "version": "0.0.0",
+  "private": true,
+  "description": "tsup preset for Ave plugins: every dependency except the host's modules is bundled into dist/.",
+  "type": "module",
+  "exports": {
+    ".": "./tsup.ts"
+  },
+  "files": [
+    "tsup.ts"
+  ],
+  "dependencies": {
+    "@ave/plugin-contract": "file:../../contract"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

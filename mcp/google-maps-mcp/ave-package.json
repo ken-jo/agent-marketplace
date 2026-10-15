@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "google-maps-mcp",
+  "version": "0.6.3",
+  "minAppVersion": "0.14.0",
+  "displayName": "Google Maps MCP",
+  "description": "Adds the official Google Maps MCP server for geocoding, places, directions, and distance data.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-maps"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/google-maps",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-google-maps@0.6.2"
+      ],
+      "env": {
+        "GOOGLE_MAPS_API_KEY": ""
+      },
+      "auth": "none"
+    }
+  }
+}

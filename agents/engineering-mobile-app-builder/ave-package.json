@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-mobile-app-builder",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Mobile App Builder",
+  "description": "Specialized mobile application developer with expertise in native iOS/Android development and cross-platform frameworks",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

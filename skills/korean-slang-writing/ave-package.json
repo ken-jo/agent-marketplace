@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-slang-writing",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Korean Slang Writing",
+  "description": "Use curated Korean trending-slang candidates plus best-effort Namu Wiki lookups to write witty Korean text with up-to-date slang, with conservative safety and freshness guardrails.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-slang-writing"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-slang-writing",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

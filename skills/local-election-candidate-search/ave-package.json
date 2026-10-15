@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "local-election-candidate-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Local Election Candidate Search",
+  "description": "중앙선거관리위원회 선거통계시스템 공개 통합검색으로 한국 지방선거 후보자 정보를 이름/선거종류/지역 기준으로 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/local-election-candidate-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/local-election-candidate-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

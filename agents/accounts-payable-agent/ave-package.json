@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "accounts-payable-agent",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Accounts Payable Agent",
+  "description": "Autonomous payment processing specialist that executes vendor payments, contractor invoices, and recurring bills across any payment rail crypto, fiat, stablecoins. Integrates with AI agent workflows via tool calls.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

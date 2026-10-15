@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "cerebras",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Cerebras Provider",
+  "description": "Adds Cerebras as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

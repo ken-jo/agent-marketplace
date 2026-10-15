@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "bunjang-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Bunjang Search",
+  "description": "번개장터 검색, 상세조회, 찜, 채팅, 대량 수집, AI TOON export를 bunjang-cli로 안내한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/bunjang-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/bunjang-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

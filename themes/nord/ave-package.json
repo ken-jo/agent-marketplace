@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "nord",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Nord",
+  "description": "Dark shell + arctic frost accents + aurora state colors",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

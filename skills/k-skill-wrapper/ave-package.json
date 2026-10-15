@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "k-skill-wrapper",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "k-skill-wrapper",
+  "description": "Overview and setup wrapper for the NomaDamas/k-skill Korean automation skill bundle; individual upstream skills are published as separate marketplace entries.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

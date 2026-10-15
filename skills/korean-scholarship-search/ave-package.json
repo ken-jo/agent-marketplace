@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-scholarship-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "장학금 검색 및 조회",
+  "description": "Search Korean scholarship announcements across official KOSAF, university, foundation, company, and public-sector sources, extract amount and eligibility, and filter results by school, income band, student level, and organization type. Users may invoke it with the phrase 장학금 검...",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-scholarship-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-scholarship-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

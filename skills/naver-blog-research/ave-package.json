@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "naver-blog-research",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "네이버 블로그 리서치",
+  "description": "Search Naver blogs, read full post content, and download images using only python3 stdlib — no API key required.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/naver-blog-research"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/naver-blog-research",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "ticket-availability",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Ticket Availability",
+  "description": "YES24 / 인터파크 공연의 공개 일정 + 등급별 잔여석을 단일 HTTP 호출로 조회 (조회 전용, 예매·결제 없음).",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/ticket-availability"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/ticket-availability",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

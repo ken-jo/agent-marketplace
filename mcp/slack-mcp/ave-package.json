@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "slack-mcp",
+  "version": "2025.4.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "Slack MCP",
+  "description": "Adds the Slack MCP server for channel discovery, messages, threads, reactions, and user profiles.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-slack@2025.4.25"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": "",
+        "SLACK_TEAM_ID": "",
+        "SLACK_CHANNEL_IDS": ""
+      },
+      "auth": "none"
+    }
+  }
+}

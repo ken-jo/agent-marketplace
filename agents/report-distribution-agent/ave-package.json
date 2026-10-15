@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "report-distribution-agent",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Report Distribution Agent",
+  "description": "AI agent that automates distribution of consolidated sales reports to representatives based on territorial parameters",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

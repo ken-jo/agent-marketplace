@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korea-weather",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Korea Weather",
+  "description": "한국 날씨를 기상청 단기예보 조회서비스와 프록시 경유로 조회해 요약한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korea-weather"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korea-weather",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

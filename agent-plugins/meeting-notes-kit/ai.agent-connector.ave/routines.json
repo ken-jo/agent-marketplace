@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "weekly-notes-review",
+      "title": "Weekly meeting notes review",
+      "description": "Review the week's meeting notes and highlight pending actions.",
+      "trigger": "schedule",
+      "schedule": {
+        "repeat": {
+          "kind": "cron",
+          "expression": "0 18 * * 5"
+        }
+      },
+      "execution": "llm-session",
+      "prePrompt": "Review meeting notes available in the current session. Summarize decisions and list unresolved action items with their stated owners and deadlines. Ask for missing context instead of guessing."
+    }
+  ]
+}

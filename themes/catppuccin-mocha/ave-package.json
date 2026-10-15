@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "catppuccin-mocha",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Catppuccin Mocha",
+  "description": "Dark shell + mauve accent + pastel aurora",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

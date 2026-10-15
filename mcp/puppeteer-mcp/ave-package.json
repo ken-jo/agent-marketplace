@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "puppeteer-mcp",
+  "version": "2025.5.13",
+  "minAppVersion": "0.14.0",
+  "displayName": "Puppeteer MCP",
+  "description": "Adds the official Puppeteer MCP server for browser automation and page inspection.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-puppeteer@2025.5.12"
+      ],
+      "auth": "none"
+    }
+  }
+}

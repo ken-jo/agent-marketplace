@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-patent-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "한국 특허 정보 검색",
+  "description": "Search Korean patent and utility-model publications through the official KIPRIS Plus Open API with keyword search plus application-number detail lookup.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-patent-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-patent-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,52 @@
+Knowledge Distillation: A Practitioner's Note
+=============================================
+
+Motivation
+----------
+Modern neural networks are powerful but expensive to deploy. A model
+that fits comfortably on a research workstation may be too slow or too
+memory-hungry for an embedded device. Knowledge distillation (Hinton,
+Vinyals, Dean, 2015) addresses this gap by training a small "student"
+network to mimic the output of a large "teacher" network.
+
+Soft Targets
+------------
+The key insight is that the teacher's output distribution carries
+information that hard labels lose. A teacher trained on ImageNet may
+assign a probability of 0.92 to "Labrador retriever" and 0.03 to
+"golden retriever" for a single image. The 0.03 implicitly encodes
+that goldens look more like Labradors than they do like trucks. By
+training the student to match this distribution, the student inherits
+that inter-class structure.
+
+To make those small probabilities visible the softmax is computed at
+temperature T > 1:
+
+    p_i = exp(z_i / T) / sum_j exp(z_j / T)
+
+Larger T flattens the distribution and exposes the relative ranking
+of the non-top classes.
+
+Loss
+----
+The student is trained with a weighted sum of two terms:
+
+    L = alpha * KL(softmax(z_s / T) || softmax(z_t / T)) * T^2
+      + (1 - alpha) * CE(softmax(z_s), y)
+
+where z_s and z_t are the student and teacher logits, y is the ground
+truth, and alpha trades off teacher imitation against task accuracy.
+The T^2 factor keeps the gradient magnitude comparable to the
+hard-label term when T is raised.
+
+Results
+-------
+Across vision and language benchmarks, students recover most of the
+teacher's accuracy at a fraction of the parameter count and inference
+cost. Modern production stacks routinely ship distilled variants of
+their flagship models on mobile and edge hardware.
+
+References
+----------
+Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge
+in a Neural Network. arXiv:1503.02531.

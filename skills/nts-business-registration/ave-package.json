@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "nts-business-registration",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "국세청 사업자등록정보 진위확인 및 상태조회",
+  "description": "국세청 사업자등록정보 진위확인 및 사업자등록 상태조회를 공공데이터포털 API(k-skill-proxy 경유)로 수행한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/nts-business-registration"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/nts-business-registration",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

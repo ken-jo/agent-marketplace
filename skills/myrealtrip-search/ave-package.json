@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "myrealtrip-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "마이리얼트립 검색",
+  "description": "마이리얼트립 공식 Streamable HTTP MCP 서버로 항공권, 숙소, 투어/티켓/액티비티를 검색하고 상세·가격·예약 링크를 확인한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/myrealtrip-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/myrealtrip-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

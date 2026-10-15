@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "supabase-mcp",
+  "version": "0.8.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "Supabase MCP",
+  "description": "Adds the Supabase MCP server for project, database, migration, branch, and log workflows.",
+  "author": {
+    "name": "Supabase Community",
+    "url": "https://github.com/supabase-community/supabase-mcp"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/supabase-community/supabase-mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@0.8.1",
+        "--read-only"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "",
+        "SUPABASE_PROJECT_REF": ""
+      },
+      "auth": "none"
+    }
+  }
+}

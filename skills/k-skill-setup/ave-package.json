@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "k-skill-setup",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "k-skill Setup",
+  "description": "After installing the full k-skill bundle, configure and verify the shared cross-platform setup, then optionally wire update checks and GitHub starring with explicit user consent.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/k-skill-setup"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/k-skill-setup",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "lotto-results",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Lotto Results",
+  "description": "Check Korean Lotto draw results, latest rounds, and ticket matches with the k-lotto npm package. Use when the user asks for winning numbers, payout details, or whether their numbers matched.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/lotto-results"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/lotto-results",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

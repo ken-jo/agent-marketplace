@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "fetch-mcp",
+  "version": "2025.4.8",
+  "minAppVersion": "0.14.0",
+  "displayName": "Fetch MCP",
+  "description": "Adds the official Fetch MCP server for retrieving web pages and converting content to markdown for agent context.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch==2025.4.7"
+      ],
+      "auth": "none"
+    }
+  }
+}

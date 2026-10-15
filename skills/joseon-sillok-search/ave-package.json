@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "joseon-sillok-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "조선왕조실록 검색",
+  "description": "Search Joseon Dynasty Annals records from the official sillok.history.go.kr site with keyword search plus optional king/year narrowing.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/joseon-sillok-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/joseon-sillok-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

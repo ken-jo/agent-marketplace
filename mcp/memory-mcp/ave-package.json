@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "memory-mcp",
+  "version": "2026.1.27",
+  "minAppVersion": "0.14.0",
+  "displayName": "Memory MCP",
+  "description": "Adds the official Memory MCP server for local knowledge-graph memory across conversations.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory@2026.1.26"
+      ],
+      "auth": "none"
+    }
+  }
+}

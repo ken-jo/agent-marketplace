@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "doubao",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Doubao Provider",
+  "description": "Adds Doubao as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

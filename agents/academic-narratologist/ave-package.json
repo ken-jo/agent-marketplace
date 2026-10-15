@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "academic-narratologist",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Narratologist",
+  "description": "Expert in narrative theory, story structure, character arcs, and literary analysis grounds advice in established frameworks from Propp to Campbell to modern narratology",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

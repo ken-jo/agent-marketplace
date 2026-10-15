@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "forest",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Forest",
+  "description": "Light shell + teal accent + light code",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

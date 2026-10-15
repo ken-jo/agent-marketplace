@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "naver-shopping-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Naver Shopping Search",
+  "description": "네이버 쇼핑 공개 BFF JSON을 k-skill-proxy로 조회해 상품 후보, 최저가, 판매처 링크를 보수적으로 가격비교한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/naver-shopping-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/naver-shopping-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

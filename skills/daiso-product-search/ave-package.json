@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "daiso-product-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Daiso Product Search",
+  "description": "Look up Daiso products by store name and product keyword using official Daiso Mall store/search/stock surfaces. Use when the user wants to know whether a product is available at a specific Daiso store.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/daiso-product-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/daiso-product-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

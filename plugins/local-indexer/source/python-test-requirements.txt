@@ -1,0 +1,11 @@
+# Test-only Python dependencies for test/*.test.py. They are not shipped: the
+# worker's runtime set is python-requirements.lock, the file package.json
+# "files" packs and the host installs. Install both into one venv:
+#
+#   uv venv --python 3.12 .venv
+#   uv pip install --python .venv -r python-requirements.lock -r python-test-requirements.txt
+#   uv run pytest test/
+pytest==9.1.1
+# FastAPI's TestClient (starlette.testclient) imports httpx. openai 3 no longer
+# installs it, and the worker itself uses httpx2, so it belongs here only.
+httpx==0.28.1

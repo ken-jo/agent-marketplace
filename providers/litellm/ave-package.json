@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "litellm",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "LiteLLM Provider",
+  "description": "Adds LiteLLM as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

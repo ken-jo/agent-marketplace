@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "daangn-realty-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Daangn Realty Search",
+  "description": "당근부동산 공개 웹 데이터 표면으로 지역 기반 부동산 매물 검색과 상세 확인을 수행한다. 문의/예약/계약 자동화는 제외한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/daangn-realty-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/daangn-realty-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

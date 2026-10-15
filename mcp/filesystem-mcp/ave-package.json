@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "filesystem-mcp",
+  "version": "2026.1.15",
+  "minAppVersion": "0.14.0",
+  "displayName": "Filesystem MCP",
+  "description": "Adds the official filesystem MCP server for controlled file and directory access.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@2026.1.14",
+        "$DATA_DIR"
+      ],
+      "auth": "none"
+    }
+  }
+}

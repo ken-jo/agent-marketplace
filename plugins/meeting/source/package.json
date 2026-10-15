@@ -1,0 +1,66 @@
+{
+  "name": "@ave/plugin-meeting",
+  "version": "0.10.0",
+  "description": "Ave meeting extension for recording, transcription, and summaries.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./host-plugin": {
+      "types": "./dist/hostPlugin.d.ts",
+      "import": "./dist/hostPlugin.js",
+      "require": "./dist/hostPlugin.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "plugin.json"
+  ],
+  "scripts": {
+    "build": "tsup && tsc -p tsconfig.build.json --emitDeclarationOnly && node scripts/copy-build-assets.mjs src/ui/meeting-control.html dist/ui/meeting-control.html && node scripts/copy-ffmpeg-vendor.mjs",
+    "clean": "node scripts/clean.mjs",
+    "install:ffmpeg:win64": "node scripts/install-ffmpeg-vendor.mjs --platform win32-x64",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run build && vitest run",
+    "dev:test": "vitest",
+    "validate:events": "node scripts/validate-events.mjs",
+    "validate:hostapi": "node scripts/validate-hostapi.mjs",
+    "install:ffmpeg": "node scripts/install-ffmpeg-vendor.mjs"
+  },
+  "keywords": [
+    "electron",
+    "stt",
+    "meeting",
+    "summary",
+    "typescript"
+  ],
+  "author": "ave",
+  "license": "MIT",
+  "peerDependencies": {
+    "electron": ">=31.0.1"
+  },
+  "peerDependenciesMeta": {
+    "electron": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@ave/plugin-build": "file:../../../tools/plugin-build",
+    "@ave/plugin-contract": "file:../../../contract",
+    "@types/node": "^26.0.0",
+    "ajv-cli": "5",
+    "ajv-formats": "3",
+    "tsup": "^8.2.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "patchedDependencies": {
+    "tsup@8.5.1": "patches/tsup@8.5.1.patch"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "comment": "Pre-release pin of ken-jo/ave main for host protocol 3 (Ave 0.14.0). Publication refuses this ref until it is re-synced to the annotated v0.14.0 tag with `node tools/vendor.mjs sync contract --ref v0.14.0 --app <checkout at tag>`; never edit a copy.",
+  "repository": "ken-jo/ave",
+  "ref": "8079fca60d03397f91e5a3fe46f05334ba73a605",
+  "files": {
+    "public-contract.ts": {
+      "from": "src/plugins/public-contract.ts",
+      "sha256": "3008ea20a57e6dfe8bda0d7b4dfbdd97aab7327b12540d9e8c6d2ffb616f0a63"
+    },
+    "plugin-manifest.schema.json": {
+      "from": "schemas/plugin-manifest.schema.json",
+      "sha256": "8014f0785336bf83b70378c03e36032adc6149622cc044ac4ae160be9ebe833d"
+    },
+    "protocol.schema.json": {
+      "from": "schemas/plugin-host-protocol/3/protocol.schema.json",
+      "sha256": "8e54512111bf6f03570438afb3337e4772b63149e9e4c60e0360115595e2aa7e"
+    }
+  }
+}

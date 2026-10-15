@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "kilo",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Kilo Gateway Provider",
+  "description": "Adds Kilo Gateway as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

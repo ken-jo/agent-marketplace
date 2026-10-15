@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "coupang-product-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Coupang Product Search",
+  "description": "retention-corp/coupang_partners의 로컬 Coupang MCP 호환 레이어로 쿠팡 상품 검색, 로켓배송 필터, 가격대 검색, 상품 비교, 베스트 상품, 골드박스 특가를 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/coupang-product-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/coupang-product-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "household-waste-info",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Household Waste Info",
+  "description": "Use when the user asks for 생활쓰레기 배출 요일/시간/장소 정보 by 지역명(시군구) and wants official data.go.kr household waste guidance.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/household-waste-info"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/household-waste-info",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

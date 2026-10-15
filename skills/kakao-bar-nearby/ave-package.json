@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "kakao-bar-nearby",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Kakao Bar Nearby",
+  "description": "Use when the user asks for nearby bars or 근처 술집. Always ask the user's current location first, then use Kakao Map search + place detail panels to find open-now bars with menu, seating, and phone hints.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/kakao-bar-nearby"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/kakao-bar-nearby",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

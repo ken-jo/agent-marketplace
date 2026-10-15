@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "agents-orchestrator",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Agents Orchestrator",
+  "description": "Autonomous pipeline manager that orchestrates the entire development workflow. You are the leader of this process.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

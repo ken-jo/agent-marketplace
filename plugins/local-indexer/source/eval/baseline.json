@@ -1,0 +1,9 @@
+{
+  "_comment": "LEXICAL-PATH baseline ONLY. Captured from a green run of eval/run_eval.py with the offline DeterministicEmbedder (NOT real embeddings) over the 118-doc / 43-query de-ceiling corpus. recall@10 and ndcg@10 measure the Kiwi + FTS5 + RRF LEXICAL path and are the regression anchors enforced by test/retrieval_eval.test.py — they do NOT measure embedding, reranker, or OCR quality (that is the nightly real-embedding job: .github/workflows/retrieval-eval-real.yml). The corpus is intentionally NOT ceiling-saturated (recall 0.7558 / ndcg 0.7117, well below 1.0) so a later real-embedding/reranker run has measurable headroom; the absolute floors in the gate (recall 0.60 / ndcg 0.55) sit below this. p95_latency_s is advisory only — the gate guards latency with an absolute hard ceiling plus a headroom-padded 2x bound (sub-millisecond baselines make a bare 2x multiplier flaky under CI jitter). Raising recall/ndcg updates this file in the same PR; never lower without sign-off.",
+  "corpus_size": 118,
+  "query_count": 43,
+  "top_k": 10,
+  "recall@10": 0.7558,
+  "ndcg@10": 0.7117,
+  "p95_latency_s": 0.004
+}

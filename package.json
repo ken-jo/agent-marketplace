@@ -1,0 +1,19 @@
+{
+  "name": "agent-marketplace",
+  "private": true,
+  "type": "module",
+  "description": "Repository tools for the official Ave marketplace. Each plugin under plugins/*/source keeps its own package.json and lockfile.",
+  "scripts": {
+    "validate": "node tools/check.mjs",
+    "index": "node tools/index.mjs",
+    "index:check": "node tools/index.mjs --check",
+    "release:verify": "node tools/release.mjs verify",
+    "contract:check": "node tools/vendor.mjs check",
+    "contract:verify": "node tools/vendor.mjs verify",
+    "contract:sync": "node tools/vendor.mjs sync",
+    "test:tools": "node --test tools/__tests__/tools.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

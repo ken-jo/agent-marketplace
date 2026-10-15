@@ -1,0 +1,591 @@
+[
+  {
+    "id": "q-ko-01",
+    "query": "연차 휴가는 며칠인가요",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-005",
+        "grade": 3
+      },
+      {
+        "doc": "ko-009",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-02",
+    "query": "비밀번호 정책 알려줘",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-014",
+        "grade": 3
+      },
+      {
+        "doc": "en-002",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-03",
+    "query": "출장비 정산 방법",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-013",
+        "grade": 3
+      },
+      {
+        "doc": "ko-010",
+        "grade": 2
+      }
+    ]
+  },
+  {
+    "id": "q-ko-04",
+    "query": "재택근무 규정",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-008",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-05",
+    "query": "보안 사고가 발생하면 어떻게 대응하나",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-017",
+        "grade": 3
+      },
+      {
+        "doc": "en-001",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-06",
+    "query": "경비 품의 절차",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-010",
+        "grade": 3
+      },
+      {
+        "doc": "ko-012",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-07",
+    "query": "VPN 원격 접속 신청",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-015",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-08",
+    "query": "채용 절차는 어떻게 되나요",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-006",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-09",
+    "query": "예산 편성 일정",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-011",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-10",
+    "query": "문서 보존 기간",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-004",
+        "grade": 3
+      },
+      {
+        "doc": "ko-001",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-11",
+    "query": "인사 평가 기준",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-007",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-12",
+    "query": "데이터 백업 주기",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-019",
+        "grade": 3
+      },
+      {
+        "doc": "en-005",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-13",
+    "query": "개인 기기로 회사 업무 사용",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-018",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-14",
+    "query": "정보 보안 등급 분류",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-016",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-15",
+    "query": "연장 근로 수당 지급",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-009",
+        "grade": 3
+      },
+      {
+        "doc": "ko-005",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-en-01",
+    "query": "password requirements policy",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-002",
+        "grade": 3
+      },
+      {
+        "doc": "ko-014",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-en-02",
+    "query": "security incident response procedure",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-001",
+        "grade": 3
+      },
+      {
+        "doc": "ko-017",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-en-03",
+    "query": "expense reimbursement report",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-004",
+        "grade": 3
+      },
+      {
+        "doc": "ko-010",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-en-04",
+    "query": "employee onboarding guide",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-003",
+        "grade": 3
+      },
+      {
+        "doc": "ko-006",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-en-05",
+    "query": "backup and disaster recovery",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-005",
+        "grade": 3
+      },
+      {
+        "doc": "ko-019",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-16",
+    "query": "회사 다니다가 아기를 낳으면 쉴 수 있는 기간",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-023",
+        "grade": 3
+      },
+      {
+        "doc": "ko-024",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-17",
+    "query": "어린 자녀를 돌보려고 장기간 쉬는 제도",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-024",
+        "grade": 3
+      },
+      {
+        "doc": "ko-023",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-18",
+    "query": "월급은 매달 언제 통장에 들어오나요",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-031",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-19",
+    "query": "회사 그만두면 받는 돈은 어떻게 계산하나",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-035",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-20",
+    "query": "로그인할 때 추가로 인증번호를 더 입력",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-041",
+        "grade": 3
+      },
+      {
+        "doc": "ko-014",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-21",
+    "query": "수상한 링크가 담긴 메일을 받았을 때",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-045",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-22",
+    "query": "파일이 암호화되고 금전을 요구하는 공격",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-044",
+        "grade": 3
+      },
+      {
+        "doc": "ko-017",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-23",
+    "query": "내 정보를 지워달라고 요청하고 싶어요",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-053",
+        "grade": 3
+      },
+      {
+        "doc": "ko-057",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-24",
+    "query": "고객 정보를 해외 서버로 보내도 되나",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-055",
+        "grade": 3
+      },
+      {
+        "doc": "ko-056",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-25",
+    "query": "새로운 거래처를 공급사로 등록하는 심사",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-060",
+        "grade": 3
+      },
+      {
+        "doc": "ko-058",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-26",
+    "query": "납품 받은 물건의 합격 여부를 확인하는 검사",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-062",
+        "grade": 3
+      },
+      {
+        "doc": "ko-089",
+        "grade": 2
+      }
+    ]
+  },
+  {
+    "id": "q-ko-27",
+    "query": "장비를 자산으로 잡고 가치 감소를 회계 처리",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-067",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-28",
+    "query": "서비스가 갑자기 멈췄을 때 복구 대응",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-099",
+        "grade": 3
+      },
+      {
+        "doc": "ko-100",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-29",
+    "query": "퇴사자의 시스템 권한을 정리하는 기준",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-101",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-30",
+    "query": "건물에 불이 나면 어디로 빠져나가나",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-073",
+        "grade": 3
+      },
+      {
+        "doc": "ko-072",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-31",
+    "query": "갓 입사한 사원에게 처음 시키는 교육",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-078",
+        "grade": 3
+      },
+      {
+        "doc": "ko-079",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-32",
+    "query": "상사의 부정행위를 몰래 알리는 창구",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-104",
+        "grade": 3
+      },
+      {
+        "doc": "ko-085",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-33",
+    "query": "거래처에서 주는 선물이나 접대를 받아도 되나",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-105",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-ko-34",
+    "query": "만든 제품에서 결함이 나왔을 때 처리",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-087",
+        "grade": 3
+      },
+      {
+        "doc": "ko-091",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-35",
+    "query": "구매한 상품을 돌려보내고 돈을 돌려받기",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-094",
+        "grade": 3
+      },
+      {
+        "doc": "ko-095",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-ko-36",
+    "query": "스캔한 영수증에서 결제 금액 확인",
+    "lang": "ko",
+    "relevant": [
+      {
+        "doc": "ko-108",
+        "grade": 3
+      }
+    ]
+  },
+  {
+    "id": "q-en-06",
+    "query": "writing a blameless review after an outage",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-006",
+        "grade": 3
+      },
+      {
+        "doc": "ko-099",
+        "grade": 1
+      }
+    ]
+  },
+  {
+    "id": "q-en-07",
+    "query": "how long do we keep records before deleting",
+    "lang": "en",
+    "relevant": [
+      {
+        "doc": "en-007",
+        "grade": 3
+      },
+      {
+        "doc": "ko-057",
+        "grade": 1
+      }
+    ]
+  }
+]

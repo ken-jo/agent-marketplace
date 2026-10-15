@@ -1,0 +1,8 @@
+lck-analytics marketplace skill package
+
+This Ave marketplace package contains the upstream `lck-analytics` skill from:
+
+https://github.com/NomaDamas/k-skill/tree/main/lck-analytics
+
+The upstream project is licensed under the MIT License. This package was copied
+from upstream commit 34a0928eddd21e157a19befe292f70e097fc9de3.

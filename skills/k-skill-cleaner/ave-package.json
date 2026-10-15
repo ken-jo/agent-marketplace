@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "k-skill-cleaner",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "k-skill-cleaner",
+  "description": "Interview the user and inspect coding-agent skill trigger counts to recommend unused K-skills for removal.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/k-skill-cleaner"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/k-skill-cleaner",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

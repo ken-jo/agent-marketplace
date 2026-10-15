@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "specialized-french-consulting-market",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "French Consulting Market Navigator",
+  "description": "Navigate the French ESN/SI freelance ecosystem margin models, platform mechanics (Malt, collective.work), portage salarial, rate positioning, and payment cycle realities",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

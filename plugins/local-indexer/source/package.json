@@ -1,0 +1,60 @@
+{
+  "name": "@ave/plugin-local-indexer",
+  "version": "0.7.0",
+  "description": "Ave desktop extension for local document indexing and retrieval.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./host-plugin": {
+      "types": "./dist/hostPlugin.d.ts",
+      "import": "./dist/hostPlugin.js"
+    }
+  },
+  "files": [
+    "dist",
+    "plugin.json",
+    "python-requirements.lock"
+  ],
+  "scripts": {
+    "setup:python": "node scripts/install-python-deps.mjs",
+    "build": "tsup && tsc --declaration --emitDeclarationOnly && node scripts/copy-build-assets.mjs src/ui/indexer-control.html dist/ui/indexer-control.html && node scripts/copy-worker.mjs",
+    "sync:dev-consumer": "node scripts/sync-dev-consumer.mjs --force",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev:test": "vitest",
+    "clean": "node scripts/clean.mjs",
+    "clean:port": "node scripts/free-worker-port.mjs",
+    "validate:events": "node scripts/validate-events.mjs",
+    "validate:hostapi": "node scripts/validate-hostapi.mjs",
+    "lock:python": "uv pip compile python-requirements.in -o python-requirements.lock --python-version 3.12"
+  },
+  "keywords": [
+    "electron",
+    "local-indexer",
+    "indexer",
+    "local-search",
+    "ave",
+    "desktop",
+    "plugin"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@ave/plugin-build": "file:../../../tools/plugin-build",
+    "@ave/plugin-contract": "file:../../../contract",
+    "@types/node": "^26.0.0",
+    "@vitest/coverage-v8": "^5.0.1",
+    "ajv-cli": "5",
+    "ajv-formats": "3",
+    "tsup": "^8.2.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0"
+  }
+}

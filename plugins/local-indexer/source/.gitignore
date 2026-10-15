@@ -1,0 +1,39 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.tsbuildinfo
+.omc/
+.claude/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 개발용 test venv
+.test-venv/
+.venv/
+.venv-eval/
+
+# 인덱서 런타임 산출물 (~/.ave 아래에 쓰이므로 repo 유입 차단)
+fts5.sqlite
+fts5.sqlite-wal
+fts5.sqlite-shm
+vectors.lance/
+
+# Retrieval eval gate — generated per-run artifact (uploaded by CI, not committed)
+eval/last_run.json
+
+# Auto Claude data directory
+.auto-claude/
+
+# Auto Claude generated files
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json
+.worktrees/
+.security-key
+logs/security/
+package-lock.json

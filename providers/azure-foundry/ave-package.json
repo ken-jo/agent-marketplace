@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "azure-foundry",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Azure AI Foundry Provider",
+  "description": "Adds Azure AI Foundry as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

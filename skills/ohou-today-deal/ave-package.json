@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "ohou-today-deal",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "오늘의집 오늘의딜 조회",
+  "description": "오늘의집 공개 오늘의딜 페이지에서 로그인 없이 특가 상품을 조회하고 할인율, 가격, 리뷰, 링크를 정리하는 읽기 전용 스킬.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/ohou-today-deal"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/ohou-today-deal",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

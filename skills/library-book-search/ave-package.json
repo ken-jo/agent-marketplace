@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "library-book-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Library Book Search (Data4Library)",
+  "description": "Use when the user asks to search Korean library books, book details, library holdings, or whether a Korean public library owns a book via k-skill-proxy Data4Library routes.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/library-book-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/library-book-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-voice-ai-integration-engineer",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Voice AI Integration Engineer",
+  "description": "Expert in building end-to-end speech transcription pipelines using Whisper-style models and cloud ASR services from raw audio ingestion through preprocessing, transcript cleanup, subtitle generation, speaker diarization, and structured downstream...",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

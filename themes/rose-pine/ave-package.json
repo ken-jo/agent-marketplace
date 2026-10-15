@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "rose-pine",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Rosé Pine",
+  "description": "Dark shell + iris accent + soft rose tones",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

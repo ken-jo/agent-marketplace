@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "meeting-notes-kit",
+  "version": "1.0.1",
+  "description": "Reusable instructions and templates for meeting notes.",
+  "extensions": {
+    "ai.agent-connector.ave": {
+      "requires": {
+        "minAppVersion": "0.14.0"
+      }
+    }
+  }
+}

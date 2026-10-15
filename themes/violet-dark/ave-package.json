@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "violet-dark",
+  "version": "1.0.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "Violet Dark",
+  "description": "Dark shell + warm-grey surface + vivid purple accent",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

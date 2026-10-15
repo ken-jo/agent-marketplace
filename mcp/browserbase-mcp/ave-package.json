@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "browserbase-mcp",
+  "version": "2.4.4",
+  "minAppVersion": "0.14.0",
+  "displayName": "Browserbase MCP",
+  "description": "Adds Browserbase's MCP server for cloud browser automation and web extraction through Stagehand.",
+  "author": {
+    "name": "Browserbase",
+    "url": "https://github.com/browserbase/mcp-server-browserbase"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/browserbase/mcp-server-browserbase",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@browserbasehq/mcp-server-browserbase@2.4.3"
+      ],
+      "env": {
+        "BROWSERBASE_API_KEY": "",
+        "BROWSERBASE_PROJECT_ID": "",
+        "GEMINI_API_KEY": ""
+      },
+      "auth": "none"
+    }
+  }
+}

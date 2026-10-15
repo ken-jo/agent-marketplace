@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "aws-kb-retrieval-mcp",
+  "version": "0.6.3",
+  "minAppVersion": "0.14.0",
+  "displayName": "AWS KB Retrieval MCP",
+  "description": "Adds the AWS Knowledge Base Retrieval MCP server for Bedrock knowledge base search.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/aws-kb-retrieval-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/aws-kb-retrieval-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-aws-kb-retrieval@0.6.2"
+      ],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
+        "AWS_REGION": ""
+      },
+      "auth": "none"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "provider",
+  "name": "qwen",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Alibaba Qwen Provider",
+  "description": "Adds Alibaba Qwen as a marketplace-installed LLM provider.",
+  "payload": {
+    "entry": "provider.json"
+  }
+}

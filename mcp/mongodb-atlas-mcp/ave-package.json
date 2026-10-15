@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "mongodb-atlas-mcp",
+  "version": "0.0.4",
+  "minAppVersion": "0.14.0",
+  "displayName": "MongoDB Atlas MCP",
+  "description": "Adds MongoDB's MCP server for Atlas project operations and MongoDB database workflows.",
+  "author": {
+    "name": "MongoDB",
+    "url": "https://github.com/mongodb-js/mongodb-mcp-server"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/mongodb-js/mongodb-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mongodb-js/mongodb-mcp-server@0.0.3"
+      ],
+      "env": {
+        "MDB_MCP_API_CLIENT_ID": "",
+        "MDB_MCP_API_CLIENT_SECRET": "",
+        "MDB_MCP_CONNECTION_STRING": ""
+      },
+      "auth": "none"
+    }
+  }
+}

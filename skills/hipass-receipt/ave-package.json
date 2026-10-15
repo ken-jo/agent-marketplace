@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "hipass-receipt",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "하이패스 영수증 발급",
+  "description": "공식 하이패스 홈페이지에서 사용자가 직접 로그인한 Chrome 세션을 재사용해 사용내역 조회와 영수증 팝업 진입을 돕는다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/hipass-receipt"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/hipass-receipt",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

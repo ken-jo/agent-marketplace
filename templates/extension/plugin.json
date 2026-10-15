@@ -1,0 +1,36 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "your-plugin-id",
+  "version": "0.2.1",
+  "description": "Ave 익스텐션 템플릿입니다. 새 익스텐션을 만들 때 id/name/description/tools를 실제 기능에 맞게 바꾸고, 각 tool은 tools 배열 안에서 사용 시기·사용하지 말아야 할 경우·입력 스키마·반환 형태를 갖춘 MCP Tool 객체로 선언하세요. 파일 인자가 있으면 해당 tool의 _meta[\"ave/pathFields\"]에 선언하세요. (category는 호스트가 직접 분류하므로 선언하지 않습니다)",
+  "extensions": {
+    "ai.agent-connector.ave": {
+      "displayName": "Your Extension Display Name",
+      "entry": "dist/index.js",
+      "tools": [],
+      "capabilities": [],
+      "ui": [],
+      "configSchema": {
+        "properties": {
+          "exampleSetting": {
+            "type": "string",
+            "title": "예시 설정",
+            "description": "익스텐션 설정 예시. 실제 익스텐션에서는 이 항목을 제거하고 실제 설정을 정의하세요.",
+            "default": ""
+          },
+          "exampleSecret": {
+            "type": "string",
+            "title": "예시 시크릿",
+            "description": "format: secret 로 선언하면 호스트가 암호화 저장소(safeStorage)에 보관합니다.",
+            "format": "secret",
+            "default": ""
+          }
+        }
+      },
+      "requires": {
+        "minAppVersion": "0.12.0",
+        "hostProtocol": "2"
+      }
+    }
+  }
+}

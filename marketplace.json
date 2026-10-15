@@ -1,0 +1,2783 @@
+{
+  "schemaVersion": 2,
+  "name": "ave",
+  "displayName": "Ave Official",
+  "description": "Official Ave marketplace index.",
+  "owner": {
+    "name": "Ave"
+  },
+  "packages": [
+    {
+      "kind": "agent-plugin",
+      "name": "meeting-notes-kit",
+      "path": "agent-plugins/meeting-notes-kit",
+      "displayName": "Meeting Notes Kit",
+      "description": "Reusable instructions and templates for meeting notes."
+    },
+    {
+      "kind": "mcp",
+      "name": "aws-kb-retrieval-mcp",
+      "path": "mcp/aws-kb-retrieval-mcp",
+      "displayName": "AWS KB Retrieval MCP",
+      "description": "Adds the AWS Knowledge Base Retrieval MCP server for Bedrock knowledge base search."
+    },
+    {
+      "kind": "mcp",
+      "name": "brave-search-mcp",
+      "path": "mcp/brave-search-mcp",
+      "displayName": "Brave Search MCP",
+      "description": "Adds the Brave Search MCP server for web and local search through the Brave Search API."
+    },
+    {
+      "kind": "mcp",
+      "name": "browserbase-mcp",
+      "path": "mcp/browserbase-mcp",
+      "displayName": "Browserbase MCP",
+      "description": "Adds Browserbase's MCP server for cloud browser automation and web extraction through Stagehand."
+    },
+    {
+      "kind": "mcp",
+      "name": "context-mode-mcp",
+      "path": "mcp/context-mode-mcp",
+      "displayName": "Context Mode MCP",
+      "description": "Adds Context Mode for context-window optimization — sandboxes large tool output (Bash / Read / web_fetch) into an indexed cache so AI coding agents do not blow their context window."
+    },
+    {
+      "kind": "mcp",
+      "name": "context7-mcp",
+      "path": "mcp/context7-mcp",
+      "displayName": "Context7 MCP",
+      "description": "Adds Context7 documentation lookup as an MCP server for current, version-specific library guidance."
+    },
+    {
+      "kind": "mcp",
+      "name": "fetch-mcp",
+      "path": "mcp/fetch-mcp",
+      "displayName": "Fetch MCP",
+      "description": "Adds the official Fetch MCP server for retrieving web pages and converting content to markdown for agent context."
+    },
+    {
+      "kind": "mcp",
+      "name": "filesystem-mcp",
+      "path": "mcp/filesystem-mcp",
+      "displayName": "Filesystem MCP",
+      "description": "Adds the official filesystem MCP server for controlled file and directory access."
+    },
+    {
+      "kind": "mcp",
+      "name": "git-mcp",
+      "path": "mcp/git-mcp",
+      "displayName": "Git MCP",
+      "description": "Adds the official Git MCP server for repository inspection and Git workflow automation."
+    },
+    {
+      "kind": "mcp",
+      "name": "github-official-mcp",
+      "path": "mcp/github-official-mcp",
+      "displayName": "GitHub Official MCP",
+      "description": "Adds GitHub's official MCP server for repository, issue, pull request, Actions, and security workflows."
+    },
+    {
+      "kind": "mcp",
+      "name": "gitlab-mcp",
+      "path": "mcp/gitlab-mcp",
+      "displayName": "GitLab MCP",
+      "description": "Adds the GitLab MCP server for project, repository, issue, and merge request workflows."
+    },
+    {
+      "kind": "mcp",
+      "name": "google-maps-mcp",
+      "path": "mcp/google-maps-mcp",
+      "displayName": "Google Maps MCP",
+      "description": "Adds the official Google Maps MCP server for geocoding, places, directions, and distance data."
+    },
+    {
+      "kind": "mcp",
+      "name": "memory-mcp",
+      "path": "mcp/memory-mcp",
+      "displayName": "Memory MCP",
+      "description": "Adds the official Memory MCP server for local knowledge-graph memory across conversations."
+    },
+    {
+      "kind": "mcp",
+      "name": "mongodb-atlas-mcp",
+      "path": "mcp/mongodb-atlas-mcp",
+      "displayName": "MongoDB Atlas MCP",
+      "description": "Adds MongoDB's MCP server for Atlas project operations and MongoDB database workflows."
+    },
+    {
+      "kind": "mcp",
+      "name": "notion-mcp",
+      "path": "mcp/notion-mcp",
+      "displayName": "Notion MCP",
+      "description": "Adds Notion's MCP server for searching, reading, and updating Notion workspace content."
+    },
+    {
+      "kind": "mcp",
+      "name": "playwright-mcp",
+      "path": "mcp/playwright-mcp",
+      "displayName": "Playwright MCP",
+      "description": "Adds Microsoft Playwright MCP for local browser automation through a stdio subprocess. No LLM API key is required."
+    },
+    {
+      "kind": "mcp",
+      "name": "postgres-mcp",
+      "path": "mcp/postgres-mcp",
+      "displayName": "PostgreSQL MCP",
+      "description": "Adds the official PostgreSQL MCP server for read-only schema inspection and SQL queries."
+    },
+    {
+      "kind": "mcp",
+      "name": "puppeteer-mcp",
+      "path": "mcp/puppeteer-mcp",
+      "displayName": "Puppeteer MCP",
+      "description": "Adds the official Puppeteer MCP server for browser automation and page inspection."
+    },
+    {
+      "kind": "mcp",
+      "name": "redis-mcp",
+      "path": "mcp/redis-mcp",
+      "displayName": "Redis MCP",
+      "description": "Adds the Redis MCP server for interacting with Redis key-value stores."
+    },
+    {
+      "kind": "mcp",
+      "name": "sequential-thinking-mcp",
+      "path": "mcp/sequential-thinking-mcp",
+      "displayName": "Sequential Thinking MCP",
+      "description": "Adds the Sequential Thinking MCP server for structured, reflective multi-step problem solving."
+    },
+    {
+      "kind": "mcp",
+      "name": "slack-mcp",
+      "path": "mcp/slack-mcp",
+      "displayName": "Slack MCP",
+      "description": "Adds the Slack MCP server for channel discovery, messages, threads, reactions, and user profiles."
+    },
+    {
+      "kind": "mcp",
+      "name": "sqlite-mcp",
+      "path": "mcp/sqlite-mcp",
+      "displayName": "SQLite MCP",
+      "description": "Adds the official SQLite MCP server for local database querying and analysis."
+    },
+    {
+      "kind": "mcp",
+      "name": "stripe-mcp",
+      "path": "mcp/stripe-mcp",
+      "displayName": "Stripe MCP",
+      "description": "Adds Stripe's MCP server for interacting with Stripe APIs through a restricted API key."
+    },
+    {
+      "kind": "mcp",
+      "name": "supabase-mcp",
+      "path": "mcp/supabase-mcp",
+      "displayName": "Supabase MCP",
+      "description": "Adds the Supabase MCP server for project, database, migration, branch, and log workflows."
+    },
+    {
+      "kind": "skill",
+      "name": "angular-architect",
+      "path": "skills/angular-architect",
+      "displayName": "Angular Architect",
+      "description": "Generates Angular 17+ standalone components, configures advanced routing with lazy loading and guards, implements NgRx state management, applies RxJS patterns, and optimizes bundle performance. Use when building Angular 17+ applications with standalone..."
+    },
+    {
+      "kind": "skill",
+      "name": "api-designer",
+      "path": "skills/api-designer",
+      "displayName": "Api Designer",
+      "description": "Use when designing REST or GraphQL APIs, creating OpenAPI specifications, or planning API architecture. Invoke for resource modeling, versioning strategies, pagination patterns, error handling standards."
+    },
+    {
+      "kind": "skill",
+      "name": "architecture-designer",
+      "path": "skills/architecture-designer",
+      "displayName": "Architecture Designer",
+      "description": "Use when designing new high-level system architecture, reviewing existing designs, or making architectural decisions. Invoke to create architecture diagrams, write Architecture Decision Records (ADRs), evaluate technology trade-offs, design component..."
+    },
+    {
+      "kind": "skill",
+      "name": "atlassian-mcp",
+      "path": "skills/atlassian-mcp",
+      "displayName": "Atlassian Mcp",
+      "description": "Integrates with Atlassian products to manage project tracking and documentation via MCP protocol. Use when querying Jira issues with JQL filters, creating and updating tickets with custom fields, searching or editing Confluence pages with CQL, managing..."
+    },
+    {
+      "kind": "skill",
+      "name": "blue-ribbon-nearby",
+      "path": "skills/blue-ribbon-nearby",
+      "displayName": "Blue Ribbon Nearby",
+      "description": "Use when the user asks for nearby restaurants or 근처 맛집 and wants 블루리본 picks. Always ask the user's current location first, then search official Blue Ribbon nearby restaurants via k-skill-proxy."
+    },
+    {
+      "kind": "skill",
+      "name": "bunjang-search",
+      "path": "skills/bunjang-search",
+      "displayName": "Bunjang Search",
+      "description": "번개장터 검색, 상세조회, 찜, 채팅, 대량 수집, AI TOON export를 bunjang-cli로 안내한다."
+    },
+    {
+      "kind": "skill",
+      "name": "catchtable-sniper",
+      "path": "skills/catchtable-sniper",
+      "displayName": "catchtable-sniper",
+      "description": "Monitor Catchtable for open reservation slots and attempt booking using a logged-in Chrome session."
+    },
+    {
+      "kind": "skill",
+      "name": "chaos-engineer",
+      "path": "skills/chaos-engineer",
+      "displayName": "Chaos Engineer",
+      "description": "Designs chaos experiments, creates failure injection frameworks, and facilitates game day exercises for distributed systems producing runbooks, experiment manifests, rollback procedures, and post-mortem templates. Use when designing chaos experiments..."
+    },
+    {
+      "kind": "skill",
+      "name": "cheap-gas-nearby",
+      "path": "skills/cheap-gas-nearby",
+      "displayName": "Cheap Gas Nearby",
+      "description": "Use when the user asks for nearby cheapest gas stations or 근처 가장 싼 주유소. Always ask the user's current location first, then use Kakao Map anchor resolution plus official Opinet fuel-price APIs."
+    },
+    {
+      "kind": "skill",
+      "name": "cli-developer",
+      "path": "skills/cli-developer",
+      "displayName": "Cli Developer",
+      "description": "Use when building CLI tools, implementing argument parsing, or adding interactive prompts. Invoke for parsing flags and subcommands, displaying progress bars and spinners, generating bash/zsh/fish completion scripts, CLI design, shell completions, and..."
+    },
+    {
+      "kind": "skill",
+      "name": "cloud-architect",
+      "path": "skills/cloud-architect",
+      "displayName": "Cloud Architect",
+      "description": "Designs cloud architectures, creates migration plans, generates cost optimization recommendations, and produces disaster recovery strategies across AWS, Azure, and GCP. Use when designing cloud architectures, planning migrations, or optimizing multi-cloud..."
+    },
+    {
+      "kind": "skill",
+      "name": "code-documenter",
+      "path": "skills/code-documenter",
+      "displayName": "Code Documenter",
+      "description": "Generates, formats, and validates technical documentation including docstrings, OpenAPI/Swagger specs, JSDoc annotations, doc portals, and user guides. Use when adding docstrings to functions or classes, creating API documentation, building documentation..."
+    },
+    {
+      "kind": "skill",
+      "name": "code-reviewer",
+      "path": "skills/code-reviewer",
+      "displayName": "Code Reviewer",
+      "description": "Analyzes code diffs and files to identify bugs, security vulnerabilities (SQL injection, XSS, insecure deserialization), code smells, N+1 queries, naming issues, and architectural concerns, then produces a structured review report with prioritized..."
+    },
+    {
+      "kind": "skill",
+      "name": "corporate-registration-consulting",
+      "path": "skills/corporate-registration-consulting",
+      "displayName": "법인등기 신청 컨설팅",
+      "description": "법인등기소/인터넷등기소 상업등기 신청을 처음 하는 사용자를 위해 일반 영리 주식회사 발기설립 절차, 정관·첨부서류 실제 HWP 양식 작성, 등록면허세·과밀억제권역 중과 체크, rhwp 기반 순차 검토 흐름을 참고용으로 안내한다."
+    },
+    {
+      "kind": "skill",
+      "name": "coupang-product-search",
+      "path": "skills/coupang-product-search",
+      "displayName": "Coupang Product Search",
+      "description": "retention-corp/coupang_partners의 로컬 Coupang MCP 호환 레이어로 쿠팡 상품 검색, 로켓배송 필터, 가격대 검색, 상품 비교, 베스트 상품, 골드박스 특가를 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "court-auction-notice-search",
+      "path": "skills/court-auction-notice-search",
+      "displayName": "Court Auction Notice Search",
+      "description": "Browse 대법원경매정보(courtauction.go.kr) 부동산 매각공고 by 매각기일·법원·기일/기간 입찰, expand each notice into 사건번호·용도·주소·감정평가액·최저매각가, search property items by free conditions(지역·용도·가격·면적·유찰횟수), and look up a case directly by 법원+사건번호. Read-only, slow-by-design (~2s/call) to avoid IP blocks."
+    },
+    {
+      "kind": "skill",
+      "name": "cpp-pro",
+      "path": "skills/cpp-pro",
+      "displayName": "Cpp Pro",
+      "description": "Writes, optimizes, and debugs C++ applications using modern C++20/23 features, template metaprogramming, and high-performance systems techniques. Use when building or refactoring C++ code requiring concepts, ranges, coroutines, SIMD optimization, or..."
+    },
+    {
+      "kind": "skill",
+      "name": "csharp-developer",
+      "path": "skills/csharp-developer",
+      "displayName": "Csharp Developer",
+      "description": "Use when building C# applications with .NET 8+, ASP.NET Core APIs, or Blazor web apps. Builds REST APIs using minimal or controller-based routing, configures database access with Entity Framework Core, implements async patterns and cancellation, structures..."
+    },
+    {
+      "kind": "skill",
+      "name": "daangn-cars-search",
+      "path": "skills/daangn-cars-search",
+      "displayName": "Daangn Cars Search",
+      "description": "당근중고차 공개 웹 데이터 표면으로 지역·가격 조건 기반 차량 검색과 상세 조회를 수행한다. 문의/구매 자동화는 제외한다."
+    },
+    {
+      "kind": "skill",
+      "name": "daangn-jobs-search",
+      "path": "skills/daangn-jobs-search",
+      "displayName": "Daangn Jobs Search",
+      "description": "당근알바 공개 웹 데이터 표면으로 키워드·지역 기반 알바 공고 검색과 상세 조회를 수행한다. 지원/채팅 자동화는 제외한다."
+    },
+    {
+      "kind": "skill",
+      "name": "daangn-realty-search",
+      "path": "skills/daangn-realty-search",
+      "displayName": "Daangn Realty Search",
+      "description": "당근부동산 공개 웹 데이터 표면으로 지역 기반 부동산 매물 검색과 상세 확인을 수행한다. 문의/예약/계약 자동화는 제외한다."
+    },
+    {
+      "kind": "skill",
+      "name": "daangn-used-goods-search",
+      "path": "skills/daangn-used-goods-search",
+      "displayName": "Daangn Used-Goods Search",
+      "description": "당근 중고거래 공개 웹 데이터 표면으로 키워드·지역 기반 매물 검색과 상세 조회를 수행한다. 로그인/채팅/찜/구매 자동화는 제외한다."
+    },
+    {
+      "kind": "skill",
+      "name": "daishin-report-search",
+      "path": "skills/daishin-report-search",
+      "displayName": "Daishin Report Search",
+      "description": "대신증권 리포트 GitHub Pages 미러에서 최신 HTML 리포트 목록과 원문/설명 페이지를 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "daiso-product-search",
+      "path": "skills/daiso-product-search",
+      "displayName": "Daiso Product Search",
+      "description": "Look up Daiso products by store name and product keyword using official Daiso Mall store/search/stock surfaces. Use when the user wants to know whether a product is available at a specific Daiso store."
+    },
+    {
+      "kind": "skill",
+      "name": "danawa-price-search",
+      "path": "skills/danawa-price-search",
+      "displayName": "Danawa Price Search",
+      "description": "다나와 공개 검색/가격비교 표면으로 상품 후보를 찾고, 쇼핑몰별 최저가·배송비 포함 실구매가·카드 할인가·무이자 할부 정보를 보수적으로 비교한다."
+    },
+    {
+      "kind": "skill",
+      "name": "database-optimizer",
+      "path": "skills/database-optimizer",
+      "displayName": "Database Optimizer",
+      "description": "Optimizes database queries and improves performance across PostgreSQL and MySQL systems. Use when investigating slow queries, analyzing execution plans, or optimizing database performance. Invoke for index design, query rewrites, configuration tuning..."
+    },
+    {
+      "kind": "skill",
+      "name": "debugging-wizard",
+      "path": "skills/debugging-wizard",
+      "displayName": "Debugging Wizard",
+      "description": "Parses error messages, traces execution flow through stack traces, correlates log entries to identify failure points, and applies systematic hypothesis-driven methodology to isolate and resolve bugs. Use when investigating errors, analyzing stack traces..."
+    },
+    {
+      "kind": "skill",
+      "name": "delivery-tracking",
+      "path": "skills/delivery-tracking",
+      "displayName": "Delivery Tracking",
+      "description": "Track CJ대한통운 and 우체국 parcels by invoice number with official carrier endpoints, and structure the workflow around a carrier adapter that can grow to more couriers later."
+    },
+    {
+      "kind": "skill",
+      "name": "devops-engineer",
+      "path": "skills/devops-engineer",
+      "displayName": "Devops Engineer",
+      "description": "Creates Dockerfiles, configures CI/CD pipelines, writes Kubernetes manifests, and generates Terraform/Pulumi infrastructure templates. Handles deployment automation, GitOps configuration, incident response runbooks, and internal developer platform tooling..."
+    },
+    {
+      "kind": "skill",
+      "name": "django-expert",
+      "path": "skills/django-expert",
+      "displayName": "Django Expert",
+      "description": "Use when building Django web applications or REST APIs with Django REST Framework. Invoke when working with settings.py, models.py, manage.py, or any Django project file. Creates Django models with proper indexes, optimizes ORM queries using..."
+    },
+    {
+      "kind": "skill",
+      "name": "donation-place-search",
+      "path": "skills/donation-place-search",
+      "displayName": "기부처 조회 / Donation Place Search",
+      "description": "Use when the user asks where to donate, 기부처 조회, or donation place recommendations by Korean location and category. Recommend recipients with best-effort 1365 verification-assist links and never execute donations."
+    },
+    {
+      "kind": "skill",
+      "name": "dotnet-core-expert",
+      "path": "skills/dotnet-core-expert",
+      "displayName": "Dotnet Core Expert",
+      "description": "Use when building .NET 8 applications with minimal APIs, clean architecture, or cloud-native microservices. Invoke for Entity Framework Core, CQRS with MediatR, JWT authentication, AOT compilation."
+    },
+    {
+      "kind": "skill",
+      "name": "embedded-systems",
+      "path": "skills/embedded-systems",
+      "displayName": "Embedded Systems",
+      "description": "Use when developing firmware for microcontrollers, implementing RTOS applications, or optimizing power consumption. Invoke for STM32, ESP32, FreeRTOS, bare-metal, power optimization, real-time systems, configure peripherals, write interrupt handlers..."
+    },
+    {
+      "kind": "skill",
+      "name": "emergency-room-beds",
+      "path": "skills/emergency-room-beds",
+      "displayName": "Emergency Room Beds",
+      "description": "Use when the user asks for nearby Korean emergency rooms, 응급실, ER, or emergency bed/병상 status near a location. Ask for the user's current location first unless a location was already provided."
+    },
+    {
+      "kind": "skill",
+      "name": "express-bus-booking",
+      "path": "skills/express-bus-booking",
+      "displayName": "Express Bus Booking (KOBUS)",
+      "description": "Search and assist Korean 고속버스/KOBUS bookings using official HTTP/API-first flows; use for 고속버스 예매, 시간표, 좌석 조회, 임시 선점, and official checkout-entry handoff."
+    },
+    {
+      "kind": "skill",
+      "name": "fastapi-expert",
+      "path": "skills/fastapi-expert",
+      "displayName": "Fastapi Expert",
+      "description": "Use when building high-performance async Python APIs with FastAPI and Pydantic V2. Invoke to create REST endpoints, define Pydantic models, implement authentication flows, set up async SQLAlchemy database operations, add JWT authentication, build WebSocket..."
+    },
+    {
+      "kind": "skill",
+      "name": "feature-forge",
+      "path": "skills/feature-forge",
+      "displayName": "Feature Forge",
+      "description": "Conducts structured requirements workshops to produce feature specifications, user stories, EARS-format functional requirements, acceptance criteria, and implementation checklists. Use when defining new features, gathering requirements, or writing..."
+    },
+    {
+      "kind": "skill",
+      "name": "fine-dust-location",
+      "path": "skills/fine-dust-location",
+      "displayName": "Fine Dust By Location",
+      "description": "에어코리아 기반 미세먼지/초미세먼지를 지역명 또는 위치 힌트로 조회한다. 기본 경로는 k-skill-proxy의 report endpoint다."
+    },
+    {
+      "kind": "skill",
+      "name": "fine-tuning-expert",
+      "path": "skills/fine-tuning-expert",
+      "displayName": "Fine Tuning Expert",
+      "description": "Use when fine-tuning LLMs, training custom models, or adapting foundation models for specific tasks. Invoke for configuring LoRA/QLoRA adapters, preparing JSONL training datasets, setting hyperparameters for fine-tuning runs, adapter training, transfer..."
+    },
+    {
+      "kind": "skill",
+      "name": "flight-ticket-search",
+      "path": "skills/flight-ticket-search",
+      "displayName": "Flight Ticket Search",
+      "description": "Google Flights 공개 검색 표면을 무료로 조회해 항공권 후보, 예약 검색 링크, 날짜/월/연도별 최저가·평균가 비교를 보수적으로 제공한다."
+    },
+    {
+      "kind": "skill",
+      "name": "flutter-expert",
+      "path": "skills/flutter-expert",
+      "displayName": "Flutter Expert",
+      "description": "Use when building cross-platform applications with Flutter 3+ and Dart. Invoke for widget development, Riverpod/Bloc state management, GoRouter navigation, platform-specific implementations, performance optimization."
+    },
+    {
+      "kind": "skill",
+      "name": "foresttrip-vacancy",
+      "path": "skills/foresttrip-vacancy",
+      "displayName": "Foresttrip Vacancy",
+      "description": "Look up available Korean national forest recreation lodging or camping slots on foresttrip.go.kr. Use when the user asks for 숲나들e or 자연휴양림 빈 객실/빈자리 조회, not for booking."
+    },
+    {
+      "kind": "skill",
+      "name": "fullstack-guardian",
+      "path": "skills/fullstack-guardian",
+      "displayName": "Fullstack Guardian",
+      "description": "Builds security-focused full-stack web applications by implementing integrated frontend and backend components with layered security at every level. Covers the complete stack from database to UI, enforcing auth, input validation, output encoding, and..."
+    },
+    {
+      "kind": "skill",
+      "name": "game-developer",
+      "path": "skills/game-developer",
+      "displayName": "Game Developer",
+      "description": "Use when building game systems, implementing Unity/Unreal Engine features, or optimizing game performance. Invoke to implement ECS architecture, configure physics systems and colliders, set up multiplayer networking with lag compensation, optimize frame..."
+    },
+    {
+      "kind": "skill",
+      "name": "gangnamunni-clinic-search",
+      "path": "skills/gangnamunni-clinic-search",
+      "displayName": "Gangnam Unni Clinic Search",
+      "description": "강남언니 공개 검색 페이지에서 성형외과·피부과 병원 후보, 평점, 리뷰 수, 지원 언어, 공개 병원 링크를 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "geeknews-search",
+      "path": "skills/geeknews-search",
+      "displayName": "GeekNews Search",
+      "description": "GeekNews public RSS/Atom feed로 긱뉴스 게시물을 조회, 검색, 상세 확인하는 읽기 전용 스킬."
+    },
+    {
+      "kind": "skill",
+      "name": "golang-pro",
+      "path": "skills/golang-pro",
+      "displayName": "Golang Pro",
+      "description": "Implements concurrent Go patterns using goroutines and channels, designs and builds microservices with gRPC or REST, optimizes Go application performance with pprof, and enforces idiomatic Go with generics, interfaces, and robust error handling. Use when..."
+    },
+    {
+      "kind": "skill",
+      "name": "gongsijiga-search",
+      "path": "skills/gongsijiga-search",
+      "displayName": "개별공시지가 조회",
+      "description": "대한민국 국토교통부가 매년 공시하는 \"개별공시지가\"(원/㎡) 조회. 지번 단위 토지의 정부 공시 단가로, 재산세·종부세·양도세 등 세금 산정의 법적 기준이다. **시세/실거래가가 아니다.** Use when the user asks for 공시지가, 개별공시지가, 토지 공시단가, 세무 계산용 토지 단가, or \"이 땅 공시지가 얼마야\". Do NOT use for 시세, 실거래가, 매매가, 호가, 공동주택가격 (those need a different data source)."
+    },
+    {
+      "kind": "skill",
+      "name": "graphql-architect",
+      "path": "skills/graphql-architect",
+      "displayName": "Graphql Architect",
+      "description": "Use when designing GraphQL schemas, implementing Apollo Federation, or building real-time subscriptions. Invoke for schema design, resolvers with DataLoader, query optimization, federation directives."
+    },
+    {
+      "kind": "skill",
+      "name": "han-river-water-level",
+      "path": "skills/han-river-water-level",
+      "displayName": "Han River Water Level",
+      "description": "한강홍수통제소 기반 현재 수위/유량을 관측소명 또는 관측소코드로 조회한다. 기본 경로는 k-skill-proxy의 han-river water-level endpoint다."
+    },
+    {
+      "kind": "skill",
+      "name": "hipass-receipt",
+      "path": "skills/hipass-receipt",
+      "displayName": "하이패스 영수증 발급",
+      "description": "공식 하이패스 홈페이지에서 사용자가 직접 로그인한 Chrome 세션을 재사용해 사용내역 조회와 영수증 팝업 진입을 돕는다."
+    },
+    {
+      "kind": "skill",
+      "name": "hola-poke-yeoksam",
+      "path": "skills/hola-poke-yeoksam",
+      "displayName": "Hola Poke Yeoksam",
+      "description": "올라포케 역삼점의 메뉴·매장 정보·이벤트 참여 흐름을 remote MCP 서버 기준으로 안내한다."
+    },
+    {
+      "kind": "skill",
+      "name": "household-waste-info",
+      "path": "skills/household-waste-info",
+      "displayName": "Household Waste Info",
+      "description": "Use when the user asks for 생활쓰레기 배출 요일/시간/장소 정보 by 지역명(시군구) and wants official data.go.kr household waste guidance."
+    },
+    {
+      "kind": "skill",
+      "name": "hwp",
+      "path": "skills/hwp",
+      "displayName": "HWP",
+      "description": "Use kordoc for agent-native HWP/HWPX document parsing, JSON extraction, diffing, form-field extraction, and Markdown→HWPX reverse conversion (read/convert only — for binary editing use rhwp-edit)."
+    },
+    {
+      "kind": "skill",
+      "name": "intercity-bus-booking",
+      "path": "skills/intercity-bus-booking",
+      "displayName": "Intercity Bus Booking (Tmoney 시외버스)",
+      "description": "Search and assist Korean 시외버스/Tmoney bookings using official HTTP/API-first flows; use for 시외버스 예매, 시간표, 좌석/요금 조회, and official checkout-entry handoff."
+    },
+    {
+      "kind": "skill",
+      "name": "iros-registry-automation",
+      "path": "skills/iros-registry-automation",
+      "displayName": "인터넷등기소 등기부등본 자동화",
+      "description": "인터넷등기소(IROS)에서 법인/부동산 등기부등본(등기사항증명서) 발급을 준비하고, 사용자가 직접 로그인·결제한 브라우저 흐름 안에서 장바구니·열람·저장을 안전하게 보조한다."
+    },
+    {
+      "kind": "skill",
+      "name": "java-architect",
+      "path": "skills/java-architect",
+      "displayName": "Java Architect",
+      "description": "Use when building, configuring, or debugging enterprise Java applications with Spring Boot 3.x, microservices, or reactive programming. Invoke to implement WebFlux endpoints, optimize JPA queries and database performance, configure Spring Security with..."
+    },
+    {
+      "kind": "skill",
+      "name": "javascript-pro",
+      "path": "skills/javascript-pro",
+      "displayName": "Javascript Pro",
+      "description": "Writes, debugs, and refactors JavaScript code using modern ES2023+ features, async/await patterns, ESM module systems, and Node.js APIs. Use when building vanilla JavaScript applications, implementing Promise-based async flows, optimising browser or..."
+    },
+    {
+      "kind": "skill",
+      "name": "joseon-sillok-search",
+      "path": "skills/joseon-sillok-search",
+      "displayName": "조선왕조실록 검색",
+      "description": "Search Joseon Dynasty Annals records from the official sillok.history.go.kr site with keyword search plus optional king/year narrowing."
+    },
+    {
+      "kind": "skill",
+      "name": "k-dart",
+      "path": "skills/k-dart",
+      "displayName": "k-dart — 금감원 DART 전자공시 조회",
+      "description": "금융감독원 전자공시시스템(DART) OpenAPI로 공시검색, 기업개황, 재무제표, 주요사항보고서를 조회한다. 사용자의 API_K_DART 환경변수를 직접 사용한다."
+    },
+    {
+      "kind": "skill",
+      "name": "k-schoollunch-menu",
+      "path": "skills/k-schoollunch-menu",
+      "displayName": "Korean School Lunch Menu (NEIS)",
+      "description": "Use when the user asks for Korean school meal menus (급식 식단) by natural-language education office and school name, via k-skill-proxy NEIS school-search and school-meal routes."
+    },
+    {
+      "kind": "skill",
+      "name": "k-skill-cleaner",
+      "path": "skills/k-skill-cleaner",
+      "displayName": "k-skill-cleaner",
+      "description": "Interview the user and inspect coding-agent skill trigger counts to recommend unused K-skills for removal."
+    },
+    {
+      "kind": "skill",
+      "name": "k-skill-setup",
+      "path": "skills/k-skill-setup",
+      "displayName": "k-skill Setup",
+      "description": "After installing the full k-skill bundle, configure and verify the shared cross-platform setup, then optionally wire update checks and GitHub starring with explicit user consent."
+    },
+    {
+      "kind": "skill",
+      "name": "k-skill-wrapper",
+      "path": "skills/k-skill-wrapper",
+      "displayName": "k-skill-wrapper",
+      "description": "Overview and setup wrapper for the NomaDamas/k-skill Korean automation skill bundle; individual upstream skills are published as separate marketplace entries."
+    },
+    {
+      "kind": "skill",
+      "name": "kakao-bar-nearby",
+      "path": "skills/kakao-bar-nearby",
+      "displayName": "Kakao Bar Nearby",
+      "description": "Use when the user asks for nearby bars or 근처 술집. Always ask the user's current location first, then use Kakao Map search + place detail panels to find open-now bars with menu, seating, and phone hints."
+    },
+    {
+      "kind": "skill",
+      "name": "kakaotalk-mac",
+      "path": "skills/kakaotalk-mac",
+      "displayName": "KakaoTalk Mac CLI",
+      "description": "Use kakaocli on macOS to read KakaoTalk chats, search messages, send replies after explicit confirmation, and delete sent messages with explicit operator intent."
+    },
+    {
+      "kind": "skill",
+      "name": "kbl-results",
+      "path": "skills/kbl-results",
+      "displayName": "KBL Results",
+      "description": "KBL 한국프로농구 경기 결과와 현재 팀 순위를 날짜/팀 기준으로 조회한다. 공식 JSON 엔드포인트와 kbl-results npm 패키지를 사용한다."
+    },
+    {
+      "kind": "skill",
+      "name": "kbo-results",
+      "path": "skills/kbo-results",
+      "displayName": "KBO Results",
+      "description": "Fetch KBO game schedules and results for a specific date with the kbo-game npm package. Use when the user asks for today's KBO games, yesterday's scores, or a date-specific scoreboard."
+    },
+    {
+      "kind": "skill",
+      "name": "kleague-results",
+      "path": "skills/kleague-results",
+      "displayName": "K League Results",
+      "description": "케이리그 경기 결과와 현재 순위를 날짜/팀 기준으로 조회한다. 공식 JSON 엔드포인트와 kleague-results npm 패키지를 사용한다."
+    },
+    {
+      "kind": "skill",
+      "name": "korea-weather",
+      "path": "skills/korea-weather",
+      "displayName": "Korea Weather",
+      "description": "한국 날씨를 기상청 단기예보 조회서비스와 프록시 경유로 조회해 요약한다."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-character-count",
+      "path": "skills/korean-character-count",
+      "displayName": "한국어 글자 수 세기",
+      "description": "Count Korean text deterministically with exact grapheme, line, and byte contracts for self-intros and form limits."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-cinema-search",
+      "path": "skills/korean-cinema-search",
+      "displayName": "Korean Cinema Search",
+      "description": "CGV, 메가박스, 롯데시네마 영화관 검색, 상영작, 시간표, 잔여석 조회가 필요할 때 사용한다."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-jangbu-for",
+      "path": "skills/korean-jangbu-for",
+      "displayName": "Korean Jangbu For (thin wrapper)",
+      "description": "kimlawtech/korean-jangbu-for (Apache-2.0) 업스트림을 중심으로 한국 스타트업·1인 법인·프리랜서·개인사업자 장부 자동화와 사업자 세무 자료 정리, 원본 데이터 가져오기, 계정과목 태깅, 세무사 전달 CSV, 경영 리포트 생성을 안내하는 thin wrapper 스킬."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-law-search",
+      "path": "skills/korean-law-search",
+      "displayName": "Korean Law Search",
+      "description": "Use korean-law-mcp first for Korean law lookups, and fall back to Beopmang when the primary service is unavailable."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-marathon-schedule",
+      "path": "skills/korean-marathon-schedule",
+      "displayName": "Korean Marathon Schedule",
+      "description": "고러닝과 대한철인3종협회 공개 표면으로 한국 마라톤·철인3종 경기 일정, 장소, 신청 마감일, 종목을 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-patent-search",
+      "path": "skills/korean-patent-search",
+      "displayName": "한국 특허 정보 검색",
+      "description": "Search Korean patent and utility-model publications through the official KIPRIS Plus Open API with keyword search plus application-number detail lookup."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-privacy-terms",
+      "path": "skills/korean-privacy-terms",
+      "displayName": "Korean Privacy & Terms (thin wrapper)",
+      "description": "kimlawtech/korean-privacy-terms (Apache-2.0) 업스트림을 경유해 Next.js 프로젝트에 한국 법령(개인정보보호법·약관규제법·전자상거래법) 기반 개인정보처리방침·이용약관·쿠키 배너·동의 모달을 생성하는 thin wrapper 스킬."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-scholarship-search",
+      "path": "skills/korean-scholarship-search",
+      "displayName": "장학금 검색 및 조회",
+      "description": "Search Korean scholarship announcements across official KOSAF, university, foundation, company, and public-sector sources, extract amount and eligibility, and filter results by school, income band, student level, and organization type. Users may invoke it with the phrase 장학금 검..."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-slang-writing",
+      "path": "skills/korean-slang-writing",
+      "displayName": "Korean Slang Writing",
+      "description": "Use curated Korean trending-slang candidates plus best-effort Namu Wiki lookups to write witty Korean text with up-to-date slang, with conservative safety and freshness guardrails."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-spell-check",
+      "path": "skills/korean-spell-check",
+      "displayName": "Korean Spell Check",
+      "description": "Use Nara/PNU Korean spell-check surfaces conservatively to proofread Korean text, chunk long input, and return change-focused correction suggestions."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-stock-search",
+      "path": "skills/korean-stock-search",
+      "displayName": "Korean Stock Search",
+      "description": "Use k-skill-proxy to search Korean listed stocks, inspect KRX base information, and fetch daily trade snapshots without asking the user to issue a KRX API key."
+    },
+    {
+      "kind": "skill",
+      "name": "korean-transit-route",
+      "path": "skills/korean-transit-route",
+      "displayName": "korean-transit-route",
+      "description": "Korean door-to-door public transit routing (subway + bus + walking) via ODsay LIVE API with Kakao geocoding for address-to-address queries. Use when the user asks for 지하철/버스/대중교통 길찾기, 환승 경로, 소요시간, or transit directions between two places in Korea."
+    },
+    {
+      "kind": "skill",
+      "name": "kosis-stats",
+      "path": "skills/kosis-stats",
+      "displayName": "KOSIS Stats",
+      "description": "국가데이터처가 운영하는 KOSIS(국가통계포털, kosis.kr) Open API로 한국 공식 통계표를 검색하고 메타데이터·데이터·대용량 자료를 조회한다. Use when the user asks for 한국 공식 통계 (인구, 가구, 물가, 고용 등) 수치 조회, not for analysis or visualization."
+    },
+    {
+      "kind": "skill",
+      "name": "kotlin-specialist",
+      "path": "skills/kotlin-specialist",
+      "displayName": "Kotlin Specialist",
+      "description": "Provides idiomatic Kotlin implementation patterns including coroutine concurrency, Flow stream handling, multiplatform architecture, Compose UI construction, Ktor server setup, and type-safe DSL design. Use when building Kotlin applications requiring..."
+    },
+    {
+      "kind": "skill",
+      "name": "kstartup-search",
+      "path": "skills/kstartup-search",
+      "displayName": "창업진흥원 K-Startup 조회",
+      "description": "공공데이터포털 창업진흥원 K-Startup Open API(15125364)로 통합 공고 사업 정보·지원사업 공고·창업 콘텐츠·통계보고서를 k-skill-proxy 경유로 조회한다. 검색 전용."
+    },
+    {
+      "kind": "skill",
+      "name": "ktx-booking",
+      "path": "skills/ktx-booking",
+      "displayName": "KTX Booking",
+      "description": "Search, reserve, inspect, and cancel KTX or Korail tickets in Korea with the korail2 + pycryptodome Python packages. Use when the user asks for KTX seats, Korail bookings, train changes, or reservation status."
+    },
+    {
+      "kind": "skill",
+      "name": "kubernetes-specialist",
+      "path": "skills/kubernetes-specialist",
+      "displayName": "Kubernetes Specialist",
+      "description": "Use when deploying or managing Kubernetes workloads. Invoke to create deployment manifests, configure pod security policies, set up service accounts, define network isolation rules, debug pod crashes, analyze resource limits, inspect container logs, or..."
+    },
+    {
+      "kind": "skill",
+      "name": "laravel-specialist",
+      "path": "skills/laravel-specialist",
+      "displayName": "Laravel Specialist",
+      "description": "Build and configure Laravel 10+ applications, including creating Eloquent models and relationships, implementing Sanctum authentication, configuring Horizon queues, designing RESTful APIs with API resources, and building reactive interfaces with Livewire..."
+    },
+    {
+      "kind": "skill",
+      "name": "lck-analytics",
+      "path": "skills/lck-analytics",
+      "displayName": "LCK Results + Advanced Analysis",
+      "description": "Riot 공식 LoL Esports 데이터와 Oracle's Elixir 스타일 historical 데이터로 LCK 경기 결과, 현재 순위, live turning point, 밴픽 matchup/synergy, patch meta, 팀 파워 레이팅을 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "legacy-modernizer",
+      "path": "skills/legacy-modernizer",
+      "displayName": "Legacy Modernizer",
+      "description": "Designs incremental migration strategies, identifies service boundaries, produces dependency maps and migration roadmaps, and generates API facade designs for aging codebases. Use when modernizing legacy systems, implementing strangler fig pattern or..."
+    },
+    {
+      "kind": "skill",
+      "name": "lh-notice-search",
+      "path": "skills/lh-notice-search",
+      "displayName": "LH 청약 공고문 조회",
+      "description": "Search official LH 청약 (Korea Land & Housing Corporation lease/subscription) 공고 lists through k-skill-proxy. Use when a user asks about 청년/행복/영구/국민/매입/전세임대, 분양주택, 신혼희망타운 공고 marketed on apply.lh.or.kr."
+    },
+    {
+      "kind": "skill",
+      "name": "library-book-search",
+      "path": "skills/library-book-search",
+      "displayName": "Library Book Search (Data4Library)",
+      "description": "Use when the user asks to search Korean library books, book details, library holdings, or whether a Korean public library owns a book via k-skill-proxy Data4Library routes."
+    },
+    {
+      "kind": "skill",
+      "name": "local-election-candidate-search",
+      "path": "skills/local-election-candidate-search",
+      "displayName": "Local Election Candidate Search",
+      "description": "중앙선거관리위원회 선거통계시스템 공개 통합검색으로 한국 지방선거 후보자 정보를 이름/선거종류/지역 기준으로 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "lotto-results",
+      "path": "skills/lotto-results",
+      "displayName": "Lotto Results",
+      "description": "Check Korean Lotto draw results, latest rounds, and ticket matches with the k-lotto npm package. Use when the user asks for winning numbers, payout details, or whether their numbers matched."
+    },
+    {
+      "kind": "skill",
+      "name": "market-kurly-search",
+      "path": "skills/market-kurly-search",
+      "displayName": "Market Kurly Search",
+      "description": "로그인 없이 접근 가능한 마켓컬리 검색/상품 상세 표면으로 상품 후보, 현재 가격, 할인 여부, 품절 여부를 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "mcp-developer",
+      "path": "skills/mcp-developer",
+      "displayName": "Mcp Developer",
+      "description": "Use when building, debugging, or extending MCP servers or clients that connect AI systems with external tools and data sources. Invoke to implement tool handlers, configure resource providers, set up stdio/HTTP/SSE transport layers, validate schemas with..."
+    },
+    {
+      "kind": "skill",
+      "name": "mfds-drug-safety",
+      "path": "skills/mfds-drug-safety",
+      "displayName": "의약품 안전 체크",
+      "description": "식약처 공공 OpenAPI를 k-skill-proxy 경유로 조회하기 전에 증상·복용상황을 반드시 되묻는 인터뷰형 의약품 안전 체크 스킬."
+    },
+    {
+      "kind": "skill",
+      "name": "mfds-food-safety",
+      "path": "skills/mfds-food-safety",
+      "displayName": "식품 안전 체크",
+      "description": "식약처/식품안전나라 공개 표면을 k-skill-proxy 경유로 조회하기 전에 증상·섭취상황을 반드시 되묻는 인터뷰형 식품 안전 체크 스킬."
+    },
+    {
+      "kind": "skill",
+      "name": "microservices-architect",
+      "path": "skills/microservices-architect",
+      "displayName": "Microservices Architect",
+      "description": "Designs distributed system architectures, decomposes monoliths into bounded-context services, recommends communication patterns, and produces service boundary diagrams and resilience strategies. Use when designing distributed systems, decomposing..."
+    },
+    {
+      "kind": "skill",
+      "name": "ml-pipeline",
+      "path": "skills/ml-pipeline",
+      "displayName": "Ml Pipeline",
+      "description": "Designs and implements production-grade ML pipeline infrastructure: configures experiment tracking with MLflow or Weights & Biases, creates Kubeflow or Airflow DAGs for training orchestration, builds feature store schemas with Feast, deploys model..."
+    },
+    {
+      "kind": "skill",
+      "name": "monitoring-expert",
+      "path": "skills/monitoring-expert",
+      "displayName": "Monitoring Expert",
+      "description": "Configures monitoring systems, implements structured logging pipelines, creates Prometheus/Grafana dashboards, defines alerting rules, and instruments distributed tracing. Implements Prometheus/Grafana stacks, conducts load testing, performs application..."
+    },
+    {
+      "kind": "skill",
+      "name": "myrealtrip-search",
+      "path": "skills/myrealtrip-search",
+      "displayName": "마이리얼트립 검색",
+      "description": "마이리얼트립 공식 Streamable HTTP MCP 서버로 항공권, 숙소, 투어/티켓/액티비티를 검색하고 상세·가격·예약 링크를 확인한다."
+    },
+    {
+      "kind": "skill",
+      "name": "naver-blog-research",
+      "path": "skills/naver-blog-research",
+      "displayName": "네이버 블로그 리서치",
+      "description": "Search Naver blogs, read full post content, and download images using only python3 stdlib — no API key required."
+    },
+    {
+      "kind": "skill",
+      "name": "naver-news-search",
+      "path": "skills/naver-news-search",
+      "displayName": "Naver News Search",
+      "description": "네이버 검색 Open API 뉴스 검색(news.json)을 k-skill-proxy 경유로 조회해 최신 뉴스 기사 제목·발행시각·링크·요약을 보수적으로 정리한다. 사용자는 별도 API 키 발급 없이 호출한다."
+    },
+    {
+      "kind": "skill",
+      "name": "naver-shopping-search",
+      "path": "skills/naver-shopping-search",
+      "displayName": "Naver Shopping Search",
+      "description": "네이버 쇼핑 공개 BFF JSON을 k-skill-proxy로 조회해 상품 후보, 최저가, 판매처 링크를 보수적으로 가격비교한다."
+    },
+    {
+      "kind": "skill",
+      "name": "nestjs-expert",
+      "path": "skills/nestjs-expert",
+      "displayName": "Nestjs Expert",
+      "description": "Creates and configures NestJS modules, controllers, services, DTOs, guards, and interceptors for enterprise-grade TypeScript backend applications. Use when building NestJS REST APIs or GraphQL services, implementing dependency injection, scaffolding..."
+    },
+    {
+      "kind": "skill",
+      "name": "nextjs-developer",
+      "path": "skills/nextjs-developer",
+      "displayName": "Nextjs Developer",
+      "description": "Use when building Next.js 14+ applications with App Router, server components, or server actions. Invoke to configure route handlers, implement middleware, set up API routes, add streaming SSR, write generateMetadata for SEO, scaffold loading.tsx/error.tsx..."
+    },
+    {
+      "kind": "skill",
+      "name": "nts-business-registration",
+      "path": "skills/nts-business-registration",
+      "displayName": "국세청 사업자등록정보 진위확인 및 상태조회",
+      "description": "국세청 사업자등록정보 진위확인 및 사업자등록 상태조회를 공공데이터포털 API(k-skill-proxy 경유)로 수행한다."
+    },
+    {
+      "kind": "skill",
+      "name": "ohou-today-deal",
+      "path": "skills/ohou-today-deal",
+      "displayName": "오늘의집 오늘의딜 조회",
+      "description": "오늘의집 공개 오늘의딜 페이지에서 로그인 없이 특가 상품을 조회하고 할인율, 가격, 리뷰, 링크를 정리하는 읽기 전용 스킬."
+    },
+    {
+      "kind": "skill",
+      "name": "olive-young-search",
+      "path": "skills/olive-young-search",
+      "displayName": "Olive Young Search",
+      "description": "upstream daiso CLI를 사용해 올리브영 매장 검색, 상품 검색, 재고 확인을 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "pandas-pro",
+      "path": "skills/pandas-pro",
+      "displayName": "Pandas Pro",
+      "description": "Performs pandas DataFrame operations for data analysis, manipulation, and transformation. Use when working with pandas DataFrames, data cleaning, aggregation, merging, or time series analysis. Invoke for data manipulation tasks such as joining DataFrames..."
+    },
+    {
+      "kind": "skill",
+      "name": "parking-lot-search",
+      "path": "skills/parking-lot-search",
+      "displayName": "Parking Lot Search",
+      "description": "Use when the user asks for nearby parking lots or 근처 주차장/공영주차장. Always ask the user's current location first, then use official Data.go.kr public parking data through k-skill-proxy or the parking-lot-search package."
+    },
+    {
+      "kind": "skill",
+      "name": "php-pro",
+      "path": "skills/php-pro",
+      "displayName": "Php Pro",
+      "description": "Use when building PHP applications with modern PHP 8.3+ features, Laravel, or Symfony frameworks. Invokes strict typing, PHPStan level 9, async patterns with Swoole, and PSR standards. Creates controllers, configures middleware, generates migrations..."
+    },
+    {
+      "kind": "skill",
+      "name": "playwright-expert",
+      "path": "skills/playwright-expert",
+      "displayName": "Playwright Expert",
+      "description": "Use when writing E2E tests with Playwright, setting up test infrastructure, or debugging flaky browser tests. Invoke to write test scripts, create page objects, configure test fixtures, set up reporters, add CI integration, implement API mocking, or..."
+    },
+    {
+      "kind": "skill",
+      "name": "postgres-pro",
+      "path": "skills/postgres-pro",
+      "displayName": "Postgres Pro",
+      "description": "Use when optimizing PostgreSQL queries, configuring replication, or implementing advanced database features. Invoke for EXPLAIN analysis, JSONB operations, extension usage, VACUUM tuning, performance monitoring."
+    },
+    {
+      "kind": "skill",
+      "name": "prompt-engineer",
+      "path": "skills/prompt-engineer",
+      "displayName": "Prompt Engineer",
+      "description": "Writes, refactors, and evaluates prompts for LLMs generating optimized prompt templates, structured output schemas, evaluation rubrics, and test suites. Use when designing prompts for new LLM applications, refactoring existing prompts for better accuracy..."
+    },
+    {
+      "kind": "skill",
+      "name": "public-restroom-nearby",
+      "path": "skills/public-restroom-nearby",
+      "displayName": "Public Restroom Nearby",
+      "description": "Use when the user asks for nearby public/open restrooms or 근처 화장실. Always ask the user's current location first, then use the official nationwide public-restroom standard dataset plus Kakao anchor resolution."
+    },
+    {
+      "kind": "skill",
+      "name": "python-pro",
+      "path": "skills/python-pro",
+      "displayName": "Python Pro",
+      "description": "Use when building Python 3.11+ applications requiring type safety, async programming, or robust error handling. Generates type-annotated Python code, configures mypy in strict mode, writes pytest test suites with fixtures and mocking, and validates code..."
+    },
+    {
+      "kind": "skill",
+      "name": "rag-architect",
+      "path": "skills/rag-architect",
+      "displayName": "Rag Architect",
+      "description": "Designs and implements production-grade RAG systems by chunking documents, generating embeddings, configuring vector stores, building hybrid search pipelines, applying reranking, and evaluating retrieval quality. Use when building RAG systems, vector..."
+    },
+    {
+      "kind": "skill",
+      "name": "rails-expert",
+      "path": "skills/rails-expert",
+      "displayName": "Rails Expert",
+      "description": "Rails 7+ specialist that optimizes Active Record queries with includes/eager_load, implements Turbo Frames and Turbo Streams for partial page updates, configures Action Cable for WebSocket connections, sets up Sidekiq workers for background job processing..."
+    },
+    {
+      "kind": "skill",
+      "name": "react-expert",
+      "path": "skills/react-expert",
+      "displayName": "React Expert",
+      "description": "Use when building React 18+ applications in .jsx or .tsx files, Next.js App Router projects, or create-react-app setups. Creates components, implements custom hooks, debugs rendering issues, migrates class components to functional, and implements state..."
+    },
+    {
+      "kind": "skill",
+      "name": "react-native-expert",
+      "path": "skills/react-native-expert",
+      "displayName": "React Native Expert",
+      "description": "Builds, optimizes, and debugs cross-platform mobile applications with React Native and Expo. Implements navigation hierarchies (tabs, stacks, drawers), configures native modules, optimizes FlatList rendering with memo and useCallback, and handles..."
+    },
+    {
+      "kind": "skill",
+      "name": "real-estate-search",
+      "path": "skills/real-estate-search",
+      "displayName": "Korean Real Estate Search",
+      "description": "Korean apartment/officetel/villa/single-house real transaction price and rent lookups via k-skill-proxy. Based on tae0y's real-estate-mcp and MOLIT public data APIs."
+    },
+    {
+      "kind": "skill",
+      "name": "rhwp-advanced",
+      "path": "skills/rhwp-advanced",
+      "displayName": "rhwp-advanced",
+      "description": "Debug HWP layout, dump document IR, compare versions, extract thumbnails, and unlock read-only HWPs with the upstream rhwp Rust CLI (export-svg/dump/dump-pages/ir-diff/thumbnail/convert)."
+    },
+    {
+      "kind": "skill",
+      "name": "rhwp-edit",
+      "path": "skills/rhwp-edit",
+      "displayName": "rhwp-edit",
+      "description": "Edit HWP documents — insert/delete text, replace-all, create tables, set cell text — with the k-skill-rhwp CLI that wraps the @rhwp/core WASM engine (rhwp by Edward Kim)."
+    },
+    {
+      "kind": "skill",
+      "name": "rust-engineer",
+      "path": "skills/rust-engineer",
+      "displayName": "Rust Engineer",
+      "description": "Writes, reviews, and debugs idiomatic Rust code with memory safety and zero-cost abstractions. Implements ownership patterns, manages lifetimes, designs trait hierarchies, builds async applications with tokio, and structures error handling with..."
+    },
+    {
+      "kind": "skill",
+      "name": "salesforce-developer",
+      "path": "skills/salesforce-developer",
+      "displayName": "Salesforce Developer",
+      "description": "Writes and debugs Apex code, builds Lightning Web Components, optimizes SOQL queries, implements triggers, batch jobs, platform events, and integrations on the Salesforce platform. Use when developing Salesforce applications, customizing CRM workflows..."
+    },
+    {
+      "kind": "skill",
+      "name": "secure-code-guardian",
+      "path": "skills/secure-code-guardian",
+      "displayName": "Secure Code Guardian",
+      "description": "Use when implementing authentication/authorization, securing user input, or preventing OWASP Top 10 vulnerabilities including custom security implementations such as hashing passwords with bcrypt/argon2, sanitizing SQL queries with parameterized..."
+    },
+    {
+      "kind": "skill",
+      "name": "security-reviewer",
+      "path": "skills/security-reviewer",
+      "displayName": "Security Reviewer",
+      "description": "Identifies security vulnerabilities, generates structured audit reports with severity ratings, and provides actionable remediation guidance. Use when conducting security audits, reviewing code for vulnerabilities, or analyzing infrastructure security..."
+    },
+    {
+      "kind": "skill",
+      "name": "seoul-density",
+      "path": "skills/seoul-density",
+      "displayName": "Seoul Density",
+      "description": "서울 주요 121개 핫스팟 장소의 실시간 혼잡도와 인구 현황을 조회한다. 지금 강남역이 얼마나 붐비는지, 홍대 인파가 얼마나 되는지 물어볼 때 사용한다."
+    },
+    {
+      "kind": "skill",
+      "name": "seoul-subway-arrival",
+      "path": "skills/seoul-subway-arrival",
+      "displayName": "Seoul Subway Arrival",
+      "description": "Look up Seoul real-time subway arrival information with the official Seoul Open Data API. Use when the user asks when a train arrives, which trains are approaching a station, or how crowded Seoul subway timing looks right now."
+    },
+    {
+      "kind": "skill",
+      "name": "sh-notice-search",
+      "path": "skills/sh-notice-search",
+      "displayName": "SH Notice Search",
+      "description": "서울주택도시개발공사(SH) 공개 공고/공지 게시판에서 청약·주택 공고 목록, 상세 본문, 첨부 미리보기 메타데이터를 직접 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "shopify-expert",
+      "path": "skills/shopify-expert",
+      "displayName": "Shopify Expert",
+      "description": "Builds and debugs Shopify themes (.liquid files, theme.json, sections), develops custom Shopify apps (shopify.app.toml, OAuth, webhooks), and implements Storefront API integrations for headless storefronts. Use when building or customizing Shopify themes..."
+    },
+    {
+      "kind": "skill",
+      "name": "spark-engineer",
+      "path": "skills/spark-engineer",
+      "displayName": "Spark Engineer",
+      "description": "Use when writing Spark jobs, debugging performance issues, or configuring cluster settings for Apache Spark applications, distributed data processing pipelines, or big data workloads. Invoke to write DataFrame transformations, optimize Spark SQL queries..."
+    },
+    {
+      "kind": "skill",
+      "name": "spec-miner",
+      "path": "skills/spec-miner",
+      "displayName": "Spec Miner",
+      "description": "Reverse-engineering specialist that extracts specifications from existing codebases. Use when working with legacy or undocumented systems, inherited projects, or old codebases with no documentation. Invoke to map code dependencies, generate API..."
+    },
+    {
+      "kind": "skill",
+      "name": "spring-boot-engineer",
+      "path": "skills/spring-boot-engineer",
+      "displayName": "Spring Boot Engineer",
+      "description": "Generates Spring Boot 3.x configurations, creates REST controllers, implements Spring Security 6 authentication flows, sets up Spring Data JPA repositories, and configures reactive WebFlux endpoints. Use when building Spring Boot 3.x applications..."
+    },
+    {
+      "kind": "skill",
+      "name": "sql-pro",
+      "path": "skills/sql-pro",
+      "displayName": "Sql Pro",
+      "description": "Optimizes SQL queries, designs database schemas, and troubleshoots performance issues. Use when a user asks why their query is slow, needs help writing complex joins or aggregations, mentions database performance issues, or wants to design or migrate a..."
+    },
+    {
+      "kind": "skill",
+      "name": "sre-engineer",
+      "path": "skills/sre-engineer",
+      "displayName": "Sre Engineer",
+      "description": "Defines service level objectives, creates error budget policies, designs incident response procedures, develops capacity models, and produces monitoring configurations and automation scripts for production systems. Use when defining SLIs/SLOs, managing..."
+    },
+    {
+      "kind": "skill",
+      "name": "srt-booking",
+      "path": "skills/srt-booking",
+      "displayName": "SRT Booking",
+      "description": "Search, reserve, inspect, and cancel SRT tickets in Korea with the SRTrain library. Use when the user asks for SRT seat availability, booking, canceling, or sold-out retry plans."
+    },
+    {
+      "kind": "skill",
+      "name": "subway-lost-property",
+      "path": "skills/subway-lost-property",
+      "displayName": "Subway Lost Property",
+      "description": "Use when the user asks how to look up 지하철 분실물 or 유실물 by 역명/물품명. v1 is an 안내형/하이브리드 skill that structures the official LOST112 + 서울교통공사 flow conservatively."
+    },
+    {
+      "kind": "skill",
+      "name": "swift-expert",
+      "path": "skills/swift-expert",
+      "displayName": "Swift Expert",
+      "description": "Builds iOS/macOS/watchOS/tvOS applications, implements SwiftUI views and state management, designs protocol-oriented architectures, handles async/await concurrency, implements actors for thread safety, and debugs Swift-specific issues. Use when building..."
+    },
+    {
+      "kind": "skill",
+      "name": "terraform-engineer",
+      "path": "skills/terraform-engineer",
+      "displayName": "Terraform Engineer",
+      "description": "Use when implementing infrastructure as code with Terraform across AWS, Azure, or GCP. Invoke for module development (create reusable modules, manage module versioning), state management (migrate backends, import existing resources, resolve state..."
+    },
+    {
+      "kind": "skill",
+      "name": "test-master",
+      "path": "skills/test-master",
+      "displayName": "Test Master",
+      "description": "Generates test files, creates mocking strategies, analyzes code coverage, designs test architectures, and produces test plans and defect reports across functional, performance, and security testing disciplines. Use when writing unit tests, integration..."
+    },
+    {
+      "kind": "skill",
+      "name": "the-fool",
+      "path": "skills/the-fool",
+      "displayName": "The Fool",
+      "description": "Use when challenging ideas, plans, decisions, or proposals using structured critical reasoning. Invoke to play devil's advocate, run a pre-mortem, red team, or audit evidence and assumptions."
+    },
+    {
+      "kind": "skill",
+      "name": "ticket-availability",
+      "path": "skills/ticket-availability",
+      "displayName": "Ticket Availability",
+      "description": "YES24 / 인터파크 공연의 공개 일정 + 등급별 잔여석을 단일 HTTP 호출로 조회 (조회 전용, 예매·결제 없음)."
+    },
+    {
+      "kind": "skill",
+      "name": "toss-securities",
+      "path": "skills/toss-securities",
+      "displayName": "Toss Securities",
+      "description": "토스증권 조회형 질문에 대해 tossinvest-cli의 tossctl을 설치/로그인한 뒤 계좌 요약, 포트폴리오, 시세, 주문내역, 관심종목을 안전한 read-only 흐름으로 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "typescript-pro",
+      "path": "skills/typescript-pro",
+      "displayName": "Typescript Pro",
+      "description": "Implements advanced TypeScript type systems, creates custom type guards, utility types, and branded types, and configures tRPC for end-to-end type safety. Use when building TypeScript applications requiring advanced generics, conditional or mapped types..."
+    },
+    {
+      "kind": "skill",
+      "name": "used-car-price-search",
+      "path": "skills/used-car-price-search",
+      "displayName": "Used Car Price Search",
+      "description": "주요 한국 렌터카 업체를 비교한 뒤 SK렌터카 다이렉트 타고BUY inventory snapshot 으로 중고차 가격/인수가를 조회한다."
+    },
+    {
+      "kind": "skill",
+      "name": "vue-expert",
+      "path": "skills/vue-expert",
+      "displayName": "Vue Expert",
+      "description": "Builds Vue 3 components with Composition API patterns, configures Nuxt 3 SSR/SSG projects, sets up Pinia stores, scaffolds Quasar/Capacitor mobile apps, implements PWA features, and optimises Vite builds. Use when creating Vue 3 applications with..."
+    },
+    {
+      "kind": "skill",
+      "name": "vue-expert-js",
+      "path": "skills/vue-expert-js",
+      "displayName": "Vue Expert Js",
+      "description": "Creates Vue 3 components, builds vanilla JS composables, configures Vite projects, and sets up routing and state management using JavaScript only no TypeScript. Generates JSDoc-typed code with @typedef, @param, and @returns annotations for full type..."
+    },
+    {
+      "kind": "skill",
+      "name": "websocket-engineer",
+      "path": "skills/websocket-engineer",
+      "displayName": "Websocket Engineer",
+      "description": "Use when building real-time communication systems with WebSockets or Socket.IO. Invoke for bidirectional messaging, horizontal scaling with Redis, presence tracking, room management."
+    },
+    {
+      "kind": "skill",
+      "name": "wordpress-pro",
+      "path": "skills/wordpress-pro",
+      "displayName": "Wordpress Pro",
+      "description": "Develops custom WordPress themes and plugins, creates and registers Gutenberg blocks and block patterns, configures WooCommerce stores, implements WordPress REST API endpoints, applies security hardening (nonces, sanitization, escaping, capability checks)..."
+    },
+    {
+      "kind": "skill",
+      "name": "zipcode-search",
+      "path": "skills/zipcode-search",
+      "displayName": "Zipcode Search",
+      "description": "Look up a Korean postcode and official English address from a known address with the official ePost integrated search page."
+    },
+    {
+      "kind": "agent",
+      "name": "academic-anthropologist",
+      "path": "agents/academic-anthropologist",
+      "displayName": "Anthropologist",
+      "description": "Expert in cultural systems, rituals, kinship, belief systems, and ethnographic method builds culturally coherent societies that feel lived-in rather than invented"
+    },
+    {
+      "kind": "agent",
+      "name": "academic-geographer",
+      "path": "agents/academic-geographer",
+      "displayName": "Geographer",
+      "description": "Expert in physical and human geography, climate systems, cartography, and spatial analysis builds geographically coherent worlds where terrain, climate, resources, and settlement patterns make scientific sense"
+    },
+    {
+      "kind": "agent",
+      "name": "academic-historian",
+      "path": "agents/academic-historian",
+      "displayName": "Historian",
+      "description": "Expert in historical analysis, periodization, material culture, and historiography validates historical coherence and enriches settings with authentic period detail grounded in primary and secondary sources"
+    },
+    {
+      "kind": "agent",
+      "name": "academic-narratologist",
+      "path": "agents/academic-narratologist",
+      "displayName": "Narratologist",
+      "description": "Expert in narrative theory, story structure, character arcs, and literary analysis grounds advice in established frameworks from Propp to Campbell to modern narratology"
+    },
+    {
+      "kind": "agent",
+      "name": "academic-psychologist",
+      "path": "agents/academic-psychologist",
+      "displayName": "Psychologist",
+      "description": "Expert in human behavior, personality theory, motivation, and cognitive patterns builds psychologically credible characters and interactions grounded in clinical and research frameworks"
+    },
+    {
+      "kind": "agent",
+      "name": "accounts-payable-agent",
+      "path": "agents/accounts-payable-agent",
+      "displayName": "Accounts Payable Agent",
+      "description": "Autonomous payment processing specialist that executes vendor payments, contractor invoices, and recurring bills across any payment rail crypto, fiat, stablecoins. Integrates with AI agent workflows via tool calls."
+    },
+    {
+      "kind": "agent",
+      "name": "agentic-identity-trust",
+      "path": "agents/agentic-identity-trust",
+      "displayName": "Agentic Identity & Trust Architect",
+      "description": "Designs identity, authentication, and trust verification systems for autonomous AI agents operating in multi-agent environments. Ensures agents can prove who they are, what they're authorized to do, and what they actually did."
+    },
+    {
+      "kind": "agent",
+      "name": "agents-orchestrator",
+      "path": "agents/agents-orchestrator",
+      "displayName": "Agents Orchestrator",
+      "description": "Autonomous pipeline manager that orchestrates the entire development workflow. You are the leader of this process."
+    },
+    {
+      "kind": "agent",
+      "name": "automation-governance-architect",
+      "path": "agents/automation-governance-architect",
+      "displayName": "Automation Governance Architect",
+      "description": "Governance-first architect for business automations (n8n-first) who audits value, risk, and maintainability before implementation."
+    },
+    {
+      "kind": "agent",
+      "name": "blockchain-security-auditor",
+      "path": "agents/blockchain-security-auditor",
+      "displayName": "Blockchain Security Auditor",
+      "description": "Expert smart contract security auditor specializing in vulnerability detection, formal verification, exploit analysis, and comprehensive audit report writing for DeFi protocols and blockchain applications."
+    },
+    {
+      "kind": "agent",
+      "name": "compliance-auditor",
+      "path": "agents/compliance-auditor",
+      "displayName": "Compliance Auditor",
+      "description": "Expert technical compliance auditor specializing in SOC 2, ISO 27001, HIPAA, and PCI-DSS audits from readiness assessment through evidence collection to certification."
+    },
+    {
+      "kind": "agent",
+      "name": "corporate-training-designer",
+      "path": "agents/corporate-training-designer",
+      "displayName": "Corporate Training Designer",
+      "description": "Expert in enterprise training system design and curriculum development proficient in training needs analysis, instructional design methodology, blended learning program design, internal trainer development, leadership programs, and training effectiveness..."
+    },
+    {
+      "kind": "agent",
+      "name": "customer-service",
+      "path": "agents/customer-service",
+      "displayName": "Customer Service",
+      "description": "Friendly, professional customer service specialist for any industry handling inquiries, complaints, account support, FAQs, and seamless escalation with warmth, efficiency, and a genuine commitment to customer satisfaction"
+    },
+    {
+      "kind": "agent",
+      "name": "data-consolidation-agent",
+      "path": "agents/data-consolidation-agent",
+      "displayName": "Data Consolidation Agent",
+      "description": "AI agent that consolidates extracted sales data into live reporting dashboards with territory, rep, and pipeline summaries"
+    },
+    {
+      "kind": "agent",
+      "name": "design-brand-guardian",
+      "path": "agents/design-brand-guardian",
+      "displayName": "Brand Guardian",
+      "description": "Expert brand strategist and guardian specializing in brand identity development, consistency maintenance, and strategic brand positioning"
+    },
+    {
+      "kind": "agent",
+      "name": "design-image-prompt-engineer",
+      "path": "agents/design-image-prompt-engineer",
+      "displayName": "Image Prompt Engineer",
+      "description": "Expert photography prompt engineer specializing in crafting detailed, evocative prompts for AI image generation. Masters the art of translating visual concepts into precise language that produces stunning, professional-quality photography through..."
+    },
+    {
+      "kind": "agent",
+      "name": "design-inclusive-visuals-specialist",
+      "path": "agents/design-inclusive-visuals-specialist",
+      "displayName": "Inclusive Visuals Specialist",
+      "description": "Representation expert who defeats systemic AI biases to generate culturally accurate, affirming, and non-stereotypical images and video."
+    },
+    {
+      "kind": "agent",
+      "name": "design-ui-designer",
+      "path": "agents/design-ui-designer",
+      "displayName": "UI Designer",
+      "description": "Expert UI designer specializing in visual design systems, component libraries, and pixel-perfect interface creation. Creates beautiful, consistent, accessible user interfaces that enhance UX and reflect brand identity"
+    },
+    {
+      "kind": "agent",
+      "name": "design-ux-architect",
+      "path": "agents/design-ux-architect",
+      "displayName": "UX Architect",
+      "description": "Technical architecture and UX specialist who provides developers with solid foundations, CSS systems, and clear implementation guidance"
+    },
+    {
+      "kind": "agent",
+      "name": "design-ux-researcher",
+      "path": "agents/design-ux-researcher",
+      "displayName": "UX Researcher",
+      "description": "Expert user experience researcher specializing in user behavior analysis, usability testing, and data-driven design insights. Provides actionable research findings that improve product usability and user satisfaction"
+    },
+    {
+      "kind": "agent",
+      "name": "design-visual-storyteller",
+      "path": "agents/design-visual-storyteller",
+      "displayName": "Visual Storyteller",
+      "description": "Expert visual communication specialist focused on creating compelling visual narratives, multimedia content, and brand storytelling through design. Specializes in transforming complex information into engaging visual stories that connect with audiences and..."
+    },
+    {
+      "kind": "agent",
+      "name": "design-whimsy-injector",
+      "path": "agents/design-whimsy-injector",
+      "displayName": "Whimsy Injector",
+      "description": "Expert creative specialist focused on adding personality, delight, and playful elements to brand experiences. Creates memorable, joyful interactions that differentiate brands through unexpected moments of whimsy"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-ai-data-remediation-engineer",
+      "path": "agents/engineering-ai-data-remediation-engineer",
+      "displayName": "AI Data Remediation Engineer",
+      "description": "Specialist in self-healing data pipelines uses air-gapped local SLMs and semantic clustering to automatically detect, classify, and fix data anomalies at scale. Focuses exclusively on the remediation layer: intercepting bad data, generating deterministic..."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-ai-engineer",
+      "path": "agents/engineering-ai-engineer",
+      "displayName": "AI Engineer",
+      "description": "Expert AI/ML engineer specializing in machine learning model development, deployment, and integration into production systems. Focused on building intelligent features, data pipelines, and AI-powered applications with emphasis on practical, scalable solutions."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-autonomous-optimization-architect",
+      "path": "agents/engineering-autonomous-optimization-architect",
+      "displayName": "Autonomous Optimization Architect",
+      "description": "Intelligent system governor that continuously shadow-tests APIs for performance while enforcing strict financial and security guardrails against runaway costs."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-backend-architect",
+      "path": "agents/engineering-backend-architect",
+      "displayName": "Backend Architect",
+      "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-cms-developer",
+      "path": "agents/engineering-cms-developer",
+      "displayName": "CMS Developer",
+      "description": "Drupal and WordPress specialist for theme development, custom plugins/modules, content architecture, and code-first CMS implementation"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-code-reviewer",
+      "path": "agents/engineering-code-reviewer",
+      "displayName": "Code Reviewer",
+      "description": "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance not style preferences."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-codebase-onboarding-engineer",
+      "path": "agents/engineering-codebase-onboarding-engineer",
+      "displayName": "Codebase Onboarding Engineer",
+      "description": "Expert developer onboarding specialist who helps new engineers understand unfamiliar codebases fast by reading source code, tracing code paths, and stating only facts grounded in the code."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-data-engineer",
+      "path": "agents/engineering-data-engineer",
+      "displayName": "Data Engineer",
+      "description": "Expert data engineer specializing in building reliable data pipelines, lakehouse architectures, and scalable data infrastructure. Masters ETL/ELT, Apache Spark, dbt, streaming systems, and cloud data platforms to turn raw data into trusted, analytics-ready..."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-database-optimizer",
+      "path": "agents/engineering-database-optimizer",
+      "displayName": "Database Optimizer",
+      "description": "Expert database specialist focusing on schema design, query optimization, indexing strategies, and performance tuning for PostgreSQL, MySQL, and modern databases like Supabase and PlanetScale."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-devops-automator",
+      "path": "agents/engineering-devops-automator",
+      "displayName": "DevOps Automator",
+      "description": "Expert DevOps engineer specializing in infrastructure automation, CI/CD pipeline development, and cloud operations"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-email-intelligence-engineer",
+      "path": "agents/engineering-email-intelligence-engineer",
+      "displayName": "Email Intelligence Engineer",
+      "description": "Expert in extracting structured, reasoning-ready data from raw email threads for AI agents and automation systems"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-embedded-firmware-engineer",
+      "path": "agents/engineering-embedded-firmware-engineer",
+      "displayName": "Embedded Firmware Engineer",
+      "description": "Specialist in bare-metal and RTOS firmware - ESP32/ESP-IDF, PlatformIO, Arduino, ARM Cortex-M, STM32 HAL/LL, Nordic nRF5/nRF Connect SDK, FreeRTOS, Zephyr"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-feishu-integration-developer",
+      "path": "agents/engineering-feishu-integration-developer",
+      "displayName": "Feishu Integration Developer",
+      "description": "Full-stack integration expert specializing in the Feishu (Lark) Open Platform proficient in Feishu bots, mini programs, approval workflows, Bitable (multidimensional spreadsheets), interactive message cards, Webhooks, SSO authentication, and workflow..."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-filament-optimization-specialist",
+      "path": "agents/engineering-filament-optimization-specialist",
+      "displayName": "Filament Optimization Specialist",
+      "description": "Expert in restructuring and optimizing Filament PHP admin interfaces for maximum usability and efficiency. Focuses on impactful structural changes not just cosmetic tweaks."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-frontend-developer",
+      "path": "agents/engineering-frontend-developer",
+      "displayName": "Frontend Developer",
+      "description": "Expert frontend developer specializing in modern web technologies, React/Vue/Angular frameworks, UI implementation, and performance optimization"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-git-workflow-master",
+      "path": "agents/engineering-git-workflow-master",
+      "displayName": "Git Workflow Master",
+      "description": "Expert in Git workflows, branching strategies, and version control best practices including conventional commits, rebasing, worktrees, and CI-friendly branch management."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-incident-response-commander",
+      "path": "agents/engineering-incident-response-commander",
+      "displayName": "Incident Response Commander",
+      "description": "Expert incident commander specializing in production incident management, structured response coordination, post-mortem facilitation, SLO/SLI tracking, and on-call process design for reliable engineering organizations."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-minimal-change-engineer",
+      "path": "agents/engineering-minimal-change-engineer",
+      "displayName": "Minimal Change Engineer",
+      "description": "Engineering specialist focused on minimum-viable diffs fixes only what was asked, refuses scope creep, prefers three similar lines over a premature abstraction. The discipline that prevents bug-fix PRs from becoming refactor avalanches."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-mobile-app-builder",
+      "path": "agents/engineering-mobile-app-builder",
+      "displayName": "Mobile App Builder",
+      "description": "Specialized mobile application developer with expertise in native iOS/Android development and cross-platform frameworks"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-rapid-prototyper",
+      "path": "agents/engineering-rapid-prototyper",
+      "displayName": "Rapid Prototyper",
+      "description": "Specialized in ultra-fast proof-of-concept development and MVP creation using efficient tools and frameworks"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-security-engineer",
+      "path": "agents/engineering-security-engineer",
+      "displayName": "Security Engineer",
+      "description": "Expert application security engineer specializing in threat modeling, vulnerability assessment, secure code review, security architecture design, and incident response for modern web, API, and cloud-native applications."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-senior-developer",
+      "path": "agents/engineering-senior-developer",
+      "displayName": "Senior Developer",
+      "description": "Premium implementation specialist - Masters Laravel/Livewire/FluxUI, advanced CSS, Three.js integration"
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-software-architect",
+      "path": "agents/engineering-software-architect",
+      "displayName": "Software Architect",
+      "description": "Expert software architect specializing in system design, domain-driven design, architectural patterns, and technical decision-making for scalable, maintainable systems."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-solidity-smart-contract-engineer",
+      "path": "agents/engineering-solidity-smart-contract-engineer",
+      "displayName": "Solidity Smart Contract Engineer",
+      "description": "Expert Solidity developer specializing in EVM smart contract architecture, gas optimization, upgradeable proxy patterns, DeFi protocol development, and security-first contract design across Ethereum and L2 chains."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-sre",
+      "path": "agents/engineering-sre",
+      "displayName": "SRE (Site Reliability Engineer)",
+      "description": "Expert site reliability engineer specializing in SLOs, error budgets, observability, chaos engineering, and toil reduction for production systems at scale."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-technical-writer",
+      "path": "agents/engineering-technical-writer",
+      "displayName": "Technical Writer",
+      "description": "Expert technical writer specializing in developer documentation, API references, README files, and tutorials. Transforms complex engineering concepts into clear, accurate, and engaging docs that developers actually read and use."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-threat-detection-engineer",
+      "path": "agents/engineering-threat-detection-engineer",
+      "displayName": "Threat Detection Engineer",
+      "description": "Expert detection engineer specializing in SIEM rule development, MITRE ATT&CK coverage mapping, threat hunting, alert tuning, and detection-as-code pipelines for security operations teams."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-voice-ai-integration-engineer",
+      "path": "agents/engineering-voice-ai-integration-engineer",
+      "displayName": "Voice AI Integration Engineer",
+      "description": "Expert in building end-to-end speech transcription pipelines using Whisper-style models and cloud ASR services from raw audio ingestion through preprocessing, transcript cleanup, subtitle generation, speaker diarization, and structured downstream..."
+    },
+    {
+      "kind": "agent",
+      "name": "engineering-wechat-mini-program-developer",
+      "path": "agents/engineering-wechat-mini-program-developer",
+      "displayName": "WeChat Mini Program Developer",
+      "description": "Expert WeChat Mini Program developer specializing in development with WXML/WXSS/WXS, WeChat API integration, payment systems, subscription messaging, and the full WeChat ecosystem."
+    },
+    {
+      "kind": "agent",
+      "name": "finance-bookkeeper-controller",
+      "path": "agents/finance-bookkeeper-controller",
+      "displayName": "Bookkeeper & Controller",
+      "description": "Expert bookkeeper and controller specializing in day-to-day accounting operations, financial reconciliations, month-end close processes, and internal controls. Ensures the accuracy, completeness, and timeliness of financial records while maintaining GAAP..."
+    },
+    {
+      "kind": "agent",
+      "name": "finance-financial-analyst",
+      "path": "agents/finance-financial-analyst",
+      "displayName": "Financial Analyst",
+      "description": "Expert financial analyst specializing in financial modeling, forecasting, scenario analysis, and data-driven decision support. Transforms raw financial data into actionable business intelligence that drives strategic planning, investment decisions, and..."
+    },
+    {
+      "kind": "agent",
+      "name": "finance-fpa-analyst",
+      "path": "agents/finance-fpa-analyst",
+      "displayName": "FP&A Analyst",
+      "description": "Expert Financial Planning & Analysis (FP&A) analyst specializing in budgeting, variance analysis, financial planning, rolling forecasts, and strategic decision support. Bridges the gap between the numbers and the business narrative to drive operational..."
+    },
+    {
+      "kind": "agent",
+      "name": "finance-investment-researcher",
+      "path": "agents/finance-investment-researcher",
+      "displayName": "Investment Researcher",
+      "description": "Expert investment researcher specializing in market research, due diligence, portfolio analysis, and asset valuation. Conducts rigorous fundamental and quantitative analysis to identify investment opportunities, assess risks, and support data-driven..."
+    },
+    {
+      "kind": "agent",
+      "name": "finance-tax-strategist",
+      "path": "agents/finance-tax-strategist",
+      "displayName": "Tax Strategist",
+      "description": "Expert tax strategist specializing in tax optimization, multi-jurisdictional compliance, transfer pricing, and strategic tax planning. Navigates complex tax codes to minimize liability while ensuring full regulatory compliance across local, state, federal..."
+    },
+    {
+      "kind": "agent",
+      "name": "game-audio-engineer",
+      "path": "agents/game-audio-engineer",
+      "displayName": "Game Audio Engineer",
+      "description": "Interactive audio specialist - Masters FMOD/Wwise integration, adaptive music systems, spatial audio, and audio performance budgeting across all game engines"
+    },
+    {
+      "kind": "agent",
+      "name": "game-designer",
+      "path": "agents/game-designer",
+      "displayName": "Game Designer",
+      "description": "Systems and mechanics architect - Masters GDD authorship, player psychology, economy balancing, and gameplay loop design across all engines and genres"
+    },
+    {
+      "kind": "agent",
+      "name": "government-digital-presales-consultant",
+      "path": "agents/government-digital-presales-consultant",
+      "displayName": "Government Digital Presales Consultant",
+      "description": "Presales expert for China's government digital transformation market (ToG), proficient in policy interpretation, solution design, bid document preparation, POC validation, compliance requirements (classified protection/cryptographic assessment/Xinchuang..."
+    },
+    {
+      "kind": "agent",
+      "name": "healthcare-customer-service",
+      "path": "agents/healthcare-customer-service",
+      "displayName": "Healthcare Customer Service",
+      "description": "Empathetic healthcare customer service specialist for patient support, billing inquiries, appointment management, insurance questions, complaint resolution, and seamless escalation to clinical or administrative staff"
+    },
+    {
+      "kind": "agent",
+      "name": "healthcare-marketing-compliance",
+      "path": "agents/healthcare-marketing-compliance",
+      "displayName": "Healthcare Marketing Compliance Specialist",
+      "description": "Expert in healthcare marketing compliance in China, proficient in the Advertising Law, Medical Advertisement Management Measures, Drug Administration Law, and related regulations covering pharmaceuticals, medical devices, medical aesthetics, health..."
+    },
+    {
+      "kind": "agent",
+      "name": "hospitality-guest-services",
+      "path": "agents/hospitality-guest-services",
+      "displayName": "Hospitality Guest Services",
+      "description": "Comprehensive hospitality guest services specialist for hotels, resorts, restaurants, and event venues covering reservations, check-in/check-out, concierge services, guest complaint resolution, loyalty program management, and post-stay follow-up to deliver..."
+    },
+    {
+      "kind": "agent",
+      "name": "hr-onboarding",
+      "path": "agents/hr-onboarding",
+      "displayName": "HR Onboarding",
+      "description": "Comprehensive HR onboarding specialist for employee orientation, documentation management, compliance tracking, benefits enrollment, culture integration, and new hire support delivering a seamless first-day-to-first-year experience that drives retention..."
+    },
+    {
+      "kind": "agent",
+      "name": "identity-graph-operator",
+      "path": "agents/identity-graph-operator",
+      "displayName": "Identity Graph Operator",
+      "description": "Operates a shared identity graph that multiple AI agents resolve against. Ensures every agent in a multi-agent system gets the same canonical answer for \"who is this entity?\" - deterministically, even under concurrent writes."
+    },
+    {
+      "kind": "agent",
+      "name": "language-translator",
+      "path": "agents/language-translator",
+      "displayName": "Language Translator",
+      "description": "Real-time Spanish English translation specialist with cultural context, regional dialect awareness, travel phrase guidance, and tone-appropriate communication for everyday, business, and emergency situations"
+    },
+    {
+      "kind": "agent",
+      "name": "legal-billing-time-tracking",
+      "path": "agents/legal-billing-time-tracking",
+      "displayName": "Legal Billing & Time Tracking",
+      "description": "Comprehensive legal billing and time tracking specialist for accurate time capture, invoice generation, billing narrative writing, collections management, trust account compliance, and billing analysis maximizing revenue recovery while maintaining client..."
+    },
+    {
+      "kind": "agent",
+      "name": "legal-client-intake",
+      "path": "agents/legal-client-intake",
+      "displayName": "Legal Client Intake",
+      "description": "Comprehensive legal client intake specialist for qualifying prospects, collecting case information, scheduling consultations, managing conflict checks, and delivering attorney-ready intake summaries across any practice area and firm size"
+    },
+    {
+      "kind": "agent",
+      "name": "legal-document-review",
+      "path": "agents/legal-document-review",
+      "displayName": "Legal Document Review",
+      "description": "Comprehensive legal document review specialist for contracts, litigation documents, and real estate agreements summarizing documents, flagging risk clauses, comparing contract versions, and checking compliance across any law firm size or practice area"
+    },
+    {
+      "kind": "agent",
+      "name": "level-designer",
+      "path": "agents/level-designer",
+      "displayName": "Level Designer",
+      "description": "Spatial storytelling and flow specialist - Masters layout theory, pacing architecture, encounter design, and environmental narrative across all game engines"
+    },
+    {
+      "kind": "agent",
+      "name": "loan-officer-assistant",
+      "path": "agents/loan-officer-assistant",
+      "displayName": "Loan Officer Assistant",
+      "description": "Comprehensive loan officer assistant for mortgage and lending professionals covering borrower intake, pre-qualification, document collection, pipeline management, compliance tracking, rate quoting, and closing coordination across residential, commercial..."
+    },
+    {
+      "kind": "agent",
+      "name": "lsp-index-engineer",
+      "path": "agents/lsp-index-engineer",
+      "displayName": "LSP/Index Engineer",
+      "description": "Language Server Protocol specialist building unified code intelligence systems through LSP client orchestration and semantic indexing"
+    },
+    {
+      "kind": "agent",
+      "name": "macos-spatial-metal-engineer",
+      "path": "agents/macos-spatial-metal-engineer",
+      "displayName": "macOS Spatial/Metal Engineer",
+      "description": "Native Swift and Metal specialist building high-performance 3D rendering systems and spatial computing experiences for macOS and Vision Pro"
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-agentic-search-optimizer",
+      "path": "agents/marketing-agentic-search-optimizer",
+      "displayName": "Agentic Search Optimizer",
+      "description": "Expert in WebMCP readiness and agentic task completion audits whether AI agents can actually accomplish tasks on your site (book, buy, register, subscribe), implements WebMCP declarative and imperative patterns, and measures task completion rates across AI..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-ai-citation-strategist",
+      "path": "agents/marketing-ai-citation-strategist",
+      "displayName": "AI Citation Strategist",
+      "description": "Expert in AI recommendation engine optimization (AEO/GEO) audits brand visibility across ChatGPT, Claude, Gemini, and Perplexity, identifies why competitors get cited instead, and delivers content fixes that improve AI citations"
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-app-store-optimizer",
+      "path": "agents/marketing-app-store-optimizer",
+      "displayName": "App Store Optimizer",
+      "description": "Expert app store marketing specialist focused on App Store Optimization (ASO), conversion rate optimization, and app discoverability"
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-baidu-seo-specialist",
+      "path": "agents/marketing-baidu-seo-specialist",
+      "displayName": "Baidu SEO Specialist",
+      "description": "Expert Baidu search optimization specialist focused on Chinese search engine ranking, Baidu ecosystem integration, ICP compliance, Chinese keyword research, and mobile-first indexing for the China market."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-bilibili-content-strategist",
+      "path": "agents/marketing-bilibili-content-strategist",
+      "displayName": "Bilibili Content Strategist",
+      "description": "Expert Bilibili marketing specialist focused on UP growth, danmaku culture mastery, B algorithm optimization, community building, and branded content strategy for China's leading video community platform."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-book-co-author",
+      "path": "agents/marketing-book-co-author",
+      "displayName": "Book Co-Author",
+      "description": "Strategic thought-leadership book collaborator for founders, experts, and operators turning voice notes, fragments, and positioning into structured first-person chapters."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-carousel-growth-engine",
+      "path": "agents/marketing-carousel-growth-engine",
+      "displayName": "Carousel Growth Engine",
+      "description": "Autonomous TikTok and Instagram carousel generation specialist. Analyzes any website URL with Playwright, generates viral 6-slide carousels via Gemini image generation, publishes directly to feed via Upload-Post API with auto trending music, fetches..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-china-ecommerce-operator",
+      "path": "agents/marketing-china-ecommerce-operator",
+      "displayName": "China E-Commerce Operator",
+      "description": "Expert China e-commerce operations specialist covering Taobao, Tmall, Pinduoduo, and JD ecosystems with deep expertise in product listing optimization, live commerce, store operations, 618/Double 11 campaigns, and cross-platform strategy."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-china-market-localization-strategist",
+      "path": "agents/marketing-china-market-localization-strategist",
+      "displayName": "China Market Localization Strategist",
+      "description": "Full-stack China market localization expert who transforms real-time trend signals into executable go-to-market strategies across Douyin, Xiaohongshu, WeChat, Bilibili, and beyond"
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-content-creator",
+      "path": "agents/marketing-content-creator",
+      "displayName": "Content Creator",
+      "description": "Expert content strategist and creator for multi-platform campaigns. Develops editorial calendars, creates compelling copy, manages brand storytelling, and optimizes content for engagement across all digital channels."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-cross-border-ecommerce",
+      "path": "agents/marketing-cross-border-ecommerce",
+      "displayName": "Cross-Border E-Commerce Specialist",
+      "description": "Full-funnel cross-border e-commerce strategist covering Amazon, Shopee, Lazada, AliExpress, Temu, and TikTok Shop operations, international logistics and overseas warehousing, compliance and taxation, multilingual listing optimization, brand globalization..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-douyin-strategist",
+      "path": "agents/marketing-douyin-strategist",
+      "displayName": "Douyin Strategist",
+      "description": "Short-video marketing expert specializing in the Douyin platform, with deep expertise in recommendation algorithm mechanics, viral video planning, livestream commerce workflows, and full-funnel brand growth through content matrix strategies."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-growth-hacker",
+      "path": "agents/marketing-growth-hacker",
+      "displayName": "Growth Hacker",
+      "description": "Expert growth strategist specializing in rapid user acquisition through data-driven experimentation. Develops viral loops, optimizes conversion funnels, and finds scalable growth channels for exponential business growth."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-instagram-curator",
+      "path": "agents/marketing-instagram-curator",
+      "displayName": "Instagram Curator",
+      "description": "Expert Instagram marketing specialist focused on visual storytelling, community building, and multi-format content optimization. Masters aesthetic development and drives meaningful engagement."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-kuaishou-strategist",
+      "path": "agents/marketing-kuaishou-strategist",
+      "displayName": "Kuaishou Strategist",
+      "description": "Expert Kuaishou marketing strategist specializing in short-video content for China's lower-tier city markets, live commerce operations, community trust building, and grassroots audience growth on ."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-linkedin-content-creator",
+      "path": "agents/marketing-linkedin-content-creator",
+      "displayName": "LinkedIn Content Creator",
+      "description": "Expert LinkedIn content strategist focused on thought leadership, personal brand building, and high-engagement professional content. Masters LinkedIn's algorithm and culture to drive inbound opportunities for founders, job seekers, developers, and anyone..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-livestream-commerce-coach",
+      "path": "agents/marketing-livestream-commerce-coach",
+      "displayName": "Livestream Commerce Coach",
+      "description": "Veteran livestream e-commerce coach specializing in host training and live room operations across Douyin, Kuaishou, Taobao Live, and Channels, covering script design, product sequencing, paid-vs-organic traffic balancing, conversion closing techniques, and..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-podcast-strategist",
+      "path": "agents/marketing-podcast-strategist",
+      "displayName": "Podcast Strategist",
+      "description": "Content strategy and operations expert for the Chinese podcast market, with deep expertise in Xiaoyuzhou, Ximalaya, and other major audio platforms, covering show positioning, audio production, audience growth, multi-platform distribution, and monetization..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-private-domain-operator",
+      "path": "agents/marketing-private-domain-operator",
+      "displayName": "Private Domain Operator",
+      "description": "Expert in building enterprise WeChat (WeCom) private domain ecosystems, with deep expertise in SCRM systems, segmented community operations, Mini Program commerce integration, user lifecycle management, and full-funnel conversion optimization."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-reddit-community-builder",
+      "path": "agents/marketing-reddit-community-builder",
+      "displayName": "Reddit Community Builder",
+      "description": "Expert Reddit marketing specialist focused on authentic community engagement, value-driven content creation, and long-term relationship building. Masters Reddit culture navigation."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-seo-specialist",
+      "path": "agents/marketing-seo-specialist",
+      "displayName": "SEO Specialist",
+      "description": "Expert search engine optimization strategist specializing in technical SEO, content optimization, link authority building, and organic search growth. Drives sustainable traffic through data-driven search strategies."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-short-video-editing-coach",
+      "path": "agents/marketing-short-video-editing-coach",
+      "displayName": "Short-Video Editing Coach",
+      "description": "Hands-on short-video editing coach covering the full post-production pipeline, with mastery of CapCut Pro, Premiere Pro, DaVinci Resolve, and Final Cut Pro across composition and camera language, color grading, audio engineering, motion graphics and VFX..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-social-media-strategist",
+      "path": "agents/marketing-social-media-strategist",
+      "displayName": "Social Media Strategist",
+      "description": "Expert social media strategist for LinkedIn, Twitter, and professional platforms. Creates cross-platform campaigns, builds communities, manages real-time engagement, and develops thought leadership strategies."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-tiktok-strategist",
+      "path": "agents/marketing-tiktok-strategist",
+      "displayName": "TikTok Strategist",
+      "description": "Expert TikTok marketing specialist focused on viral content creation, algorithm optimization, and community building. Masters TikTok's unique culture and features for brand growth."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-twitter-engager",
+      "path": "agents/marketing-twitter-engager",
+      "displayName": "Twitter Engager",
+      "description": "Expert Twitter marketing specialist focused on real-time engagement, thought leadership building, and community-driven growth. Builds brand authority through authentic conversation participation and viral thread creation."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-video-optimization-specialist",
+      "path": "agents/marketing-video-optimization-specialist",
+      "displayName": "Video Optimization Specialist",
+      "description": "Video marketing strategist specializing in YouTube algorithm optimization, audience retention, chaptering, thumbnail concepts, and cross-platform video syndication."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-wechat-official-account",
+      "path": "agents/marketing-wechat-official-account",
+      "displayName": "WeChat Official Account Manager",
+      "description": "Expert WeChat Official Account (OA) strategist specializing in content marketing, subscriber engagement, and conversion optimization. Masters multi-format content and builds loyal communities through consistent value delivery."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-weibo-strategist",
+      "path": "agents/marketing-weibo-strategist",
+      "displayName": "Weibo Strategist",
+      "description": "Full-spectrum operations expert for Sina Weibo, with deep expertise in trending topic mechanics, Super Topic community management, public sentiment monitoring, fan economy strategies, and Weibo advertising, helping brands achieve viral reach and sustained..."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-xiaohongshu-specialist",
+      "path": "agents/marketing-xiaohongshu-specialist",
+      "displayName": "Xiaohongshu Specialist",
+      "description": "Expert Xiaohongshu marketing specialist focused on lifestyle content, trend-driven strategies, and authentic community engagement. Masters micro-content creation and drives viral growth through aesthetic storytelling."
+    },
+    {
+      "kind": "agent",
+      "name": "marketing-zhihu-strategist",
+      "path": "agents/marketing-zhihu-strategist",
+      "displayName": "Zhihu Strategist",
+      "description": "Expert Zhihu marketing specialist focused on thought leadership, community credibility, and knowledge-driven engagement. Masters question-answering strategy and builds brand authority through authentic expertise sharing."
+    },
+    {
+      "kind": "agent",
+      "name": "narrative-designer",
+      "path": "agents/narrative-designer",
+      "displayName": "Narrative Designer",
+      "description": "Story systems and dialogue architect - Masters GDD-aligned narrative design, branching dialogue, lore architecture, and environmental storytelling across all game engines"
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-auditor",
+      "path": "agents/paid-media-auditor",
+      "displayName": "Paid Media Auditor",
+      "description": "Comprehensive paid media auditor who systematically evaluates Google Ads, Microsoft Ads, and Meta accounts across 200+ checkpoints spanning account structure, tracking, bidding, creative, audiences, and competitive positioning. Produces actionable audit..."
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-creative-strategist",
+      "path": "agents/paid-media-creative-strategist",
+      "displayName": "Ad Creative Strategist",
+      "description": "Paid media creative specialist focused on ad copywriting, RSA optimization, asset group design, and creative testing frameworks across Google, Meta, Microsoft, and programmatic platforms. Bridges the gap between performance data and persuasive messaging."
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-paid-social-strategist",
+      "path": "agents/paid-media-paid-social-strategist",
+      "displayName": "Paid Social Strategist",
+      "description": "Cross-platform paid social advertising specialist covering Meta (Facebook/Instagram), LinkedIn, TikTok, Pinterest, X, and Snapchat. Designs full-funnel social ad programs from prospecting through retargeting with platform-specific creative and audience..."
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-ppc-strategist",
+      "path": "agents/paid-media-ppc-strategist",
+      "displayName": "PPC Campaign Strategist",
+      "description": "Senior paid media strategist specializing in large-scale search, shopping, and performance max campaign architecture across Google, Microsoft, and Amazon ad platforms. Designs account structures, budget allocation frameworks, and bidding strategies that..."
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-programmatic-buyer",
+      "path": "agents/paid-media-programmatic-buyer",
+      "displayName": "Programmatic & Display Buyer",
+      "description": "Display advertising and programmatic media buying specialist covering managed placements, Google Display Network, DV360, trade desk platforms, partner media (newsletters, sponsored content), and ABM display strategies via platforms like Demandbase and 6Sense."
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-search-query-analyst",
+      "path": "agents/paid-media-search-query-analyst",
+      "displayName": "Search Query Analyst",
+      "description": "Specialist in search term analysis, negative keyword architecture, and query-to-intent mapping. Turns raw search query data into actionable optimizations that eliminate waste and amplify high-intent traffic across paid search accounts."
+    },
+    {
+      "kind": "agent",
+      "name": "paid-media-tracking-specialist",
+      "path": "agents/paid-media-tracking-specialist",
+      "displayName": "Tracking & Measurement Specialist",
+      "description": "Expert in conversion tracking architecture, tag management, and attribution modeling across Google Tag Manager, GA4, Google Ads, Meta CAPI, LinkedIn Insight Tag, and server-side implementations. Ensures every conversion is counted correctly and every..."
+    },
+    {
+      "kind": "agent",
+      "name": "product-behavioral-nudge-engine",
+      "path": "agents/product-behavioral-nudge-engine",
+      "displayName": "Behavioral Nudge Engine",
+      "description": "Behavioral psychology specialist that adapts software interaction cadences and styles to maximize user motivation and success."
+    },
+    {
+      "kind": "agent",
+      "name": "product-feedback-synthesizer",
+      "path": "agents/product-feedback-synthesizer",
+      "displayName": "Feedback Synthesizer",
+      "description": "Expert in collecting, analyzing, and synthesizing user feedback from multiple channels to extract actionable product insights. Transforms qualitative feedback into quantitative priorities and strategic recommendations."
+    },
+    {
+      "kind": "agent",
+      "name": "product-manager",
+      "path": "agents/product-manager",
+      "displayName": "Product Manager",
+      "description": "Holistic product leader who owns the full product lifecycle from discovery and strategy through roadmap, stakeholder alignment, go-to-market, and outcome measurement. Bridges business goals, user needs, and technical reality to ship the right thing at the..."
+    },
+    {
+      "kind": "agent",
+      "name": "product-sprint-prioritizer",
+      "path": "agents/product-sprint-prioritizer",
+      "displayName": "Sprint Prioritizer",
+      "description": "Expert product manager specializing in agile sprint planning, feature prioritization, and resource allocation. Focused on maximizing team velocity and business value delivery through data-driven prioritization frameworks."
+    },
+    {
+      "kind": "agent",
+      "name": "product-trend-researcher",
+      "path": "agents/product-trend-researcher",
+      "displayName": "Trend Researcher",
+      "description": "Expert market intelligence analyst specializing in identifying emerging trends, competitive analysis, and opportunity assessment. Focused on providing actionable insights that drive product strategy and innovation decisions."
+    },
+    {
+      "kind": "agent",
+      "name": "project-management-experiment-tracker",
+      "path": "agents/project-management-experiment-tracker",
+      "displayName": "Experiment Tracker",
+      "description": "Expert project manager specializing in experiment design, execution tracking, and data-driven decision making. Focused on managing A/B tests, feature experiments, and hypothesis validation through systematic experimentation and rigorous analysis."
+    },
+    {
+      "kind": "agent",
+      "name": "project-management-jira-workflow-steward",
+      "path": "agents/project-management-jira-workflow-steward",
+      "displayName": "Jira Workflow Steward",
+      "description": "Expert delivery operations specialist who enforces Jira-linked Git workflows, traceable commits, structured pull requests, and release-safe branch strategy across software teams."
+    },
+    {
+      "kind": "agent",
+      "name": "project-management-project-shepherd",
+      "path": "agents/project-management-project-shepherd",
+      "displayName": "Project Shepherd",
+      "description": "Expert project manager specializing in cross-functional project coordination, timeline management, and stakeholder alignment. Focused on shepherding projects from conception to completion while managing resources, risks, and communications across multiple..."
+    },
+    {
+      "kind": "agent",
+      "name": "project-management-studio-operations",
+      "path": "agents/project-management-studio-operations",
+      "displayName": "Studio Operations",
+      "description": "Expert operations manager specializing in day-to-day studio efficiency, process optimization, and resource coordination. Focused on ensuring smooth operations, maintaining productivity standards, and supporting all teams with the tools and processes needed..."
+    },
+    {
+      "kind": "agent",
+      "name": "project-management-studio-producer",
+      "path": "agents/project-management-studio-producer",
+      "displayName": "Studio Producer",
+      "description": "Senior strategic leader specializing in high-level creative and technical project orchestration, resource allocation, and multi-project portfolio management. Focused on aligning creative vision with business objectives while managing complex..."
+    },
+    {
+      "kind": "agent",
+      "name": "project-manager-senior",
+      "path": "agents/project-manager-senior",
+      "displayName": "Senior Project Manager",
+      "description": "Converts specs to tasks and remembers previous projects. Focused on realistic scope, no background processes, exact spec requirements"
+    },
+    {
+      "kind": "agent",
+      "name": "real-estate-buyer-seller",
+      "path": "agents/real-estate-buyer-seller",
+      "displayName": "Real Estate Buyer & Seller",
+      "description": "Comprehensive real estate agent assistant for buyer representation, seller representation, listing management, offer negotiation, transaction coordination, and closing support delivering a world-class client experience from first showing to final closing..."
+    },
+    {
+      "kind": "agent",
+      "name": "recruitment-specialist",
+      "path": "agents/recruitment-specialist",
+      "displayName": "Recruitment Specialist",
+      "description": "Expert recruitment operations and talent acquisition specialist skilled in China's major hiring platforms, talent assessment frameworks, and labor law compliance. Helps companies efficiently attract, screen, and retain top talent while building a..."
+    },
+    {
+      "kind": "agent",
+      "name": "report-distribution-agent",
+      "path": "agents/report-distribution-agent",
+      "displayName": "Report Distribution Agent",
+      "description": "AI agent that automates distribution of consolidated sales reports to representatives based on territorial parameters"
+    },
+    {
+      "kind": "agent",
+      "name": "retail-customer-returns",
+      "path": "agents/retail-customer-returns",
+      "displayName": "Retail Customer Returns",
+      "description": "Comprehensive retail customer returns specialist for processing returns, exchanges, and refunds across in-store, online, and omnichannel retail handling policy enforcement, fraud prevention, customer retention, vendor returns, and returns analytics to..."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-account-strategist",
+      "path": "agents/sales-account-strategist",
+      "displayName": "Account Strategist",
+      "description": "Expert post-sale account strategist specializing in land-and-expand execution, stakeholder mapping, QBR facilitation, and net revenue retention. Turns closed deals into long-term platform relationships through systematic expansion planning and..."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-coach",
+      "path": "agents/sales-coach",
+      "displayName": "Sales Coach",
+      "description": "Expert sales coaching specialist focused on rep development, pipeline review facilitation, call coaching, deal strategy, and forecast accuracy. Makes every rep and every deal better through structured coaching methodology and behavioral feedback."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-data-extraction-agent",
+      "path": "agents/sales-data-extraction-agent",
+      "displayName": "Sales Data Extraction Agent",
+      "description": "AI agent specialized in monitoring Excel files and extracting key sales metrics (MTD, YTD, Year End) for internal live reporting"
+    },
+    {
+      "kind": "agent",
+      "name": "sales-deal-strategist",
+      "path": "agents/sales-deal-strategist",
+      "displayName": "Deal Strategist",
+      "description": "Senior deal strategist specializing in MEDDPICC qualification, competitive positioning, and win planning for complex B2B sales cycles. Scores opportunities, exposes pipeline risk, and builds deal strategies that survive forecast review."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-discovery-coach",
+      "path": "agents/sales-discovery-coach",
+      "displayName": "Discovery Coach",
+      "description": "Coaches sales teams on elite discovery methodology question design, current-state mapping, gap quantification, and call structure that surfaces real buying motivation."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-engineer",
+      "path": "agents/sales-engineer",
+      "displayName": "Sales Engineer",
+      "description": "Senior pre-sales engineer specializing in technical discovery, demo engineering, POC scoping, competitive battlecards, and bridging product capabilities to business outcomes. Wins the technical decision so the deal can close."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-outbound-strategist",
+      "path": "agents/sales-outbound-strategist",
+      "displayName": "Outbound Strategist",
+      "description": "Signal-based outbound specialist who designs multi-channel prospecting sequences, defines ICPs, and builds pipeline through research-driven personalization not volume."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-outreach",
+      "path": "agents/sales-outreach",
+      "displayName": "Sales Outreach",
+      "description": "Consultative B2B sales outreach specialist for cold prospecting, lead follow-up, objection handling, proposal writing, and pipeline management combining data-driven targeting with genuine relationship-building to open doors and close deals"
+    },
+    {
+      "kind": "agent",
+      "name": "sales-pipeline-analyst",
+      "path": "agents/sales-pipeline-analyst",
+      "displayName": "Pipeline Analyst",
+      "description": "Revenue operations analyst specializing in pipeline health diagnostics, deal velocity analysis, forecast accuracy, and data-driven sales coaching. Turns CRM data into actionable pipeline intelligence that surfaces risks before they become missed quarters."
+    },
+    {
+      "kind": "agent",
+      "name": "sales-proposal-strategist",
+      "path": "agents/sales-proposal-strategist",
+      "displayName": "Proposal Strategist",
+      "description": "Strategic proposal architect who transforms RFPs and sales opportunities into compelling win narratives. Specializes in win theme development, competitive positioning, executive summary craft, and building proposals that persuade rather than merely comply."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-chief-of-staff",
+      "path": "agents/specialized-chief-of-staff",
+      "displayName": "Chief of Staff",
+      "description": "Master coordinator for founders and executives filters noise, owns processes, enforces consistency, routes decisions, and positions outputs for impact so the boss can think clearly."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-civil-engineer",
+      "path": "agents/specialized-civil-engineer",
+      "displayName": "Civil Engineer",
+      "description": "Expert civil and structural engineer with global standards coverage Eurocode, DIN, ACI, AISC, ASCE, AS/NZS, CSA, GB, IS, AIJ, and more. Specializes in structural analysis, geotechnical design, construction documentation, building code compliance, and..."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-cultural-intelligence-strategist",
+      "path": "agents/specialized-cultural-intelligence-strategist",
+      "displayName": "Cultural Intelligence Strategist",
+      "description": "CQ specialist that detects invisible exclusion, researches global context, and ensures software resonates authentically across intersectional identities."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-developer-advocate",
+      "path": "agents/specialized-developer-advocate",
+      "displayName": "Developer Advocate",
+      "description": "Expert developer advocate specializing in building developer communities, creating compelling technical content, optimizing developer experience (DX), and driving platform adoption through authentic engineering engagement. Bridges product and engineering..."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-document-generator",
+      "path": "agents/specialized-document-generator",
+      "displayName": "Document Generator",
+      "description": "Expert document creation specialist who generates professional PDF, PPTX, DOCX, and XLSX files using code-based approaches with proper formatting, charts, and data visualization."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-french-consulting-market",
+      "path": "agents/specialized-french-consulting-market",
+      "displayName": "French Consulting Market Navigator",
+      "description": "Navigate the French ESN/SI freelance ecosystem margin models, platform mechanics (Malt, collective.work), portage salarial, rate positioning, and payment cycle realities"
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-korean-business-navigator",
+      "path": "agents/specialized-korean-business-navigator",
+      "displayName": "Korean Business Navigator",
+      "description": "Korean business culture for foreign professionals decision process, nunchi reading, KakaoTalk business etiquette, hierarchy navigation, and relationship-first deal mechanics"
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-mcp-builder",
+      "path": "agents/specialized-mcp-builder",
+      "displayName": "MCP Builder",
+      "description": "Expert Model Context Protocol developer who designs, builds, and tests MCP servers that extend AI agent capabilities with custom tools, resources, and prompts."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-model-qa",
+      "path": "agents/specialized-model-qa",
+      "displayName": "Model QA Specialist",
+      "description": "Independent model QA expert who audits ML and statistical models end-to-end - from documentation review and data reconstruction to replication, calibration testing, interpretability analysis, performance monitoring, and audit-grade reporting."
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-salesforce-architect",
+      "path": "agents/specialized-salesforce-architect",
+      "displayName": "Salesforce Architect",
+      "description": "Solution architecture for Salesforce platform multi-cloud design, integration patterns, governor limits, deployment strategy, and data model governance for enterprise-scale orgs"
+    },
+    {
+      "kind": "agent",
+      "name": "specialized-workflow-architect",
+      "path": "agents/specialized-workflow-architect",
+      "displayName": "Workflow Architect",
+      "description": "Workflow design specialist who maps complete workflow trees for every system, user journey, and agent interaction covering happy paths, all branch conditions, failure modes, recovery paths, handoff contracts, and observable states to produce build-ready..."
+    },
+    {
+      "kind": "agent",
+      "name": "study-abroad-advisor",
+      "path": "agents/study-abroad-advisor",
+      "displayName": "Study Abroad Advisor",
+      "description": "Full-spectrum study abroad planning expert covering the US, UK, Canada, Australia, Europe, Hong Kong, and Singapore proficient in undergraduate, master's, and PhD application strategy, school selection, essay coaching, profile enhancement, standardized..."
+    },
+    {
+      "kind": "agent",
+      "name": "supply-chain-strategist",
+      "path": "agents/supply-chain-strategist",
+      "displayName": "Supply Chain Strategist",
+      "description": "Expert supply chain management and procurement strategy specialist skilled in supplier development, strategic sourcing, quality control, and supply chain digitalization. Grounded in China's manufacturing ecosystem, helps companies build efficient..."
+    },
+    {
+      "kind": "agent",
+      "name": "support-analytics-reporter",
+      "path": "agents/support-analytics-reporter",
+      "displayName": "Analytics Reporter",
+      "description": "Expert data analyst transforming raw data into actionable business insights. Creates dashboards, performs statistical analysis, tracks KPIs, and provides strategic decision support through data visualization and reporting."
+    },
+    {
+      "kind": "agent",
+      "name": "support-executive-summary-generator",
+      "path": "agents/support-executive-summary-generator",
+      "displayName": "Executive Summary Generator",
+      "description": "Consultant-grade AI specialist trained to think and communicate like a senior strategy consultant. Transforms complex business inputs into concise, actionable executive summaries using McKinsey SCQA, BCG Pyramid Principle, and Bain frameworks for C-suite..."
+    },
+    {
+      "kind": "agent",
+      "name": "support-finance-tracker",
+      "path": "agents/support-finance-tracker",
+      "displayName": "Finance Tracker",
+      "description": "Expert financial analyst and controller specializing in financial planning, budget management, and business performance analysis. Maintains financial health, optimizes cash flow, and provides strategic financial insights for business growth."
+    },
+    {
+      "kind": "agent",
+      "name": "support-infrastructure-maintainer",
+      "path": "agents/support-infrastructure-maintainer",
+      "displayName": "Infrastructure Maintainer",
+      "description": "Expert infrastructure specialist focused on system reliability, performance optimization, and technical operations management. Maintains robust, scalable infrastructure supporting business operations with security, performance, and cost efficiency."
+    },
+    {
+      "kind": "agent",
+      "name": "support-legal-compliance-checker",
+      "path": "agents/support-legal-compliance-checker",
+      "displayName": "Legal Compliance Checker",
+      "description": "Expert legal and compliance specialist ensuring business operations, data handling, and content creation comply with relevant laws, regulations, and industry standards across multiple jurisdictions."
+    },
+    {
+      "kind": "agent",
+      "name": "support-support-responder",
+      "path": "agents/support-support-responder",
+      "displayName": "Support Responder",
+      "description": "Expert customer support specialist delivering exceptional customer service, issue resolution, and user experience optimization. Specializes in multi-channel support, proactive customer care, and turning support interactions into positive brand experiences."
+    },
+    {
+      "kind": "agent",
+      "name": "technical-artist",
+      "path": "agents/technical-artist",
+      "displayName": "Technical Artist",
+      "description": "Art-to-engine pipeline specialist - Masters shaders, VFX systems, LOD pipelines, performance budgeting, and cross-engine asset optimization"
+    },
+    {
+      "kind": "agent",
+      "name": "terminal-integration-specialist",
+      "path": "agents/terminal-integration-specialist",
+      "displayName": "Terminal Integration Specialist",
+      "description": "Terminal emulation, text rendering optimization, and SwiftTerm integration for modern Swift applications"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-accessibility-auditor",
+      "path": "agents/testing-accessibility-auditor",
+      "displayName": "Accessibility Auditor",
+      "description": "Expert accessibility specialist who audits interfaces against WCAG standards, tests with assistive technologies, and ensures inclusive design. Defaults to finding barriers if it's not tested with a screen reader, it's not accessible."
+    },
+    {
+      "kind": "agent",
+      "name": "testing-api-tester",
+      "path": "agents/testing-api-tester",
+      "displayName": "API Tester",
+      "description": "Expert API testing specialist focused on comprehensive API validation, performance testing, and quality assurance across all systems and third-party integrations"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-evidence-collector",
+      "path": "agents/testing-evidence-collector",
+      "displayName": "Evidence Collector",
+      "description": "Screenshot-obsessed, fantasy-allergic QA specialist - Default to finding 3-5 issues, requires visual proof for everything"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-performance-benchmarker",
+      "path": "agents/testing-performance-benchmarker",
+      "displayName": "Performance Benchmarker",
+      "description": "Expert performance testing and optimization specialist focused on measuring, analyzing, and improving system performance across all applications and infrastructure"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-reality-checker",
+      "path": "agents/testing-reality-checker",
+      "displayName": "Reality Checker",
+      "description": "Stops fantasy approvals, evidence-based certification - Default to \"NEEDS WORK\", requires overwhelming proof for production readiness"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-test-results-analyzer",
+      "path": "agents/testing-test-results-analyzer",
+      "displayName": "Test Results Analyzer",
+      "description": "Expert test analysis specialist focused on comprehensive test result evaluation, quality metrics analysis, and actionable insight generation from testing activities"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-tool-evaluator",
+      "path": "agents/testing-tool-evaluator",
+      "displayName": "Tool Evaluator",
+      "description": "Expert technology assessment specialist focused on evaluating, testing, and recommending tools, software, and platforms for business use and productivity optimization"
+    },
+    {
+      "kind": "agent",
+      "name": "testing-workflow-optimizer",
+      "path": "agents/testing-workflow-optimizer",
+      "displayName": "Workflow Optimizer",
+      "description": "Expert process improvement specialist focused on analyzing, optimizing, and automating workflows across all business functions for maximum productivity and efficiency"
+    },
+    {
+      "kind": "agent",
+      "name": "visionos-spatial-engineer",
+      "path": "agents/visionos-spatial-engineer",
+      "displayName": "visionOS Spatial Engineer",
+      "description": "Native visionOS spatial computing, SwiftUI volumetric interfaces, and Liquid Glass design implementation"
+    },
+    {
+      "kind": "agent",
+      "name": "xr-cockpit-interaction-specialist",
+      "path": "agents/xr-cockpit-interaction-specialist",
+      "displayName": "XR Cockpit Interaction Specialist",
+      "description": "Specialist in designing and developing immersive cockpit-based control systems for XR environments"
+    },
+    {
+      "kind": "agent",
+      "name": "xr-immersive-developer",
+      "path": "agents/xr-immersive-developer",
+      "displayName": "XR Immersive Developer",
+      "description": "Expert WebXR and immersive technology developer with specialization in browser-based AR/VR/XR applications"
+    },
+    {
+      "kind": "agent",
+      "name": "xr-interface-architect",
+      "path": "agents/xr-interface-architect",
+      "displayName": "XR Interface Architect",
+      "description": "Spatial interaction designer and interface strategist for immersive AR/VR/XR environments"
+    },
+    {
+      "kind": "agent",
+      "name": "zk-steward",
+      "path": "agents/zk-steward",
+      "displayName": "ZK Steward",
+      "description": "Knowledge-base steward in the spirit of Niklas Luhmann's Zettelkasten. Default perspective: Luhmann; switches to domain experts (Feynman, Munger, Ogilvy, etc.) by task. Enforces atomic notes, connectivity, and validation loops. Use for knowledge-base..."
+    },
+    {
+      "kind": "theme",
+      "name": "catppuccin-latte",
+      "path": "themes/catppuccin-latte",
+      "displayName": "Catppuccin Latte",
+      "description": "Light shell + mauve accent + warm pastels"
+    },
+    {
+      "kind": "theme",
+      "name": "catppuccin-mocha",
+      "path": "themes/catppuccin-mocha",
+      "displayName": "Catppuccin Mocha",
+      "description": "Dark shell + mauve accent + pastel aurora"
+    },
+    {
+      "kind": "theme",
+      "name": "cherry-blossom",
+      "path": "themes/cherry-blossom",
+      "displayName": "Cherry Blossom",
+      "description": "Light shell + cherry blossom palette + vivid interaction lines"
+    },
+    {
+      "kind": "theme",
+      "name": "executive-graphite",
+      "path": "themes/executive-graphite",
+      "displayName": "Executive Graphite",
+      "description": "Dark shell + warm graphite surfaces + teal work accent"
+    },
+    {
+      "kind": "theme",
+      "name": "forest",
+      "path": "themes/forest",
+      "displayName": "Forest",
+      "description": "Light shell + teal accent + light code"
+    },
+    {
+      "kind": "theme",
+      "name": "gruvbox-dark-hard",
+      "path": "themes/gruvbox-dark-hard",
+      "displayName": "Gruvbox Dark Hard",
+      "description": "Dark shell + warm orange accent + retro Vim palette"
+    },
+    {
+      "kind": "theme",
+      "name": "high-contrast",
+      "path": "themes/high-contrast",
+      "displayName": "High Contrast",
+      "description": "Black background + yellow accent — accessibility first"
+    },
+    {
+      "kind": "theme",
+      "name": "midnight",
+      "path": "themes/midnight",
+      "displayName": "Midnight",
+      "description": "Dark shell + magenta accent + dark code"
+    },
+    {
+      "kind": "theme",
+      "name": "nord",
+      "path": "themes/nord",
+      "displayName": "Nord",
+      "description": "Dark shell + arctic frost accents + aurora state colors"
+    },
+    {
+      "kind": "theme",
+      "name": "rose-pine",
+      "path": "themes/rose-pine",
+      "displayName": "Rosé Pine",
+      "description": "Dark shell + iris accent + soft rose tones"
+    },
+    {
+      "kind": "theme",
+      "name": "solarized-light",
+      "path": "themes/solarized-light",
+      "displayName": "Solarized Light",
+      "description": "Light shell + Solarized classic + warm beige surface"
+    },
+    {
+      "kind": "theme",
+      "name": "tokyo-night",
+      "path": "themes/tokyo-night",
+      "displayName": "Tokyo Night",
+      "description": "Dark shell + blue accent + dark code"
+    },
+    {
+      "kind": "theme",
+      "name": "violet-dark",
+      "path": "themes/violet-dark",
+      "displayName": "Violet Dark",
+      "description": "Dark shell + warm-grey surface + vivid purple accent"
+    },
+    {
+      "kind": "theme",
+      "name": "violet-light",
+      "path": "themes/violet-light",
+      "displayName": "Violet Light",
+      "description": "Light shell + warm-grey surface + vivid purple accent"
+    },
+    {
+      "kind": "language",
+      "name": "korean",
+      "path": "languages/korean",
+      "displayName": "한국어 (Korean)",
+      "description": "Korean interface translation for Ave 0.14.0 and later."
+    },
+    {
+      "kind": "provider",
+      "name": "aihubmix",
+      "path": "providers/aihubmix",
+      "displayName": "AI Hub Mix Provider",
+      "description": "Adds AI Hub Mix as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "asksage",
+      "path": "providers/asksage",
+      "displayName": "AskSage Provider",
+      "description": "Adds AskSage as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "azure-foundry",
+      "path": "providers/azure-foundry",
+      "displayName": "Azure AI Foundry Provider",
+      "description": "Adds Azure AI Foundry as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "baseten",
+      "path": "providers/baseten",
+      "displayName": "Baseten Provider",
+      "description": "Adds Baseten as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "cerebras",
+      "path": "providers/cerebras",
+      "displayName": "Cerebras Provider",
+      "description": "Adds Cerebras as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "deepseek",
+      "path": "providers/deepseek",
+      "displayName": "DeepSeek Provider",
+      "description": "Adds DeepSeek as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "doubao",
+      "path": "providers/doubao",
+      "displayName": "Doubao Provider",
+      "description": "Adds Doubao as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "fireworks",
+      "path": "providers/fireworks",
+      "displayName": "Fireworks AI Provider",
+      "description": "Adds Fireworks AI as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "groq",
+      "path": "providers/groq",
+      "displayName": "Groq Provider",
+      "description": "Adds Groq as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "hicap",
+      "path": "providers/hicap",
+      "displayName": "HiCap Provider",
+      "description": "Adds HiCap as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "huawei-cloud-maas",
+      "path": "providers/huawei-cloud-maas",
+      "displayName": "Huawei Cloud MaaS Provider",
+      "description": "Adds Huawei Cloud MaaS as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "huggingface",
+      "path": "providers/huggingface",
+      "displayName": "Hugging Face Provider",
+      "description": "Adds Hugging Face as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "kilo",
+      "path": "providers/kilo",
+      "displayName": "Kilo Gateway Provider",
+      "description": "Adds Kilo Gateway as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "litellm",
+      "path": "providers/litellm",
+      "displayName": "LiteLLM Provider",
+      "description": "Adds LiteLLM as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "lmstudio",
+      "path": "providers/lmstudio",
+      "displayName": "LM Studio Provider",
+      "description": "Adds LM Studio as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "mistral",
+      "path": "providers/mistral",
+      "displayName": "Mistral Provider",
+      "description": "Adds Mistral as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "moonshot",
+      "path": "providers/moonshot",
+      "displayName": "Moonshot Provider",
+      "description": "Adds Moonshot as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "nebius",
+      "path": "providers/nebius",
+      "displayName": "Nebius Provider",
+      "description": "Adds Nebius as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "nous-research",
+      "path": "providers/nous-research",
+      "displayName": "Nous Research Provider",
+      "description": "Adds Nous Research as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "oca",
+      "path": "providers/oca",
+      "displayName": "Oracle Code Assist Provider",
+      "description": "Adds Oracle Code Assist as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "ollama",
+      "path": "providers/ollama",
+      "displayName": "Ollama Provider",
+      "description": "Adds Ollama as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "poolside",
+      "path": "providers/poolside",
+      "displayName": "Poolside Provider",
+      "description": "Adds Poolside as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "qwen",
+      "path": "providers/qwen",
+      "displayName": "Alibaba Qwen Provider",
+      "description": "Adds Alibaba Qwen as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "qwen-code",
+      "path": "providers/qwen-code",
+      "displayName": "Alibaba Qwen Code Provider",
+      "description": "Adds Alibaba Qwen Code as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "requesty",
+      "path": "providers/requesty",
+      "displayName": "Requesty Provider",
+      "description": "Adds Requesty as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "sambanova",
+      "path": "providers/sambanova",
+      "displayName": "SambaNova Provider",
+      "description": "Adds SambaNova as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "together",
+      "path": "providers/together",
+      "displayName": "Together AI Provider",
+      "description": "Adds Together AI as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "vercel-ai-gateway",
+      "path": "providers/vercel-ai-gateway",
+      "displayName": "Vercel AI Gateway Provider",
+      "description": "Adds Vercel AI Gateway as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "vercel-v0",
+      "path": "providers/vercel-v0",
+      "displayName": "Vercel V0 Provider",
+      "description": "Adds Vercel V0 as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "vertex-ai",
+      "path": "providers/vertex-ai",
+      "displayName": "Google Vertex AI Provider",
+      "description": "Adds Google Vertex AI as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "wandb",
+      "path": "providers/wandb",
+      "displayName": "W&B by CoreWeave Provider",
+      "description": "Adds W&B by CoreWeave as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "xai",
+      "path": "providers/xai",
+      "displayName": "xAI Provider",
+      "description": "Adds xAI as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "xiaomi",
+      "path": "providers/xiaomi",
+      "displayName": "Xiaomi Provider",
+      "description": "Adds Xiaomi as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "zai",
+      "path": "providers/zai",
+      "displayName": "Z.AI Provider",
+      "description": "Adds Z.AI as a marketplace-installed LLM provider."
+    },
+    {
+      "kind": "provider",
+      "name": "zai-coding-plan",
+      "path": "providers/zai-coding-plan",
+      "displayName": "Z.AI Coding Plan Provider",
+      "description": "Adds Z.AI Coding Plan as a marketplace-installed LLM provider."
+    }
+  ]
+}

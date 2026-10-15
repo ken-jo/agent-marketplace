@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "executive-graphite",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Executive Graphite",
+  "description": "Dark shell + warm graphite surfaces + teal work accent",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-law-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Korean Law Search",
+  "description": "Use korean-law-mcp first for Korean law lookups, and fall back to Beopmang when the primary service is unavailable.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-law-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-law-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

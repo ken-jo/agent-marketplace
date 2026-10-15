@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "toss-securities",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Toss Securities",
+  "description": "토스증권 조회형 질문에 대해 tossinvest-cli의 tossctl을 설치/로그인한 뒤 계좌 요약, 포트폴리오, 시세, 주문내역, 관심종목을 안전한 read-only 흐름으로 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/toss-securities"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/toss-securities",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

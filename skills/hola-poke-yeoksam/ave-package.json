@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "hola-poke-yeoksam",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Hola Poke Yeoksam",
+  "description": "올라포케 역삼점의 메뉴·매장 정보·이벤트 참여 흐름을 remote MCP 서버 기준으로 안내한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/hola-poke-yeoksam"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/hola-poke-yeoksam",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

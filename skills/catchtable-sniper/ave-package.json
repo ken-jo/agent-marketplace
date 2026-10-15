@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "catchtable-sniper",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "catchtable-sniper",
+  "description": "Monitor Catchtable for open reservation slots and attempt booking using a logged-in Chrome session.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/catchtable-sniper"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/catchtable-sniper",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

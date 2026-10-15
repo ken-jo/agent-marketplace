@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "gangnamunni-clinic-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Gangnam Unni Clinic Search",
+  "description": "강남언니 공개 검색 페이지에서 성형외과·피부과 병원 후보, 평점, 리뷰 수, 지원 언어, 공개 병원 링크를 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/gangnamunni-clinic-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/gangnamunni-clinic-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

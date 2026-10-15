@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "daishin-report-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Daishin Report Search",
+  "description": "대신증권 리포트 GitHub Pages 미러에서 최신 HTML 리포트 목록과 원문/설명 페이지를 조회한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/daishin-report-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/daishin-report-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

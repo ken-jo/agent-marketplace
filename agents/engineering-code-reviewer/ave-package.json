@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "engineering-code-reviewer",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Code Reviewer",
+  "description": "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance not style preferences.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

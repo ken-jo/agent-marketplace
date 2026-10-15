@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "context7-mcp",
+  "version": "2.2.6",
+  "minAppVersion": "0.14.0",
+  "displayName": "Context7 MCP",
+  "description": "Adds Context7 documentation lookup as an MCP server for current, version-specific library guidance.",
+  "author": {
+    "name": "Upstash",
+    "url": "https://github.com/upstash/context7"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/upstash/context7",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@2.2.5"
+      ],
+      "auth": "none"
+    }
+  }
+}

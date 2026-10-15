@@ -1,0 +1,38 @@
+fastapi==0.141.1
+# worker/embedding_client.py `broker_http_client` imports httpx2 itself to pin
+# the provider SDKs to the host egress broker's Unix socket
+# (`httpx2.HTTPTransport(uds=...)`). openai 3 installs httpx2 too, but the
+# worker's own import makes it a direct dependency.
+httpx2==2.13.1
+kiwipiepy==0.23.2
+lancedb==0.38.0
+markitdown==0.1.7
+# DOCX multi-page parser — requires >= 1.2.0 for Paragraph.rendered_page_breaks
+# and Run.iter_inner_content() (RenderedPageBreak) APIs. Pure-Python wheel;
+# no native extensions. EDR-safe: the wheel contains a default.docx template
+# resource (not a native binary), so installation succeeds in environments that
+# scan wheel contents via OOTB policy. 1.2.0 is the latest stable release.
+python-docx>=1.2.0
+# Direct dependency of the embedding/captioning clients (worker/embedding_client.py,
+# worker/image_captioner.py import `openai`). Previously only pulled in transitively
+# via the now-removed `pageindex` cloud SDK; declared directly to keep the worker's
+# OpenAI/Azure egress path intact.
+# openai 3 uses HTTPX2 and no longer installs `httpx`, so the broker transport
+# moved to httpx2 with it (see httpx2 above). HTTPX2 verifies TLS against the
+# operating-system trust store instead of certifi; that applies to the
+# non-broker paths that reach a provider directly.
+# test/egress_broker_uds_transport.test.py drives the real SDK over the socket.
+openai==3.14.1
+openpyxl==3.1.5
+# worker/image_extractor.py re-encodes the images openpyxl finds in a workbook
+# (``ws._images`` -> ``image.image.save(..., format="PNG")``). openpyxl reads
+# those images only when Pillow is importable and skips them otherwise, so
+# without this line the XLSX image path exists in code and never runs.
+pillow==12.3.0
+pyarrow==25.0.1
+pymupdf==1.27.2.2
+pymupdf4llm==1.27.2.2
+rank-bm25==0.2.2
+structlog==26.1.0
+tenacity==9.1.4
+uvicorn==0.53.0

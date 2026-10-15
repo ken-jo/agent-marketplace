@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "agent",
+  "name": "product-behavioral-nudge-engine",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Behavioral Nudge Engine",
+  "description": "Behavioral psychology specialist that adapts software interaction cadences and styles to maximize user motivation and success.",
+  "author": {
+    "name": "msitarzewski/agency-agents",
+    "url": "https://github.com/msitarzewski/agency-agents"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/msitarzewski/agency-agents",
+  "payload": {
+    "entry": "AGENTS.md"
+  }
+}

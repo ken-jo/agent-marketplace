@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "redis-mcp",
+  "version": "2025.4.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "Redis MCP",
+  "description": "Adds the Redis MCP server for interacting with Redis key-value stores.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/redis"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/redis",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-redis@2025.4.25"
+      ],
+      "auth": "none"
+    }
+  }
+}

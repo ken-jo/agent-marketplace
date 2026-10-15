@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "intercity-bus-booking",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Intercity Bus Booking (Tmoney 시외버스)",
+  "description": "Search and assist Korean 시외버스/Tmoney bookings using official HTTP/API-first flows; use for 시외버스 예매, 시간표, 좌석/요금 조회, and official checkout-entry handoff.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/intercity-bus-booking"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/intercity-bus-booking",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

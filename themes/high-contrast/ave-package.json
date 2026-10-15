@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "high-contrast",
+  "version": "1.0.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "High Contrast",
+  "description": "Black background + yellow accent — accessibility first",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

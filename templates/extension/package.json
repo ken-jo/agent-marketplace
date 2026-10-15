@@ -1,0 +1,34 @@
+{
+  "name": "@ave/plugin-__PLUGIN_NAME__",
+  "version": "0.2.1",
+  "description": "Ave extension — __DESCRIPTION__",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && tsc --declaration --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev:test": "vitest",
+    "validate:hostapi": "node scripts/validate-hostapi.mjs"
+  },
+  "devDependencies": {
+    "@ave/plugin-build": "file:../../tools/plugin-build",
+    "@ave/plugin-contract": "file:../../contract",
+    "@types/node": "^26.1.0",
+    "tsup": "^8.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

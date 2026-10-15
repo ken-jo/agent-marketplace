@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "kind": "skill",
+  "name": "korean-cinema-search",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Korean Cinema Search",
+  "description": "CGV, 메가박스, 롯데시네마 영화관 검색, 상영작, 시간표, 잔여석 조회가 필요할 때 사용한다.",
+  "author": {
+    "name": "NomaDamas/k-skill",
+    "url": "https://github.com/NomaDamas/k-skill/tree/main/korean-cinema-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/NomaDamas/k-skill/tree/main/korean-cinema-search",
+  "payload": {
+    "entry": "SKILL.md"
+  }
+}

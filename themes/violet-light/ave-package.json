@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "kind": "theme",
+  "name": "violet-light",
+  "version": "1.0.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "Violet Light",
+  "description": "Light shell + warm-grey surface + vivid purple accent",
+  "payload": {
+    "entry": "theme.json"
+  }
+}

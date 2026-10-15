@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "brave-search-mcp",
+  "version": "0.6.3",
+  "minAppVersion": "0.14.0",
+  "displayName": "Brave Search MCP",
+  "description": "Adds the Brave Search MCP server for web and local search through the Brave Search API.",
+  "author": {
+    "name": "Model Context Protocol",
+    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search@0.6.2"
+      ],
+      "env": {
+        "BRAVE_API_KEY": ""
+      },
+      "auth": "none"
+    }
+  }
+}
