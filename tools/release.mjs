@@ -10,6 +10,9 @@
  *   node tools/release.mjs pack <name> <out.zip>
  *       Zip a built plugin: plugin.json and the paths its package.json
  *       `files` lists, never node_modules, source maps or credential files.
+ *   node tools/release.mjs build <name> <out.zip> --publish
+ *       Verify a signed tag and retain trusted modules while installing,
+ *       typechecking, building and testing, then pack in the same process.
  *   node tools/release.mjs pin <name> <zip>
  *       Point the descriptor at a released zip: version, minAppVersion,
  *       authority and display fields from the zip's plugin.json, and the
@@ -38,7 +41,10 @@ import { isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkRepository, releasedManifestsNeeded } from "./check.mjs";
 import { checkVendored, isCommitPin, isReleaseTag } from "./vendor.mjs";
+import { runPluginChecks, verifiedRuntime } from "./verified-import.mjs";
 import { DESCRIPTOR, INDEX_PATH, Ave, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson } from "./repo.mjs";
+
+const TRUSTED_RUNTIME = await verifiedRuntime();
 
 const GLOB = /[*?[\]]/u;
 const SENSITIVE = [
@@ -61,9 +67,8 @@ const protocolSchemaId = (tag) => `https://ave.agent-connector.ai/schemas/plugin
 const PROTOCOL_SCHEMA_TITLE = `Ave plugin host protocol ${HOST_PROTOCOL}`;
 
 /**
- * Offline publication prerequisites. The release tag is the `ref` both
- * sources.json files pin; the workflow runs `vendor.mjs verify` first, which
- * holds every vendored byte to that tag's signed contract bundle.
+ * Publication metadata prerequisites. The runtime loader also holds every
+ * executed vendored byte to the signed bundle, before any module evaluation.
  */
 export function publicationProblems() {
   if (process.env.MARKETPLACE_ROOT !== undefined) {
@@ -112,7 +117,9 @@ export function publicationProblems() {
 
 function requirePublicationReady() {
   const problems = publicationProblems();
+  if (!TRUSTED_RUNTIME.signed) problems.push("publication requires the runtime to have loaded a signed release bundle");
   if (problems.length > 0) throw new Error(problems.join("\n"));
+  TRUSTED_RUNTIME.assertUnchanged();
 }
 export const tagOf = (name, version) => `${name}-v${version}`;
 export const assetOf = (name, version) => `${name}-${version}.zip`;
@@ -180,6 +187,19 @@ export function pack(name, out) {
     if (lstatSync(join(dir, path)).isSymbolicLink()) throw new Error(`${path} is a symbolic link; the app refuses links in a plugin`);
   }
   return sha256(readFileSync(out));
+}
+
+/** Verify and load trusted tools once, then retain them across plugin scripts. */
+export async function build(name, out, { execute } = {}) {
+  requirePublicationReady();
+  const trusted = await verifiedRuntime({ allowDevelopment: false });
+  if (!trusted.signed) throw new Error("publication requires a signed release bundle");
+  await runPluginChecks(`plugins/${name}/source`, { execute });
+  // Neither a rewritten release/checker module nor a changed development
+  // inventory can affect this resident process. Refuse even unused changes.
+  trusted.assertUnchanged();
+  requirePublicationReady();
+  return pack(name, out);
 }
 
 function manifestIn(zip) {
@@ -365,6 +385,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     console.log(JSON.stringify(plan()));
   }
+  else if (command === "build" && args.length === 3 && args[2] === "--publish") console.log(await build(args[0], resolve(args[1])));
   else if (command === "pack") console.log(pack(args[0], resolve(args[1])));
   else if (command === "pin") console.log(JSON.stringify(pin(args[0], resolve(args[1])), null, 2));
   else if (command === "verify") {
@@ -374,7 +395,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (problems.length > 0) process.exit(1);
     console.log("release pins: OK");
   } else {
-    console.error("usage: release.mjs plan [--publish] | pack <name> <out.zip> | pin <name> <zip> | verify [--base <ref>] [--publish]");
+    console.error("usage: release.mjs plan [--publish] | build <name> <out.zip> --publish | pack <name> <out.zip> | pin <name> <zip> | verify [--base <ref>] [--publish]");
     process.exit(2);
   }
 }

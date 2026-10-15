@@ -46,6 +46,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
+      - name: Install the pinned cosign
+        run: |
+          tools/install-cosign.sh "$RUNNER_TEMP/cosign"
+          echo "$RUNNER_TEMP/cosign" >> "$GITHUB_PATH"
+      - name: Verify execution bytes (reviewed development inventory integrity is allowed)
+        run: node tools/verified-import.mjs check --allow-development
       - name: Validate packages, release pins, layout, published versions and credentials
         env:
           GH_TOKEN: ${{ github.token }}
@@ -63,13 +69,9 @@ jobs:
       - name: Committed index equals the regenerated index
         run: node tools/index.mjs --check
       - name: Repository tool tests
-        run: node --test tools/__tests__/tools.test.mjs
+        run: node --test tools/__tests__/*.test.mjs
       - name: Plugin build helper
-        working-directory: tools/plugin-build
-        run: |
-          bun install --frozen-lockfile
-          bun run typecheck
-          bun run test
+        run: node tools/verified-import.mjs plugin tools/plugin-build --allow-development --helper
 
   plugin-dirs:
     if: github.event_name != 'schedule'
@@ -103,26 +105,19 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      # A plugin reaches the build helper through a link, and the helper
-      # resolves its own imports from its own directory.
-      - name: Install the build helper
-        working-directory: tools/plugin-build
-        run: bun install --frozen-lockfile
-      - run: bun install --frozen-lockfile
-      - name: Typecheck
-        run: bun run typecheck
-      - name: Build
-        run: bun run build
-      - name: Test
-        run: bun run test
-      - name: Manifest drift checks
-        shell: bash
+      - name: Install the pinned cosign
+        working-directory: .
         run: |
-          for script in validate:events validate:hostapi; do
-            if node -e "process.exit(require('./package.json').scripts?.['$script'] ? 0 : 1)"; then
-              bun run "$script"
-            fi
-          done
+          tools/install-cosign.sh "$RUNNER_TEMP/cosign"
+          echo "$RUNNER_TEMP/cosign" >> "$GITHUB_PATH"
+      - name: Verify execution bytes (reviewed development inventory integrity is allowed)
+        working-directory: .
+        run: node tools/verified-import.mjs check --allow-development
+      - name: Typecheck, build, test and check manifest drift with a verified contract snapshot
+        working-directory: .
+        env:
+          DIRECTORY: ${{ matrix.dir }}
+        run: node tools/verified-import.mjs plugin "$DIRECTORY" --allow-development
       - name: The built entry loads in a bare Node process
         shell: bash
         run: |
@@ -185,7 +180,6 @@ jobs:
       - name: The vendored contract and checker are the signed Ave contract bundle's bytes
         run: node tools/vendor.mjs verify
       - name: Every published release still hashes to its pin and matches its source
-        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/release.mjs verify --publish

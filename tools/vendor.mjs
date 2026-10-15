@@ -12,7 +12,7 @@
  * 40-hex commit of Ave main. Only a release tag has a contract bundle: the
  * files Ave's tag build publishes under `BUNDLE_BASE<tag>/`, with a
  * `SHA256SUMS` signed by Sigstore under the tag's build workflow identity.
- * This repository never reads the Ave source itself.
+ * Release verification never reads the Ave source itself.
  *
  *   node tools/vendor.mjs check            offline: the inventories agree and the bytes match them
  *   node tools/vendor.mjs verify           the signed bundle of the pinned tag holds these exact bytes
@@ -28,14 +28,30 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const ROOT = resolve(process.env.MARKETPLACE_ROOT ?? SCRIPT_ROOT);
-export const VENDORED_DIRS = ["contract", "tools/vendor"];
+// Coverage and destinations are part of the consumer's contract, never an
+// unsigned inventory's choice. Keep this aligned with Ave's public bundle.
+export const VENDORED_ARTIFACTS = Object.freeze([
+  { name: "public-contract.ts", dir: "contract", built: false },
+  { name: "plugin-manifest.schema.json", dir: "contract", built: false },
+  { name: "protocol.schema.json", dir: "contract", built: false },
+  { name: "marketplace-check.js", dir: "tools/vendor", built: true },
+  { name: "agent-plugin-components.js", dir: "tools/vendor", built: true },
+].map((artifact) => Object.freeze({ ...artifact, destination: `${artifact.dir}/${artifact.name}` })));
+export const VENDORED_DIRS = Object.freeze([...new Set(VENDORED_ARTIFACTS.map(({ dir }) => dir))]);
+export const BUNDLE_LIMITS = Object.freeze({
+  fileBytes: 8 * 1024 * 1024,
+  metadataBytes: 64 * 1024,
+  signatureBytes: 1024 * 1024,
+  totalBytes: 20 * 1024 * 1024,
+  redirects: 3,
+});
 
 /** Where Ave's tag build publishes the contract bundle; `<tag>/` follows. */
 export const BUNDLE_BASE = "https://downloads.agent-connector.ai/contract/";
@@ -64,12 +80,21 @@ export function embeddedBuildPaths(bytes) {
   return paths;
 }
 
-function readSources(dir) {
-  const path = join(ROOT, dir, "sources.json");
+function readSources(dir, root = ROOT) {
+  if (!VENDORED_DIRS.includes(dir)) throw new Error(`unsupported vendored directory: ${dir}`);
+  const path = join(root, dir, "sources.json");
   if (!existsSync(path)) throw new Error(`${dir}/sources.json is missing`);
   const sources = JSON.parse(readFileSync(path, "utf8"));
-  if (typeof sources.repository !== "string" || typeof sources.ref !== "string" || typeof sources.files !== "object" || !Object.hasOwn(sources, "bundle")) {
+  if (typeof sources?.repository !== "string" || typeof sources.ref !== "string" || typeof sources.files !== "object" || sources.files === null || Array.isArray(sources.files) || !Object.hasOwn(sources, "bundle")) {
     throw new Error(`${dir}/sources.json needs repository, ref, bundle and files`);
+  }
+  const expected = VENDORED_ARTIFACTS.filter((artifact) => artifact.dir === dir).map(({ name }) => name).sort();
+  const listed = Object.keys(sources.files).sort();
+  if (JSON.stringify(listed) !== JSON.stringify(expected)) {
+    throw new Error(`${dir}/sources.json: files must contain exactly ${expected.join(", ")}; found ${listed.join(", ")}`);
+  }
+  for (const name of expected) {
+    if (!/^[0-9a-f]{64}$/u.test(sources.files[name]?.sha256 ?? "")) throw new Error(`${dir}/sources.json: ${name} needs a sha256`);
   }
   if (isReleaseTag(sources.ref)) {
     if (sources.bundle !== bundleUrl(sources.ref)) {
@@ -84,8 +109,8 @@ function readSources(dir) {
 }
 
 /** Read all inventories together so every check uses one upstream pin. */
-function readVendoredSources() {
-  const sources = VENDORED_DIRS.map((dir) => [dir, readSources(dir)]);
+function readVendoredSources(root = ROOT) {
+  const sources = VENDORED_DIRS.map((dir) => [dir, readSources(dir, root)]);
   for (const field of ["repository", "ref", "bundle"]) {
     if (new Set(sources.map(([, source]) => source[field])).size > 1) {
       const values = sources.map(([dir, source]) => `${dir}/sources.json ${field}=${JSON.stringify(source[field])}`);
@@ -104,19 +129,19 @@ export function checkVendored() {
     return [error.message];
   }
   const problems = [];
-  for (const [dir, sources] of inventories) {
-    for (const [name, entry] of Object.entries(sources.files)) {
-      const path = join(ROOT, dir, name);
-      if (!existsSync(path)) {
-        problems.push(`${dir}/${name}: missing`);
-        continue;
-      }
-      const bytes = readFileSync(path);
-      if (sha256(bytes) !== entry.sha256) {
-        problems.push(`${dir}/${name}: bytes differ from sources.json; the copy was edited (sync a new ref instead)`);
-      }
-      if (entry.build) for (const kind of embeddedBuildPaths(bytes)) problems.push(`${dir}/${name}: embedded absolute build path (${kind})`);
+  const byDir = new Map(inventories);
+  for (const { dir, name, destination, built } of VENDORED_ARTIFACTS) {
+    const entry = byDir.get(dir).files[name];
+    const path = join(ROOT, destination);
+    if (!existsSync(path)) {
+      problems.push(`${dir}/${name}: missing`);
+      continue;
     }
+    const bytes = readFileSync(path);
+    if (sha256(bytes) !== entry.sha256) {
+      problems.push(`${dir}/${name}: bytes differ from sources.json; the copy was edited (sync a new ref instead)`);
+    }
+    if (built) for (const kind of embeddedBuildPaths(bytes)) problems.push(`${dir}/${name}: embedded absolute build path (${kind})`);
   }
   return problems;
 }
@@ -143,12 +168,70 @@ function cosignVerify({ artifact, bundle, identity, issuer }) {
   }
 }
 
-async function httpGet(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
-  return { status: response.status, bytes: response.ok ? Buffer.from(await response.arrayBuffer()) : undefined };
-}
-
 class BundleRefusal extends Error {}
+
+/** The production transport buffers only bounded, same-origin HTTPS streams.
+ * `fetch` is a function-only test seam; no CLI or environment selects it. */
+export async function httpGet(url, { maxBytes = BUNDLE_LIMITS.fileBytes, remainingBytes = BUNDLE_LIMITS.totalBytes, fetch: request = globalThis.fetch } = {}) {
+  const origin = new URL(BUNDLE_BASE).origin;
+  const allowed = (value) => {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || parsed.origin !== origin || parsed.username || parsed.password) {
+      throw new Error(`redirect/download URL must use HTTPS at ${origin}: ${value}`);
+    }
+    return parsed.href;
+  };
+  let current = allowed(url);
+  const signal = AbortSignal.timeout(120_000);
+  for (let redirects = 0; ; redirects += 1) {
+    const response = await request(current, { signal, redirect: "manual" });
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      await response.body?.cancel();
+      if (redirects >= BUNDLE_LIMITS.redirects) throw new Error(`redirect limit (${BUNDLE_LIMITS.redirects}) exceeded`);
+      const location = response.headers.get("location");
+      if (!location) throw new Error("redirect has no Location");
+      current = allowed(new URL(location, current).href);
+      continue;
+    }
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      return { status: response.status };
+    }
+    try {
+      if (response.redirected) throw new Error("automatic redirects are forbidden");
+      if (response.url) allowed(response.url);
+      const length = response.headers.get("content-length");
+      if (length !== null) {
+        if (!/^\d+$/u.test(length)) throw new Error("invalid Content-Length");
+        if (BigInt(length) > BigInt(maxBytes)) throw new Error(`file byte limit (${maxBytes}) exceeded by Content-Length`);
+        if (BigInt(length) > BigInt(remainingBytes)) throw new Error(`total byte limit (${BUNDLE_LIMITS.totalBytes}) exceeded by Content-Length`);
+      }
+    } catch (error) {
+      await response.body?.cancel();
+      throw error;
+    }
+    const reader = response.body?.getReader();
+    if (!reader) return { status: 200, bytes: Buffer.alloc(0) };
+    const chunks = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxBytes) throw new Error(`file byte limit (${maxBytes}) exceeded`);
+        if (size > remainingBytes) throw new Error(`total byte limit (${BUNDLE_LIMITS.totalBytes}) exceeded`);
+        chunks.push(Buffer.from(value));
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    return { status: 200, bytes: Buffer.concat(chunks, size) };
+  }
+}
 
 function parseSums(bytes, tag) {
   const sums = new Map();
@@ -165,24 +248,30 @@ function parseSums(bytes, tag) {
 }
 
 /**
- * Download the bundle of `tag` and return the bytes of `names`, every one
+ * Download the bundle of `tag` and return the fixed artifact set, every one
  * held to the signed SHA256SUMS. Throws a BundleRefusal on the first failure.
  * `get` and `verifySignature` are injectable for the test harness only; the
  * command line always uses HTTPS and cosign.
  */
-async function readBundle(tag, names, { get = httpGet, verifySignature = cosignVerify } = {}) {
+async function readBundle(tag, { get = httpGet, verifySignature = cosignVerify } = {}) {
   const base = bundleUrl(tag);
+  let downloaded = 0;
   const download = async (name) => {
     const url = new URL(name, base).href;
+    const maxBytes = name === SIGNATURE ? BUNDLE_LIMITS.signatureBytes
+      : [SUMS, MANIFEST].includes(name) ? BUNDLE_LIMITS.metadataBytes : BUNDLE_LIMITS.fileBytes;
     let response;
     try {
-      response = await get(url);
+      response = await get(url, { maxBytes, remainingBytes: BUNDLE_LIMITS.totalBytes - downloaded });
     } catch (error) {
       throw new BundleRefusal(`${url}: download failed (${error instanceof Error ? error.message : String(error)}); the contract bundle for ${tag} must be published before it can be verified`);
     }
     if (response?.status !== 200 || !response.bytes) {
       throw new BundleRefusal(`${url}: HTTP ${response?.status}; the contract bundle for ${tag} is missing or incomplete`);
     }
+    if (response.bytes.length > maxBytes) throw new BundleRefusal(`${url}: file byte limit (${maxBytes}) exceeded`);
+    downloaded += response.bytes.length;
+    if (downloaded > BUNDLE_LIMITS.totalBytes) throw new BundleRefusal(`${url}: total byte limit (${BUNDLE_LIMITS.totalBytes}) exceeded`);
     return Buffer.from(response.bytes);
   };
 
@@ -195,6 +284,11 @@ async function readBundle(tag, names, { get = httpGet, verifySignature = cosignV
     throw new BundleRefusal(`${tag}/${SIGNATURE}: the signature over ${SUMS} does not verify for identity ${identity} issued by ${SIGNER_ISSUER}: ${error instanceof Error ? error.message : String(error)}`);
   }
   const sums = parseSums(sumsBytes, tag);
+  const names = VENDORED_ARTIFACTS.map(({ name }) => name);
+  const expected = [...names, MANIFEST].sort();
+  if (JSON.stringify([...sums.keys()].sort()) !== JSON.stringify(expected)) {
+    throw new BundleRefusal(`${tag}/${SUMS}: must list exactly ${expected.join(", ")}; found ${[...sums.keys()].sort().join(", ")}`);
+  }
 
   const verified = async (name) => {
     const bytes = await download(name);
@@ -208,7 +302,7 @@ async function readBundle(tag, names, { get = httpGet, verifySignature = cosignV
   } catch {
     throw new BundleRefusal(`${tag}/${MANIFEST}: invalid JSON`);
   }
-  if (manifest?.schemaVersion !== 1 || manifest.app !== "ave" || manifest.tag !== tag || !isCommitPin(manifest.commit) || typeof manifest.files !== "object" || manifest.files === null) {
+  if (manifest?.schemaVersion !== 1 || manifest.app !== "ave" || manifest.tag !== tag || !isCommitPin(manifest.commit) || typeof manifest.files !== "object" || manifest.files === null || Array.isArray(manifest.files)) {
     throw new BundleRefusal(`${tag}/${MANIFEST}: expected { schemaVersion: 1, app: "ave", tag: "${tag}", commit: <40-hex>, files }`);
   }
   const listed = [...sums.keys()].filter((name) => name !== MANIFEST).sort();
@@ -218,7 +312,7 @@ async function readBundle(tag, names, { get = httpGet, verifySignature = cosignV
   }
   for (const name of described) {
     const entry = manifest.files[name];
-    if (entry?.sha256 !== sums.get(name) || !Number.isSafeInteger(entry.bytes)) {
+    if (entry?.sha256 !== sums.get(name) || !Number.isSafeInteger(entry.bytes) || entry.bytes < 0 || entry.bytes > BUNDLE_LIMITS.fileBytes) {
       throw new BundleRefusal(`${tag}/${MANIFEST}: ${name} disagrees with the signed ${SUMS}`);
     }
   }
@@ -232,65 +326,138 @@ async function readBundle(tag, names, { get = httpGet, verifySignature = cosignV
   return { commit: manifest.commit, files };
 }
 
-const vendoredNames = (inventories) => inventories.flatMap(([, sources]) => Object.keys(sources.files));
+async function inspectVendored({ root = ROOT, allowDevelopment = false, ...options } = {}) {
+  const inventories = readVendoredSources(root);
+  const { ref } = inventories[0][1];
+  if (!isReleaseTag(ref) && !allowDevelopment) {
+    throw new BundleRefusal(`vendored sources pin ${ref}, a development commit; only an Ave release tag has a signed contract bundle to verify against`);
+  }
+  const bundle = isReleaseTag(ref) ? await readBundle(ref, options) : null;
+  const byDir = new Map(inventories);
+  const files = new Map();
+  const problems = [];
+  for (const { dir, name, destination, built } of VENDORED_ARTIFACTS) {
+    const entry = byDir.get(dir).files[name];
+    const path = join(root, destination);
+    const expected = bundle?.files.get(name);
+    if (!existsSync(path)) {
+      problems.push(`${destination}: missing`);
+    } else {
+      // These exact buffers are what the runtime loader may later evaluate;
+      // it must never re-read the mutable checkout after verification.
+      const bytes = readFileSync(path);
+      files.set(destination, bytes);
+      if (expected && !bytes.equals(expected)) problems.push(`${destination}: bytes differ from ${name} in the signed ${ref} bundle`);
+      else if (!expected && sha256(bytes) !== entry.sha256) problems.push(`${destination}: bytes differ from sources.json; the copy was edited (sync a new ref instead)`);
+      if (built) for (const kind of embeddedBuildPaths(expected ?? bytes)) problems.push(`${destination}: embedded absolute build path (${kind})${bundle ? ` in the ${ref} bundle` : ""}`);
+    }
+    if (expected && entry.sha256 !== sha256(expected)) problems.push(`${dir}/sources.json: ${name} sha256 differs from the signed ${ref} bundle`);
+  }
+  return { problems, files };
+}
 
 /** Problems between the committed copies and the signed bundle of their tag. */
 export async function verifyVendored(options = {}) {
-  let inventories;
   try {
-    inventories = readVendoredSources();
+    return (await inspectVendored({ ...options, allowDevelopment: false })).problems;
   } catch (error) {
-    return [error.message];
+    return [error instanceof Error ? error.message : String(error)];
   }
-  const { ref } = inventories[0][1];
-  if (!isReleaseTag(ref)) {
-    return [`vendored sources pin ${ref}, a development commit; only an Ave release tag has a signed contract bundle to verify against`];
-  }
-  let bundle;
-  try {
-    bundle = await readBundle(ref, vendoredNames(inventories), options);
-  } catch (error) {
-    if (error instanceof BundleRefusal) return [error.message];
-    throw error;
-  }
-  const problems = [];
-  for (const [dir, sources] of inventories) {
-    for (const [name, entry] of Object.entries(sources.files)) {
-      const expected = bundle.files.get(name);
-      const path = join(ROOT, dir, name);
-      if (!existsSync(path)) problems.push(`${dir}/${name}: missing`);
-      else if (!readFileSync(path).equals(expected)) problems.push(`${dir}/${name}: bytes differ from ${name} in the signed ${ref} bundle`);
-      if (entry.sha256 !== sha256(expected)) problems.push(`${dir}/sources.json: ${name} sha256 differs from the signed ${ref} bundle`);
-      if (entry.build) for (const kind of embeddedBuildPaths(expected)) problems.push(`${dir}/${name}: embedded absolute build path (${kind}) in the ${ref} bundle`);
-    }
-  }
-  return problems;
 }
 
-/** Write both vendored directories from the signed bundle of `tag`; nothing is written unless all of it verifies. */
+/** Verified artifact buffers for execution. Development integrity trusts the
+ * reviewed committed inventory hashes; it provides no upstream signature. */
+export async function readVerifiedVendored(options = {}) {
+  const { problems, files } = await inspectVendored(options);
+  if (problems.length > 0) throw new BundleRefusal(problems.join("\n"));
+  return files;
+}
+
+/** Stage and validate every replacement on the destination filesystem.
+ * Individual renames are atomic; caught failures restore the previous set.
+ * This is not a crash-atomic multi-file filesystem transaction. */
+function installVendored(replacements, { root = ROOT, rename = renameSync } = {}) {
+  const stage = mkdtempSync(join(root, ".vendor-stage-"));
+  const installed = [];
+  let retainBackups = false;
+  try {
+    mkdirSync(join(stage, "new"));
+    mkdirSync(join(stage, "original"));
+    const rootPath = realpathSync(root);
+    const records = [...replacements].map(([destination, bytes], index) => {
+      const target = join(root, destination);
+      const parent = realpathSync(dirname(target));
+      if (!parent.startsWith(`${rootPath}${sep}`)) throw new Error(`${destination}: destination is outside the marketplace`);
+      const staged = join(stage, "new", String(index));
+      const backup = join(stage, "original", String(index));
+      let stat;
+      try {
+        stat = lstatSync(target);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      const existed = stat !== undefined;
+      if (existed) {
+        if (!stat.isFile()) throw new Error(`${destination}: destination must be a regular file`);
+        copyFileSync(target, backup);
+        chmodSync(backup, stat.mode & 0o777);
+      }
+      writeFileSync(staged, bytes);
+      chmodSync(staged, existed ? stat.mode & 0o777 : 0o644);
+      return { target, staged, backup, existed, bytes };
+    });
+    for (const { staged, bytes } of records) {
+      if (!readFileSync(staged).equals(bytes)) throw new Error("staged vendored bytes failed verification");
+    }
+    // The caller orders all artifacts before the inventories, so a partial
+    // observation fails integrity checks until the new inventories land.
+    for (const record of records) {
+      rename(record.staged, record.target);
+      installed.push(record);
+    }
+  } catch (error) {
+    const failures = [];
+    for (const { target, backup, existed } of installed.reverse()) {
+      try {
+        if (existed) renameSync(backup, target);
+        else rmSync(target);
+      } catch (rollbackError) {
+        failures.push(`${target}: ${rollbackError.message}`);
+      }
+    }
+    if (failures.length > 0) {
+      retainBackups = true;
+      throw new Error(`vendored sync failed: ${error.message}; rollback incomplete: ${failures.join("; ")}; backups retained at ${stage}`);
+    }
+    throw error;
+  } finally {
+    if (!retainBackups) rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+/** Write both vendored directories from a complete verified bundle, with
+ * staged replacements and rollback; inventories are installed last. */
 export async function syncFromBundle(tag, options = {}) {
   if (!isReleaseTag(tag)) throw new Error(`sync --ref ${tag}: only an Ave release tag (vX.Y.Z) has a contract bundle; a commit pin syncs from a checkout with --app`);
-  const inventories = VENDORED_DIRS.map((dir) => {
-    const path = join(ROOT, dir, "sources.json");
-    if (!existsSync(path)) throw new Error(`${dir}/sources.json is missing`);
-    return [dir, JSON.parse(readFileSync(path, "utf8"))];
-  });
-  const { files } = await readBundle(tag, vendoredNames(inventories), options);
-  for (const [, sources] of inventories) {
-    for (const name of Object.keys(sources.files)) {
-      if (sources.files[name].build && embeddedBuildPaths(files.get(name)).length > 0) throw new Error(`${tag}/${name}: embedded absolute build path`);
-    }
+  const root = options.root ?? ROOT;
+  const inventories = readVendoredSources(root);
+  const { files } = await readBundle(tag, options);
+  const replacements = new Map();
+  for (const { name, destination, built } of VENDORED_ARTIFACTS) {
+    const bytes = files.get(name);
+    if (built && embeddedBuildPaths(bytes).length > 0) throw new Error(`${tag}/${name}: embedded absolute build path`);
+    replacements.set(destination, bytes);
   }
   for (const [dir, sources] of inventories) {
     sources.comment = `Ave ${tag}, from its signed contract bundle. Never edit a copy: \`node tools/vendor.mjs verify\` holds every byte to the bundle, and a new tag arrives with \`node tools/vendor.mjs sync --ref <tag>\`.`;
     sources.ref = tag;
     sources.bundle = bundleUrl(tag);
     for (const [name, entry] of Object.entries(sources.files)) {
-      writeFileSync(join(ROOT, dir, name), files.get(name));
       entry.sha256 = sha256(files.get(name));
     }
+    replacements.set(`${dir}/sources.json`, Buffer.from(`${JSON.stringify(sources, null, 2)}\n`));
   }
-  for (const [dir, sources] of inventories) writeFileSync(join(ROOT, dir, "sources.json"), `${JSON.stringify(sources, null, 2)}\n`);
+  installVendored(replacements, options);
 }
 
 /** Build `entry.build.entry` from the checkout `app`, which must be at `ref` and clean. */
@@ -317,15 +484,17 @@ function syncFromCheckout(dir, ref, app) {
   const sources = readSources(dir);
   sources.ref = ref;
   sources.bundle = null;
+  const replacements = new Map();
   for (const [name, entry] of Object.entries(sources.files)) {
     const bytes = entry.build
       ? buildAtRef(entry, app, ref)
       : execFileSync("git", ["-C", app, "show", `${ref}:${entry.from}`], { maxBuffer: 64 * 1024 * 1024 });
     if (entry.build && embeddedBuildPaths(bytes).length > 0) throw new Error(`${dir}/${name}: embedded absolute build path`);
-    writeFileSync(join(ROOT, dir, name), bytes);
+    replacements.set(`${dir}/${name}`, bytes);
     entry.sha256 = sha256(bytes);
   }
-  writeFileSync(join(ROOT, dir, "sources.json"), `${JSON.stringify(sources, null, 2)}\n`);
+  replacements.set(`${dir}/sources.json`, Buffer.from(`${JSON.stringify(sources, null, 2)}\n`));
+  installVendored(replacements);
 }
 
 function option(args, name) {

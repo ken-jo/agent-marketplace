@@ -11,7 +11,7 @@
     "contract:check": "node tools/vendor.mjs check",
     "contract:verify": "node tools/vendor.mjs verify",
     "contract:sync": "node tools/vendor.mjs sync",
-    "test:tools": "node --test tools/__tests__/tools.test.mjs"
+    "test:tools": "node --test tools/__tests__/*.test.mjs"
   },
   "engines": {
     "node": ">=22.18"

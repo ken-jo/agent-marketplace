@@ -11,10 +11,12 @@ import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { checkMarketplaceRepository } from "../vendor/marketplace-check.js";
+import { verifiedRuntime } from "../verified-import.mjs";
 import { SIGNER_ISSUER, bundleUrl, cosignArgs, embeddedBuildPaths, signerIdentity } from "../vendor.mjs";
 import { testKeys, testSignature } from "./fake-sigstore.mjs";
 import { workingTree } from "../repo.mjs";
+
+const { marketplace: { checkMarketplaceRepository } } = await verifiedRuntime();
 
 const TOOLS = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REAL_ROOT = resolve(TOOLS, "..");
@@ -52,7 +54,7 @@ function repo() {
   git("config", "commit.gpgsign", "false");
   cpSync(join(REAL_ROOT, "contract"), join(root, "contract"), { recursive: true });
   cpSync(join(REAL_ROOT, "tools/vendor"), join(root, "tools/vendor"), { recursive: true });
-  for (const script of ["check.mjs", "release.mjs", "repo.mjs", "vendor.mjs"]) {
+  for (const script of ["check.mjs", "release.mjs", "repo.mjs", "vendor.mjs", "verified-import.mjs"]) {
     cpSync(join(TOOLS, script), join(root, "tools", script));
   }
   const write = (path, value) => {
@@ -69,7 +71,20 @@ function repo() {
   const publishTool = (script, ...args) => {
     const env = { ...process.env };
     delete env.MARKETPLACE_ROOT;
-    return spawnSync("node", [realpathSync(join(root, "tools", script)), ...args], { env, encoding: "utf8" });
+    const target = realpathSync(join(root, "tools", script));
+    const sources = JSON.parse(readFileSync(join(root, "contract/sources.json"), "utf8"));
+    if (!sources.ref.startsWith("v")) return spawnSync("node", [target, ...args], { env, encoding: "utf8" });
+    // Test signatures are available only through the function API. The
+    // production CLI and environment cannot replace signature verification.
+    const keys = testKeys();
+    const { served } = publishBundle({ root }, sources.ref, keys);
+    const code = `
+      process.argv = [process.execPath, ${JSON.stringify(target)}, ...${JSON.stringify(args)}];
+      const t = await import(${JSON.stringify(join(TOOLS, "__tests__/fake-sigstore.mjs"))});
+      const loader = await import(${JSON.stringify(join(root, "tools/verified-import.mjs"))});
+      await loader.verifiedRuntime({ allowDevelopment: false, get: t.servedFrom(${JSON.stringify(served)}, []), verifySignature: t.testVerifier(${JSON.stringify(keys.publicKey)}) });
+      await import(${JSON.stringify(target)});`;
+    return spawnSync("node", ["--input-type=module", "-e", code], { env, encoding: "utf8" });
   };
   const index = () => JSON.parse(readFileSync(join(root, "marketplace.json"), "utf8"));
   /** Evaluate `expression` with the tools module `script`'s exports in scope as `m`, against this repository. */
@@ -911,9 +926,7 @@ describe("releases", () => {
     markDevelopmentPin(r);
     const pinned = publish();
     assert.equal(pinned.status, 1);
-    for (const path of VENDORED_SOURCES) {
-      assert.ok(pinned.stderr.includes(`${path}: publication requires an Ave release tag with a signed contract bundle; ${DEV_PIN} is a development commit pin, which has no contract bundle`), pinned.stderr);
-    }
+    assert.match(pinned.stderr, /publication requires an Ave release tag with a signed contract bundle; development inventory trust is not allowed/u);
 
     const { contract, schema } = markPublicationReady(r);
     assert.equal(publish().status, 0, publish().stderr);
@@ -921,7 +934,7 @@ describe("releases", () => {
     const entry = contract.files["protocol.schema.json"];
     delete contract.files["protocol.schema.json"];
     r.write("contract/sources.json", contract);
-    assert.match(publish().stderr, /publication requires schemas\/plugin-host-protocol\/3\/protocol\.schema\.json/u);
+    assert.match(publish().stderr, /contract\/sources\.json: files must contain exactly/u);
     contract.files["protocol.schema.json"] = entry;
     r.write("contract/sources.json", contract);
     assert.equal(publish().status, 0, publish().stderr);
@@ -958,7 +971,7 @@ describe("releases", () => {
     const fake = mkdtempSync(join(tmpdir(), "marketplace-failing-node-"));
     scratch.push(fake);
     writeFileSync(join(fake, "node"), "#!/bin/sh\nexit 42\n", { mode: 0o755 });
-    const run = spawnSync("bash", ["-c", script], {
+    const run = spawnSync("bash", ["--noprofile", "--norc", "-c", script], {
       cwd: REAL_ROOT,
       env: { ...process.env, PATH: `${fake}:${process.env.PATH}`, GITHUB_OUTPUT: join(fake, "output") },
       encoding: "utf8",
@@ -1211,7 +1224,7 @@ describe("releases", () => {
     assert.doesNotMatch(alone.stderr, /Supply releasedManifests|--base <ref>/u);
   });
 
-  it("accepts supplied release manifests offline and preserves the base in its recovery command", () => {
+  it("accepts supplied release manifests without downloading releases and preserves the base in its recovery command", () => {
     const { r, zip, base } = publishedAtAlertsRelease();
     const missing = r.tool("check.mjs", "--base", base);
     assert.equal(missing.status, 1);

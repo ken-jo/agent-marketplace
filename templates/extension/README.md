@@ -15,14 +15,16 @@ for compatibility. Agent Plugins without an Ave runtime entry use the separate
 
 Copy this directory to `plugins/<name>/source/` in the marketplace
 repository. The `file:` paths in `package.json` assume that depth, so change
-`../../` to `../../../` in both of them. Then:
+`../../` to `../../../` in both of them. From the repository root, install,
+typecheck, build and test against a verified contract snapshot:
 
 ```bash
-cd plugins/<name>/source
-bun install
-bun run build
-bun run test
+node tools/verified-import.mjs plugin plugins/<name>/source --allow-development
 ```
+
+Development commit pins trust the reviewed inventory hashes. Release tags
+always require signed bundle verification; omit `--allow-development` to
+require a release tag. See the repository's [contract bundle guidance](https://github.com/ken-jo/agent-marketplace#contract-bundle).
 
 Add `plugins/<name>/ave-package.json` beside `source/`. After the merge, the
 release workflow builds the zip, uploads it as a release asset and opens the
@@ -95,11 +97,8 @@ export default defineAvePluginConfig({
 });
 ```
 
-Run the build:
-
-```bash
-bun run build
-```
+Run the supervised command in [Create a new extension](#1-create-a-new-extension-from-this-template)
+from the repository root.
 
 The helper wraps `tsup.defineConfig` and enforces the self-containment contract
 described below. You only need to specify what differs from the defaults.
@@ -126,8 +125,9 @@ Additionally, the host loader enforces strict `pluginRoot` containment
 | `sourcemap` | `true` | Required for host-side stack trace symbolication |
 
 The contract itself is the host's `public-contract.ts` and manifest schema,
-copied unchanged into `contract/` at an ave release tag. The build helper
-and this README describe what the host loader expects of the bundle.
+vendored at the ref in `contract/sources.json`. The supervisor supplies the
+verified bytes as a separate package. The build helper and this README
+describe what the host loader expects of the bundle.
 
 ---
 
@@ -330,8 +330,9 @@ node tools/vendor.mjs sync --ref <ave tag>
 
 An extension that uses a member first shipped in release X sets
 `requires.minAppVersion` in `plugin.json` to X or later, and the descriptor's
-`minAppVersion` to the same value. An extension for app 0.12.0 and later
-declares `requires.hostProtocol: "2"`; this template already does so.
+`minAppVersion` to the same value. Declare `requires.hostProtocol` for the
+oldest supported app release, following the repository's [manifest rules](https://github.com/ken-jo/agent-marketplace#contract-bundle).
+This template targets protocol `"2"`.
 
 ---
 
