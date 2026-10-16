@@ -1,9 +1,9 @@
 // HAND-MAINTAINED — regenerate by syncing to host SoT (see header notes).
 //
 // A fixed fallback palette: dark, snapshotted from the former "tokyo-night"
-// default through the host's derivation (ave
+// default through the host's derivation (Ave
 // src/ui/renderer/theme/plugin-token-map.ts, bundleToPluginTokens), with an OS
-// light override. Token names follow ave src/shared/plugin-ui-tokens.ts
+// light override. Token names follow Ave src/shared/plugin-ui-tokens.ts
 // (AVE_TOKEN_NAMES).
 //
 // Why this file exists at all:

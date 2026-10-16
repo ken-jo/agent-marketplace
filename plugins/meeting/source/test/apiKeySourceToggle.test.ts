@@ -141,7 +141,6 @@ describe("STT key resolution — resolveApiKey contract", () => {
     );
     // vendor MUST NOT be passed — host defaults to user's active LLM
     // provider so Azure-only users aren't silently routed to OpenAI public.
-    // See ave#955.
     const callArg = resolveApiKey.mock.calls[0]?.[0] as { vendor?: string; signal?: AbortSignal } | undefined;
     expect(callArg?.vendor).toBeUndefined();
     expect(callArg?.signal).toBeInstanceOf(AbortSignal);

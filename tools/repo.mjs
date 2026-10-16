@@ -22,16 +22,10 @@ export const INDEX_PATH = "marketplace.json";
  */
 const RETIRED_INDEX_PATH = "marketplace.2.json";
 export const DESCRIPTOR = "ave-package.json";
-/**
- * The descriptor's name before Ave, at every commit up to the rename. Read
- * only from history (descriptorPathAt), where versions published under it
- * stay listed; never from the working tree. Remove once no listed version's
- * commit predates the rename.
- */
-export const LEGACY_DESCRIPTOR = "retiredname-package.json";
 /** Packages deliberately taken out of the catalog, published versions included, and why. */
 export const WITHDRAWN_PATH = "tools/withdrawn.json";
-export const RETIREDNAME = "ai.agent-connector.ave";
+/** The manifest `extensions` key that holds the app's own fields. */
+export const AVE_EXTENSION = "ai.agent-connector.ave";
 /** First stable app release with the full alerts contract. */
 export const ALERTS_RELEASE_VERSION = "0.11.0";
 /** The manifest fields a descriptor copies as the plugin's authority (design §5.2). */
@@ -116,20 +110,12 @@ export function withdrawnPackages() {
   }));
 }
 
-/** The descriptor `dir` holds at `rev`, under the name it carried then; undefined when it holds none. */
-export function descriptorPathAt(dir, rev) {
-  const names = [`${dir}/${DESCRIPTOR}`, `${dir}/${LEGACY_DESCRIPTOR}`];
-  const present = git(["ls-tree", "--name-only", rev, "--", ...names]).split("\n").filter(Boolean);
-  return names.find((name) => present.includes(name));
-}
-
 /**
  * The paths whose content a version of this package is: a plugin's is its
- * descriptor, since its code ships as a release asset. Both descriptor names,
- * so history before the rename is found.
+ * descriptor, since its code ships as a release asset.
  */
 export function contentPaths(dir, kind) {
-  return kind === "plugin" ? [`${dir}/${DESCRIPTOR}`, `${dir}/${LEGACY_DESCRIPTOR}`] : [dir];
+  return kind === "plugin" ? [`${dir}/${DESCRIPTOR}`] : [dir];
 }
 
 /** Derive Agent Plugins component authority from exactly the package files at a tree or commit. */
@@ -138,8 +124,7 @@ export function agentPluginComponents(dir, descriptor, rev) {
   const paths = rev === undefined
     ? trackedFiles().filter((path) => path.startsWith(prefix) && existsSync(join(ROOT, path)))
     : git(["ls-tree", "-r", "--name-only", rev, "--", dir]).split("\n").filter(Boolean);
-  const descriptors = new Set([`${dir}/${DESCRIPTOR}`, `${dir}/${LEGACY_DESCRIPTOR}`]);
-  const files = paths.filter((path) => !descriptors.has(path)).map((path) => ({
+  const files = paths.filter((path) => path !== `${dir}/${DESCRIPTOR}`).map((path) => ({
     path: path.slice(prefix.length),
     data: rev === undefined ? readFileSync(join(ROOT, path)) : Buffer.from(git(["show", `${rev}:${path}`], { encoding: "buffer" })),
   }));
@@ -256,18 +241,18 @@ export function requiredHostProtocol(minAppVersion) {
  * pinned; the app requires `capabilities` and `requires.minAppVersion`.
  */
 export function pluginAuthority(manifest) {
-  const retiredname = manifest?.extensions?.[RETIREDNAME];
-  if (!retiredname || typeof retiredname !== "object") return { problems: [`extensions["${RETIREDNAME}"] is missing`] };
+  const ave = manifest?.extensions?.[AVE_EXTENSION];
+  if (!ave || typeof ave !== "object") return { problems: [`extensions["${AVE_EXTENSION}"] is missing`] };
   const problems = [];
-  if (!Array.isArray(retiredname.capabilities)) problems.push("capabilities must be declared, [] when the plugin needs none");
-  if (typeof retiredname.requires?.minAppVersion !== "string") problems.push("requires.minAppVersion must be declared");
+  if (!Array.isArray(ave.capabilities)) problems.push("capabilities must be declared, [] when the plugin needs none");
+  if (typeof ave.requires?.minAppVersion !== "string") problems.push("requires.minAppVersion must be declared");
   else {
-    const required = requiredHostProtocol(retiredname.requires.minAppVersion);
-    if (required && retiredname.requires.hostProtocol !== required) {
-      problems.push(`requires.hostProtocol must be ${required} for minAppVersion ${retiredname.requires.minAppVersion}`);
+    const required = requiredHostProtocol(ave.requires.minAppVersion);
+    if (required && ave.requires.hostProtocol !== required) {
+      problems.push(`requires.hostProtocol must be ${required} for minAppVersion ${ave.requires.minAppVersion}`);
     }
   }
   const authority = {};
-  for (const field of AUTHORITY_FIELDS) if (retiredname[field] !== undefined) authority[field] = retiredname[field];
-  return problems.length > 0 ? { problems } : { authority, minAppVersion: retiredname.requires.minAppVersion, hostProtocol: retiredname.requires.hostProtocol };
+  for (const field of AUTHORITY_FIELDS) if (ave[field] !== undefined) authority[field] = ave[field];
+  return problems.length > 0 ? { problems } : { authority, minAppVersion: ave.requires.minAppVersion, hostProtocol: ave.requires.hostProtocol };
 }

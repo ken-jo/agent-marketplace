@@ -430,7 +430,7 @@ describe("manifest contract — configSchema allowedUncRoots", () => {
     expect(schema.items.type).toBe("string");
     // Host's PluginManifest schema (SDK v5.7+) only allows `type` on
     // configSchema array items — `minLength`, `maxLength`, `pattern` are
-    // rejected by ave's manifest validator with "unknown property".
+    // rejected by Ave's manifest validator with "unknown property".
     // The runtime guard (normalizeUncRoot) carries the real validation
     // and silently drops malformed entries; covered separately above.
     expect(schema.items).not.toHaveProperty("minLength");

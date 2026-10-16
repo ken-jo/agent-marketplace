@@ -180,13 +180,13 @@ def test_empty_provider_coerces_to_default() -> None:
 
 
 def test_no_insecure_tls_path_exists() -> None:
-    # The verify=False TLS bypass (and its AVE_DEV_INSECURE_TLS gate) is gone:
+    # The verify=False TLS bypass (and any *_INSECURE_TLS env gate) is gone:
     # certificate verification can never be disabled via a runtime env var.
     import embedding_client as ec  # noqa: PLC0415
 
     source = Path(ec.__file__).read_text(encoding="utf-8")
     assert "verify=False" not in source
-    assert "AVE_DEV_INSECURE_TLS" not in source
+    assert "INSECURE_TLS" not in source
 
 
 # ----------------------------------------------------------------------

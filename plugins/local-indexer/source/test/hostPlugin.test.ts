@@ -203,7 +203,7 @@ vi.mock("../src/folderIndexer.js", () => {
 });
 
 vi.mock("../src/localIndexerPlugin.js", () => {
-  class AveLocalIndexerPlugin {
+  class LocalIndexerPlugin {
     opts;
     started = false;
     constructor(opts) {
@@ -261,7 +261,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
     async getDocumentStructure() { return { sections: [] }; }
     async getPageContent() { return []; }
   }
-  return { AveLocalIndexerPlugin };
+  return { LocalIndexerPlugin };
 });
 
 import createPlugin from "../src/hostPlugin.js";

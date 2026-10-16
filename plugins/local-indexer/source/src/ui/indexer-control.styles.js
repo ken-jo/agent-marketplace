@@ -4,7 +4,7 @@
 // v2 theme-bundle/shell selectors only — atomic cutover (PR #102). v1 data-theme removed.
 //
 // SDK 토큰 인라인: ave-tokens.css.js 는 SDK v6.1.0 의 토큰 팔레트에서
-// 생성된 정적 스냅샷이다 (SDK v7.0.0 에서 @ave/plugin-sdk/ui/* 전체가
+// 생성된 정적 스냅샷이다 (SDK v7.0.0 에서 plugin-sdk/ui/* 전체가
 // 제거되어 더 이상 SDK 로부터 직접 생성할 수 없다). 본 STYLES 앞에
 // 합쳐 webview 스코프 안에서 --ave-* 토큰이 활성화되도록 한다. 본 시트의
 // semantic vars (--bg-base, --accent-strong, ...) 는 var(--ave-*, fallback)

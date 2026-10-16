@@ -1321,7 +1321,7 @@ export default async function createPlugin(context: HostPluginContext) {
   //     marketplace host-secret whitelist grants for BYO STT keys.
   //   - apiKeySource="host": call hostApi.resolveApiKey({purpose:"stt"}).
   //     Vendor is intentionally omitted so the host defaults to the user's
-  //     active LLM provider (ave#955), preserving Azure users.
+  //     active LLM provider, preserving Azure users.
   //   - No sidecar or legacy `apiKey` fallback is used. Secret persistence
   //     belongs to the host keychain via pluginConfig.setSecret.
   //
@@ -1768,7 +1768,7 @@ export default async function createPlugin(context: HostPluginContext) {
   // `llmKeySource: "host"`, meaning users opting plugin-local STT (BYO STT
   // key) have not consented to that key being used for summary calls against
   // OpenAI public — host inheritance (e.g. Azure AI Foundry) is the only
-  // sanctioned summary path. See ave#955.
+  // sanctioned summary path.
   const hostCallLlmAvailable = typeof hostApi.callLlm === "function";
   const summaryProvider = hostCallLlmAvailable
     ? new HostLlmSummaryProvider({
@@ -1787,7 +1787,7 @@ export default async function createPlugin(context: HostPluginContext) {
     // silent UX degradation — users finished a meeting and received a mock
     // (placeholder) summary without realising real LLM access was missing.
     // Surface this via a warn-level log AND a structured event so the host UI
-    // / proactive engine can flag the degraded state. ave#955.
+    // / proactive engine can flag the degraded state.
     log(
       "[meeting] summary via Mock — WARNING: host callLlm not exposed; real summaries unavailable until host LLM is configured",
     );
@@ -1828,7 +1828,7 @@ export default async function createPlugin(context: HostPluginContext) {
   //   - host   -> hostApi.resolveApiKey({purpose:"stt", signal}) lease,
   //      gated by manifest llmKeySource + hostSecrets and marketplace
   //      whitelist. Vendor is intentionally omitted so the host defaults to
-  //      the user's active LLM provider (ave#955): an Azure-only user
+  //      the user's active LLM provider: an Azure-only user
   //      will resolve to Azure, never silently forced onto OpenAI public.
   // Hard-fails without test-provider fallback when the selected source is unavailable; the
   // pipeline surfaces the error and hostPlugin emits meeting.error to the UI.

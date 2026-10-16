@@ -989,7 +989,7 @@ export async function mount(context) {
   // clicks the already-selected option. Native HTML keeps the input in
   // sync with the label click.
   // Provider / endpoint / API key controls live in the plugin settings
-  // panel (ave side). The main UI only owns the toggle, so there
+  // panel (Ave side). The main UI only owns the toggle, so there
   // are no click/input handlers for those fields here — they were
   // intentionally removed when settings moved to plugin config.
 
@@ -1225,7 +1225,7 @@ export async function mount(context) {
   // Theme sync — SDK primeTheme handles cold-boot `getTheme()` pull +
   // `host.theme.changed` subscribe + validated --ave-* token paint to
   // `scope.style` (inline styles win over the static scope-local fallback in
-  // ave-tokens.css.js). Mirrors ave-plugin-meeting's pattern: a single
+  // ave-tokens.css.js). Mirrors the meeting plugin's pattern: a single
   // call replaces the hand-rolled bundleId/shell attribute mirroring and
   // the cold-boot race window — primeTheme races getTheme() against the
   // initial onEvent broadcast and applies whichever lands first.

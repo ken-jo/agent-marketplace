@@ -1,7 +1,7 @@
 # agent-marketplace
 
 The official Ave marketplace. The app syncs this repository with git and
-installs packages from it. See the design, `ken-jo/ave` (formerly ave)
+installs packages from it. See the design, `ken-jo/ave`
 `docs/design/multi-source-git-marketplace.md`.
 
 Code packages are called **extensions** in user-facing text. Their existing
@@ -25,8 +25,7 @@ This repository starts from a single public import commit. Its initial catalog l
 | `templates/extension/` | Starting point for a new extension. |
 | `contract/` | The public types, manifest schema, and protocol-3 schema vendored from Ave at the ref in `contract/sources.json`. Development commit pins support review; publication requires an Ave release tag and its signed [contract bundle](#contract-bundle). |
 | `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, at the same ref as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. |
-| `tools/` | Validator, index generator, release tooling, extension build helper, vendoring. |
-| `tools/import/` | The one-time conversion of the server marketplace (seed packages, field pins). Kept as a record; not run again. |
+| `tools/` | Validator, index generator, release tooling, extension build helper, vendoring, and the retired-name gate (`check-retired-name.mjs`), whose allowlist holds only the signed vendored contract files until the next Ave tag sync. |
 
 ## Publishing
 
@@ -40,8 +39,8 @@ A merge to `main` publishes catalog changes. Marketplace packages are unsigned; 
 
 1. Change `plugins/<name>/source/`. Raise the version in its `plugin.json`
    and `package.json` together.
-   Declare the host protocol of the oldest app it supports: `requires.hostProtocol: "2"`
-   for `minAppVersion` 0.12.x–0.13.x, `"3"` for Ave 0.14.0 and later.
+   Declare `requires.hostProtocol: "3"` with `minAppVersion` 0.14.0 or later:
+   Ave serves host protocol 3 only and refuses a plugin that requires another.
 2. After the merge, the release workflow:
    - refuses publication until the contract and checker pin an Ave release
      tag (the `ref` in both `sources.json` files, never a commit), the

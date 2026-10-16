@@ -1,6 +1,6 @@
 {
   "name": "@ave/plugin-hello-world",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Ave extension — a hello_world tool and a sidebar panel that calls it, for checking extension install and dynamic UI load end to end.",
   "type": "module",
   "files": [

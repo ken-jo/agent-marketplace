@@ -17,7 +17,7 @@
  *
  * Visual: shadcn-aligned via host --ave-* tokens (single SOT) — the surface
  *   palette, radius scale, focus ring, and motion timing all derive from the
- *   host plugin-ui-tokens contract so the plugin reads as part of ave's
+ *   host plugin-ui-tokens contract so the plugin reads as part of Ave's
  *   visual system rather than a standalone widget.
  *
  * Streaming STT (batch-only):
@@ -27,7 +27,7 @@
  *     (SOFT=100 / HARD=200 chars) and flushes along Korean sentence breaks.
  *
  * Theme:
- *   - The vendored ./prime-theme.js (copied from @ave/plugin-sdk v6.1.0 —
+ *   - The vendored ./prime-theme.js (copied from plugin-sdk v6.1.0 —
  *     SDK v7.0.0 removed its UI surface) owns host.theme.changed subscribe +
  *     getTheme() pull + validated token paint to the .ave-meeting-ui
  *     scope div. Floating recorder windows receive the same host theme
@@ -81,14 +81,14 @@ const ICONS = {
 // glassmorphism surface — the previous design felt like a different app.
 const STYLES = `
 .ave-meeting-ui {
-  /* Tokens flow from ave's host.theme.changed broadcast (applied to
+  /* Tokens flow from Ave's host.theme.changed broadcast (applied to
      scope.style as --ave-* CSS variables). Fallback values are the static
      light palette used when the host hasn't broadcast yet (cold start) or
-     when running outside ave (e.g. dev iframe). The accent-bg /
+     when running outside Ave (e.g. dev iframe). The accent-bg /
      danger-bg / accent-bg-hover tints use color-mix so they track the
      primary/danger hue automatically as the chat-theme overlay changes
      (purple → orange → blue → lg-red). color-mix is supported in
-     Chromium 111+ which ave's Electron 41 ships. */
+     Chromium 111+ which Ave's Electron 41 ships. */
   /* Plugin-internal computed vars — only kept where no host token equivalent exists.
      All other styling uses --ave-* tokens directly (SOT: plugin-ui-tokens.ts).
      Tinted-surface tokens (accent-bg, danger-bg, success-bg, warning-bg, surface-hover)
@@ -1214,7 +1214,7 @@ const STYLES = `
   height: 26px;
   border-radius: 50%;
   /* Use the chat-theme accent (purple/orange/blue/lg whichever the user
-     selected in ave) so the arrows always render in the same colour
+     selected in Ave) so the arrows always render in the same colour
      family as the active chat highlight. SVG icons use currentColor for
      their stroke, so setting the color property is enough. */
   color: var(--ave-primary);
@@ -4704,7 +4704,7 @@ export default async function mount(context) {
     // Conference launcher stacked under upload. Button label dispatches on
     // conference.type; the raw URL is intentionally not repeated below it.
     //
-    // Note on link opening: ave sandboxes plugin webviews, so direct
+    // Note on link opening: Ave sandboxes plugin webviews, so direct
     // window.open and <a href> navigation are blocked. handleOpenConference
     // first asks the host to open the URL externally when supported, and
     // falls back to copying the URL to the clipboard while surfacing status.

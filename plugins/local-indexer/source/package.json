@@ -1,6 +1,6 @@
 {
   "name": "@ave/plugin-local-indexer",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Ave desktop extension for local document indexing and retrieval.",
   "type": "module",
   "main": "dist/index.js",

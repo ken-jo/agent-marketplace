@@ -1,5 +1,5 @@
 /**
- * AveLocalIndexerPlugin 스모크 테스트
+ * LocalIndexerPlugin 스모크 테스트
  *
  * Python worker 프로세스는 실제로 spawn하지 않음 — hostApi.spawnWorker를
  * 모킹한 SpawnedPluginWorker 핸들로 대체하여 lifecycle, tool 위임, stdout/stderr
@@ -128,7 +128,7 @@ function testBrokerOptions() {
 
 // ─── 테스트 ──────────────────────────────────────────────────
 
-describe("AveLocalIndexerPlugin", () => {
+describe("LocalIndexerPlugin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -138,21 +138,21 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   it("인스턴스 생성: isRunning 초기값 false", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
     expect(plugin.isRunning).toBe(false);
   });
 
   it("getWorkerClient(): WorkerClient 인스턴스 반환", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
     const { WorkerClient } = await import("../src/workerClient");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
     expect(plugin.getWorkerClient()).toBeInstanceOf(WorkerClient);
   });
 
   it("getShutdownToken(): start 전 null", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
     // token은 startInternal()에서 생성되므로 start 전에는 null
     // (실제로는 constructor에서 생성하지 않음)
     // start()를 호출하지 않으면 null이어야 함
@@ -160,23 +160,23 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   it("pythonExecutable 미설정 시 start() → Error throw", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
     // pythonExecutable 없이 생성
-    const plugin = new AveLocalIndexerPlugin({});
+    const plugin = new LocalIndexerPlugin({});
 
     // health check가 오기 전에 에러가 발생해야 하므로 fetch는 stub하지 않음
     await expect(plugin.start()).rejects.toThrow("pythonExecutable");
   });
 
   it("stop(): 실행 중이 아닌 상태에서 호출해도 에러 없음", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
     await expect(plugin.stop()).resolves.toBeUndefined();
   });
 
   it("indexDocument(): workerClient에 위임 → 결과 반환", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
 
     // workerClient.indexDocument를 spy
     const wc = plugin.getWorkerClient();
@@ -188,8 +188,8 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   it("listDocuments(): workerClient에 위임 → 배열 반환", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
 
     const wc = plugin.getWorkerClient();
     const mockDocs = [{
@@ -222,8 +222,8 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   it("removeDocument(): workerClient.removeDocument에 위임", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
 
     const wc = plugin.getWorkerClient();
     vi.spyOn(wc, "removeDocument").mockResolvedValue(undefined);
@@ -233,8 +233,8 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   it("getDocumentStructure(): workerClient.getStructure에 위임", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
 
     const wc = plugin.getWorkerClient();
     const tree = { nodes: [{ title: "서론", page: 1 }] };
@@ -246,8 +246,8 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   it("getPageContent(): workerClient에 위임 → 응답 반환", async () => {
-    const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new AveLocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
 
     const wc = plugin.getWorkerClient();
     const mockPages = [{ page: 1, content: "페이지 내용" }];
@@ -268,7 +268,7 @@ describe("AveLocalIndexerPlugin", () => {
     const corpCaPath = join(root, "corp-ca.pem");
     await writeFile(corpCaPath, "-----BEGIN CERTIFICATE-----\n");
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       let capturedSpec: Record<string, unknown> | null = null;
@@ -280,7 +280,7 @@ describe("AveLocalIndexerPlugin", () => {
       vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
       vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,
@@ -311,7 +311,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("indexStorageRoot는 worker 저장 경로로만 반영하고 미지원 CLI 플래그를 전달하지 않는다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-storage-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       let capturedArgs: string[] = [];
@@ -328,7 +328,7 @@ describe("AveLocalIndexerPlugin", () => {
       // workerClient.shutdown()도 패치 (stop 시 호출)
       vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,
@@ -399,15 +399,15 @@ describe("AveLocalIndexerPlugin", () => {
   });
 
   // SECURITY (P1 item 9): the embedding API key must NEVER be placed on the
-  // worker's spawn env. The host-injected AVE_INDEXER_API_KEY channel was
+  // worker's spawn env. The host-injected API-key env channel was
   // removed because it exposed the key via /proc/<pid>/environ, child-process
   // inheritance, and crash dumps. The key is pushed to the running worker over
   // the control channel instead, so even with an apiKey configured the spawn
-  // env must carry no AVE_INDEXER_API_KEY (and no OPENAI_API_KEY).
-  it("spawn env에 AVE_INDEXER_API_KEY를 주입하지 않는다 (키는 런타임 push 전용)", async () => {
+  // env must carry no *_API_KEY variable at all.
+  it("spawn env에 API 키 변수를 주입하지 않는다 (키는 런타임 push 전용)", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-noenvkey-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       let capturedEnv: Record<string, string | undefined> = {};
@@ -420,7 +420,7 @@ describe("AveLocalIndexerPlugin", () => {
       vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
       vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,
@@ -433,8 +433,7 @@ describe("AveLocalIndexerPlugin", () => {
       });
       await plugin.start();
 
-      expect(capturedEnv).not.toHaveProperty("AVE_INDEXER_API_KEY");
-      expect(capturedEnv).not.toHaveProperty("OPENAI_API_KEY");
+      expect(Object.keys(capturedEnv).filter((name) => /API_KEY/u.test(name))).toEqual([]);
       // Defense in depth: no env value should equal the configured key.
       expect(Object.values(capturedEnv)).not.toContain("fake-provider-token-must-not-leak-into-env");
       await plugin.stop();
@@ -455,7 +454,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("azure provider with missing endpoint/apiKey invokes onConfigWarning", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-config-warn-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       // health() never resolves within 0ms timeout → start() rejects as intended.
@@ -466,7 +465,7 @@ describe("AveLocalIndexerPlugin", () => {
 
       const onConfigWarning = vi.fn();
       const onWorkerStderr = vi.fn();
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 0,
@@ -504,7 +503,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("start() 실패 시 handle.stop()이 호출되고 isRunning이 false다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-start-fail-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       vi.spyOn(WorkerClient.prototype, "health").mockRejectedValue(new Error("health unavailable"));
@@ -512,7 +511,7 @@ describe("AveLocalIndexerPlugin", () => {
       const handle = makeHandle({ socketPath: null });
       const spawnWorker = vi.fn().mockResolvedValue(handle);
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 0,
@@ -532,7 +531,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("worker stdout/stderr shutdown token 로그를 host callback으로 전달하지 않는다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-token-redaction-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
@@ -543,7 +542,7 @@ describe("AveLocalIndexerPlugin", () => {
       const handle = makeHandle({ socketPath: null, pid: 12345 });
       const spawnWorker = vi.fn().mockResolvedValue(handle);
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 100,
@@ -582,7 +581,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("worker가 crash하면 onExit가 isRunning을 false로 돌려 재시작을 가능케 한다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-crash-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
       vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
 
@@ -590,7 +589,7 @@ describe("AveLocalIndexerPlugin", () => {
       const handle = makeHandle({ socketPath: "/tmp/ave-crash.sock", pid: 12345 });
       const spawnWorker = vi.fn().mockResolvedValue(handle);
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 100,
@@ -621,8 +620,8 @@ describe("AveLocalIndexerPlugin", () => {
   it("spawnWorker 없이 start()하면 minAppVersion 가이드 에러를 던진다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-no-spawn-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const plugin = new AveLocalIndexerPlugin({
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 100,
@@ -638,9 +637,9 @@ describe("AveLocalIndexerPlugin", () => {
   it("egressChannels 없이 start()하면 direct worker provider egress를 거부한다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-no-egress-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const spawnWorker = vi.fn().mockResolvedValue(makeHandle({ socketPath: null }));
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 100,
@@ -657,7 +656,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("handle.socketPath === null → TCP transport으로 workerClient를 구성한다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-tcp-transport-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       const configureSpy = vi.spyOn(WorkerClient.prototype, "configureTransport");
@@ -667,7 +666,7 @@ describe("AveLocalIndexerPlugin", () => {
       const handle = makeHandle({ socketPath: null, pid: 0 }); // pid=0 → no session file
       const spawnWorker = vi.fn().mockResolvedValue(handle);
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 200,
@@ -689,7 +688,7 @@ describe("AveLocalIndexerPlugin", () => {
   it("handle.socketPath non-null → UDS transport으로 workerClient를 구성한다", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-uds-transport-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
 
       const configureSpy = vi.spyOn(WorkerClient.prototype, "configureTransport");
@@ -700,7 +699,7 @@ describe("AveLocalIndexerPlugin", () => {
       const handle = makeHandle({ socketPath: sockPath, pid: 0 }); // pid=0 → no session file
       const spawnWorker = vi.fn().mockResolvedValue(handle);
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 200,
@@ -814,7 +813,7 @@ describe("manifest contract — UI-only tools are uiActions, not LLM tools", () 
 });
 
 // ─── Egress broker lifecycle (P3 ⑬) ──────────────────────────────────────
-describe("AveLocalIndexerPlugin — egress broker", () => {
+describe("LocalIndexerPlugin — egress broker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -825,7 +824,7 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
   it("broker is listening BEFORE spawnWorker resolves, and passes the broker URL via --egress-broker-url (never the real key)", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-broker-life-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
       const { EGRESS_TOKEN_HEADER } = await import("../src/egressBroker");
 
@@ -843,7 +842,7 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
       vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
       vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,
@@ -888,7 +887,7 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
   it("worker onExit tears down the pinned broker", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-broker-exit-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
       const { EGRESS_TOKEN_HEADER } = await import("../src/egressBroker");
 
@@ -902,7 +901,7 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
       });
       vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,
@@ -931,7 +930,7 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
     const realPlatform = process.platform;
     Object.defineProperty(process, "platform", { value: "win32", configurable: true });
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { WorkerClient } = await import("../src/workerClient");
       const { EGRESS_TOKEN_HEADER } = await import("../src/egressBroker");
 
@@ -945,7 +944,7 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
       vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
 
       const brokerOptions = testBrokerOptions();
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,
@@ -995,9 +994,9 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
     async () => {
       const root = await mkdtemp(join(tmpdir(), "ave-broker-nosock-"));
       try {
-        const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+        const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
         const spawnWorker = vi.fn();
-        const plugin = new AveLocalIndexerPlugin({
+        const plugin = new LocalIndexerPlugin({
           pythonExecutable: "/usr/bin/python3",
           indexStorageRoot: root,
           startupTimeoutMs: 500,
@@ -1016,14 +1015,14 @@ describe("AveLocalIndexerPlugin — egress broker", () => {
   it("a broker-start failure fails start() deterministically (worker not spawned)", async () => {
     const root = await mkdtemp(join(tmpdir(), "ave-broker-fail-"));
     try {
-      const { AveLocalIndexerPlugin } = await import("../src/localIndexerPlugin");
+      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
       const { EgressBroker } = await import("../src/egressBroker");
 
       const spawnWorker = vi.fn();
       // Force broker.start() to throw — start() must reject before spawnWorker.
       const startSpy = vi.spyOn(EgressBroker.prototype, "start").mockRejectedValue(new Error("broker bind failed"));
 
-      const plugin = new AveLocalIndexerPlugin({
+      const plugin = new LocalIndexerPlugin({
         pythonExecutable: "/usr/bin/python3",
         indexStorageRoot: root,
         startupTimeoutMs: 500,

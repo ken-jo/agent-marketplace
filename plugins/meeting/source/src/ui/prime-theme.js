@@ -1,9 +1,9 @@
-// Vendored from @ave/plugin-sdk v6.1.0 (dist/ui/hooks/primeTheme.js).
+// Vendored from plugin-sdk v6.1.0 (dist/ui/hooks/primeTheme.js).
 //
-// SDK v7.0.0 removed its entire UI surface (@ave/plugin-sdk/ui/* no longer
+// SDK v7.0.0 removed its entire UI surface (plugin-sdk/ui/* no longer
 // exists — see SDK PR #212 / tag v7.0.0). The host still broadcasts the
 // sticky `host.theme.changed` event carrying the `--ave-*` token payload to
-// plugin webviews (ave src/plugin-preload.ts STICKY_EVENT_TYPES), so
+// plugin webviews (Ave src/plugin-preload.ts STICKY_EVENT_TYPES), so
 // this plugin vendors the small subscriber helper locally to keep following
 // the host theme with zero behavior change. Content below is copied as-is
 // from the SDK's built output at the v6.1.0 tag; do not hand-edit the

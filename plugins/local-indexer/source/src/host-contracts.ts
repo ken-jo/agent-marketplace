@@ -1,6 +1,6 @@
 /**
  * Host contract stubs — structural interfaces for host types that the
- * host's public contract (`@ave/plugin-contract`, vendored from ave)
+ * host's public contract (`@ave/plugin-contract`, vendored from Ave)
  * does not export yet.
  *
  * Keep these shapes in sync with the host-side sources of truth. When the

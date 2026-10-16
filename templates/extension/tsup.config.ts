@@ -1,6 +1,6 @@
 import { defineAvePluginConfig } from "@ave/plugin-build";
 
-// Ave marketplace extensions must be self-contained. The protocol-2 entry
+// Ave marketplace extensions must be self-contained. The entry
 // declared in plugin.json is dist/index.js, built from src/index.ts here.
 // The marketplace
 // zip excludes node_modules/ and the host loader uses strict

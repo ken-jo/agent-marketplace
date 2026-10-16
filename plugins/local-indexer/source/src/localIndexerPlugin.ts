@@ -66,7 +66,7 @@ export function resolveEmbeddingProvider(
   return "openai";
 }
 
-export class AveLocalIndexerPlugin {
+export class LocalIndexerPlugin {
   private readonly options: LocalIndexerWorkerOptions & {
     host: string;
     port: number;
@@ -259,13 +259,13 @@ export class AveLocalIndexerPlugin {
 
   // ─── HTTP API: workerClient delegation (single source of truth) ──
   //
-  // 초기에는 AveLocalIndexerPlugin이 자체 fetch+parse 로직을 가지고 있었지만,
+  // 초기에는 LocalIndexerPlugin이 자체 fetch+parse 로직을 가지고 있었지만,
   // workerClient.ts가 후기에 추가되며 두 client가 공존하게 됐다. 두 client는 같은
   // worker route를 정의하고 있어 drift 가능성이 있고, 실제로 indexDocument는
   // `/index` (존재 안 함) vs workerClient의 `/indexer/reindex` 로 갈라져 있었다.
   //
   // Root fix (이번 세션): 5개 HTTP 메서드를 모두 workerClient에 위임하여 single
-  // source of truth를 확립한다. AveLocalIndexerPlugin은 process lifecycle (spawn/
+  // source of truth를 확립한다. LocalIndexerPlugin은 process lifecycle (spawn/
   // stop/health) + workerClient owner 역할만 담당.
 
   async indexDocument(filePath: string, mode: IndexMode = "auto"): Promise<string> {

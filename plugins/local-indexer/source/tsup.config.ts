@@ -1,6 +1,6 @@
 import { defineAvePluginConfig } from "@ave/plugin-build";
 
-// Two build targets (mirrors ave-plugin-meeting's pattern):
+// Two build targets (mirrors the meeting plugin's pattern):
 //   1. Node host plugin (src/hostPlugin.ts + src/index.ts) — runs in the
 //      plugin's own confined child process.
 //   2. Browser UI bundle (src/ui/indexer-control.js) — loaded via

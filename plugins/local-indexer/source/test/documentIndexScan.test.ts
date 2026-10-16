@@ -69,12 +69,12 @@ vi.mock("../src/folderIndexer.js", () => {
   return { FolderAutoIndexer };
 });
 
-// ─── AveLocalIndexerPlugin mock: indexDocument counts calls ───────────────────
+// ─── LocalIndexerPlugin mock: indexDocument counts calls ───────────────────
 const indexDocumentMock = vi.fn(async (_fp: string, _mode: string) => "doc-id-1");
 const setAllowedRootsMock = vi.fn(async (roots: string[], _token: string) => ({ roots, count: roots.length }));
 
 vi.mock("../src/localIndexerPlugin.js", () => {
-  class AveLocalIndexerPlugin {
+  class LocalIndexerPlugin {
     constructor(_opts: any) {}
     getWorkerClient() {
       return {
@@ -88,7 +88,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
     getShutdownToken() { return "test-shutdown-token"; }
     async listDocuments() { return []; }
   }
-  return { AveLocalIndexerPlugin };
+  return { LocalIndexerPlugin };
 });
 
 import createPlugin from "../src/hostPlugin.js";

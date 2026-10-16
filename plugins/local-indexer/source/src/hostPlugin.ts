@@ -69,7 +69,7 @@ import {
   maybeProposeRescanRoutine,
   RESCAN_LEDGER_FILENAME,
 } from "./rescanSuggestion.js";
-import { AveLocalIndexerPlugin } from "./localIndexerPlugin.js";
+import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
 import { LruCache } from "./lruCache.js";
 import { getIndexModeForPath, isImageFilePath, isIndexableFilePath } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
@@ -725,7 +725,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
   // The sidecar only persists the main-UI toggle. Provider / endpoint /
   // model / apiKey all live in host config + secret store now so the
-  // user maintains them in ave's plugin settings UI (single source
+  // user maintains them in Ave's plugin settings UI (single source
   // of truth across plugins).
   type ImageCaptionMode = "cloud";
 
@@ -1566,7 +1566,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   const corpCaPemPath = resolve(aveHome, "certs", "corp-ca.pem");
   const corpCaPath = existsSync(corpCaPemPath) ? corpCaPemPath : null;
 
-  const plugin = new AveLocalIndexerPlugin({
+  const plugin = new LocalIndexerPlugin({
     workspace,
     pluginDataDir: context.pluginDataDir,
     // Where the egress broker binds its Unix socket. The host creates this
@@ -2620,7 +2620,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       }
       // Push the embedding key to the freshly-started worker so query-time
       // vector search has a credential immediately. The env key channel was
-      // removed (no AVE_INDEXER_API_KEY in the worker process), so without
+      // removed (no *_INDEXER_API_KEY in the worker process), so without
       // this warmup push the SearchService would boot with an empty key and
       // silently degrade to BM25-only for any query that runs outside an
       // index_scan window. The bearer is supplied as a thunk and flows through
@@ -2694,7 +2694,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         try {
           await startup;
         } catch {
-          // AveLocalIndexerPlugin.start() rolls back partial startup before
+          // LocalIndexerPlugin.start() rolls back partial startup before
           // rethrowing. The publication caller still receives that error;
           // teardown only waits for the rollback to settle before inspecting
           // the final running state.
@@ -3999,7 +3999,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
       index_set_image_embedding: async (payload?: unknown) => {
         // The main UI is now toggle-only. Provider / endpoint / model /
-        // apiKey are managed in ave's plugin settings — this handler
+        // apiKey are managed in Ave's plugin settings — this handler
         // intentionally ignores anything else on the payload so a stale
         // UI build can't push provider mutations from here.
         const data = (payload ?? {}) as Record<string, unknown>;
