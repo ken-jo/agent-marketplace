@@ -1,8 +1,8 @@
 {
-  "comment": "Development pin of ken-jo/ave main, the same ref as contract/. The checker and agent-plugin component extractor were built from it with the recorded Bun recipe. A commit has no contract bundle, so publication refuses it. Once the v0.14.0 tag build publishes its signed bundle, `node tools/vendor.mjs sync --ref v0.14.0` replaces these bundles with its bytes; never edit a bundle.",
+  "comment": "Ave v0.14.0, from its signed contract bundle. Never edit a copy: `node tools/vendor.mjs verify` holds every byte to the bundle, and a new tag arrives with `node tools/vendor.mjs sync --ref <tag>`.",
   "repository": "ken-jo/ave",
-  "ref": "8079fca60d03397f91e5a3fe46f05334ba73a605",
-  "bundle": null,
+  "ref": "v0.14.0",
+  "bundle": "https://downloads.agent-connector.ai/contract/v0.14.0/",
   "files": {
     "agent-plugin-components.js": {
       "build": {
@@ -10,7 +10,7 @@
         "bun": "1.3.14",
         "logger": "stub-app-logger"
       },
-      "sha256": "7d23065db6a62ab1266f7501b9b8ead54b4e7d84f28774fc1281efd2b2ae55ac"
+      "sha256": "2657fcde479d7f3d2c521700424da5608bdb8c0fad4d1744982e0368a991afcb"
     },
     "marketplace-check.js": {
       "build": {
@@ -18,7 +18,7 @@
         "bun": "1.3.14",
         "logger": "stub-app-logger"
       },
-      "sha256": "9a56935e2491fef7c4b065842e09b5be865994fd7057915423125d2402587d79"
+      "sha256": "94f17fd2491b18d0d7670829387b0c80d1d17f7038b720e917e9f53f101a1bf6"
     }
   }
 }
