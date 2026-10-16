@@ -8,8 +8,11 @@
  * sha256.
  *
  * Every tracked file is scanned (binary content excepted, paths always). The
- * match needs a non-letter before the name, so words that merely contain the
- * letters never match. An ALLOWLIST entry that no longer matches any file is
+ * name matches in any case after a non-letter (`_X_HOME`, `@x/plugin`), and
+ * inside an identifier after a lower-case letter or digit when written
+ * Capitalized or in capitals (`defineXPluginConfig`, `sourceX`). Words that
+ * merely contain the letters (an `l` that ends one camelCase part before a
+ * `Vis…` part, or a capital before the name) never match. An ALLOWLIST entry that no longer matches any file is
  * stale and fails as well, so the list can only shrink, to empty.
  *
  *   node tools/check-retired-name.mjs
@@ -22,7 +25,18 @@ import { fileURLToPath } from "node:url";
 /** The retired product name, lower case. */
 export const RETIRED_NAME = String.fromCodePoint(0x6c, 0x76, 0x69, 0x73);
 
-export const RETIRED_NAME_PATTERN = new RegExp(`(?<![A-Za-z])${RETIRED_NAME}`, "i");
+const ANY_CASE = [...RETIRED_NAME].map((letter) => `[${letter}${letter.toUpperCase()}]`).join("");
+const CAPITALIZED = RETIRED_NAME[0].toUpperCase() + RETIRED_NAME.slice(1);
+const CAPITALS = RETIRED_NAME.toUpperCase();
+
+/**
+ * Case-sensitive on purpose: a case-insensitive camelCase branch would match
+ * an `l` that ends one word part before a capitalized `Vis…` part.
+ */
+export const RETIRED_NAME_PATTERN = new RegExp(
+  `(?<![A-Za-z])${ANY_CASE}|(?<=[a-z0-9])${CAPITALIZED}|(?<=[a-z0-9])${CAPITALS}`,
+  "u",
+);
 
 const VENDORED = "signed vendored bundle until the next ave tag sync";
 

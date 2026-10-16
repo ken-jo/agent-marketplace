@@ -33,8 +33,8 @@ Apps that serve protocol 2 (0.12.x, 0.13.x) keep 0.9.3.
 - The manifest declares `hostProtocol: "3"` and `minAppVersion: "0.14.0"`.
 - The recorder and panel UI read the host's `--ave-*` theme tokens.
 - The display name is "Ave Meeting", and host-update messages name Ave.
-  Tools, settings, events, `AVE_MEETING_FFMPEG_*` overrides and stored
-  sessions are unchanged.
+  Tools, settings, events, the former-prefix `*_MEETING_FFMPEG_*` overrides
+  (renamed in 0.10.2) and stored sessions are unchanged.
 
 ## [0.9.3] - 2026-10-09
 
@@ -137,8 +137,9 @@ Requires Ave 0.11.0, the release that carries the host alert contract.
   release asset of that repository, pinned by sha256 in the plugin's
   descriptor.
 - The plugin SDK is gone. Types and `flattenAgentPluginsManifest` come
-  from the host's own contract, vendored at Ave v0.10.0
-  (`@ave/plugin-contract`), and the tsup preset from `@ave/plugin-build`.
+  from the host's own contract, vendored at Ave v0.10.0 (the
+  `plugin-contract` package, then under the former package scope), and the
+  tsup preset from the `plugin-build` package under the same scope.
 - `installPolicy` and `publisher` are removed from `plugin.json`: the git
   marketplace installs and locks nothing through a package's own manifest.
 - `requires.minAppVersion` is `0.10.0`, the contract this version compiles
@@ -497,7 +498,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - Wired AbortController into Whisper fetch (in-flight cancel on stop / permission revoke)
 
 ### Security
-- Publisher sanitized to `ave-community` (open-source readiness)
+- Publisher sanitized to a `-community` publisher id under the former name (open-source readiness)
 
 ## [0.4.2] - 2026-05-14
 
@@ -514,7 +515,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - `test/hardeningGuards.test.ts` — 58개 가드 테스트 추가
 
 ### Changed
-- `plugin.json`: `packageName: "@ave/plugin-meeting"` 추가 (마켓플레이스 매핑)
+- `plugin.json`: `packageName` 추가 — 옛 패키지 스코프의 `plugin-meeting` (마켓플레이스 매핑)
 - `plugin.json`: `meeting_propagate_theme` inputSchema 강화 (bundleId/shell/tokens enum + `additionalProperties: false`), category `write` → `read` (transient fanout)
 - `plugin.json`: `meeting_open_url` category `network` → `read` (host 가 OS 핸드오프만 수행)
 - `plugin.json`: 신규 4개 write 도구에 `pathFields: []` 명시
@@ -530,7 +531,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - "No Fallback Code" optional-chain 일괄 제거 — `hostApi.config?.get`, `hostApi.logEvent?.(...)` 35+ 사이트, `hostApi.callLlm` 분기, `hostApi.onShutdown?.()` 모두 required 로 사용
 
 ### Security
-- **STT API key 암호화**: Electron `safeStorage` (`plugin-sdk/runtime/electron`) 로 sidecar 에 ciphertext + mask 만 저장. 기존 plaintext 사이드카 자동 감지 → 1회 마이그레이션. `safeStorage` 없을 때 plaintext 키 저장 거부
+- **STT API key 암호화**: Electron `safeStorage` (당시 옛 패키지 스코프 plugin SDK 의 `runtime/electron` 진입점) 로 sidecar 에 ciphertext + mask 만 저장. 기존 plaintext 사이드카 자동 감지 → 1회 마이그레이션. `safeStorage` 없을 때 plaintext 키 저장 거부
 - legacy `.meeting-sessions` host-root 마이그레이션을 `<pluginDataDir>/.legacy-migration-done` marker 로 게이트 → 반복 호스트 네임스페이스 스캔 제거 (CLAUDE.md "Storage Namespace per Feature" 준수)
 - floating recorder window 의 자동 `webContents.openDevTools({ mode: "detach" })` 제거 — production 빌드에서 DevTools 가 열리는 회귀 차단
 

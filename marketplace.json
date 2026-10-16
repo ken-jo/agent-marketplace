@@ -159,7 +159,7 @@
       "name": "sqlite-mcp",
       "path": "mcp/sqlite-mcp",
       "displayName": "SQLite MCP",
-      "description": "Adds the official SQLite MCP server for local database querying and analysis."
+      "description": "Adds the official SQLite MCP server for local database querying and analysis. From 2025.4.27 the database is ave.sqlite in the package's data folder. Earlier versions used a differently named .sqlite file there; it is not migrated, so copy it to ave.sqlite to keep its data."
     },
     {
       "kind": "mcp",

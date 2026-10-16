@@ -27,8 +27,8 @@ Apps that serve protocol 2 (0.12.x, 0.13.x) keep 0.6.9.
   the Python runtime as `managedBy: "ave"`, and the path-bearing tool
   arguments under the `ave/pathFields` annotation.
 - The host home comes from `PluginRuntimeContext.aveHome`; the default
-  home, the corporate CA path and the Kiwi user dictionary move to
-  `~/.ave` with the host.
+  home, the corporate CA path and the Kiwi user dictionary move from the
+  former data home to `~/.ave` with the host.
 - The panel reads the host's `--ave-*` theme tokens.
 - The display name is "Ave Local Indexer". Tools, settings, events and
   stored data are unchanged.
@@ -89,8 +89,9 @@ Ave 0.11.x and earlier keep 0.6.8.
   release asset of that repository, pinned by sha256 in the plugin's
   descriptor.
 - The plugin SDK is gone. Types and `flattenAgentPluginsManifest` come
-  from the host's own contract, vendored at Ave v0.10.0
-  (`@ave/plugin-contract`), and the tsup preset from `@ave/plugin-build`.
+  from the host's own contract, vendored at Ave v0.10.0 (the
+  `plugin-contract` package, then under the former package scope), and the
+  tsup preset from the `plugin-build` package under the same scope.
 - `installPolicy` and `publisher` are removed from `plugin.json`: the git
   marketplace installs and locks nothing through a package's own manifest.
 - `requires.minAppVersion` is `0.10.0`, the contract this version compiles
@@ -315,7 +316,7 @@ Ave 0.11.x and earlier keep 0.6.8.
   runs `index_scan` (incremental: mtime + content-hash short-circuit + orphan
   sweep). Accepting it creates an `llm-session` routine (leaves session history
   + a per-run summary). Propose-once: never re-proposed once a routine exists or
-  the suggestion was shown (ledger at `~/.ave/plugins/local-indexer/`). The
+  the suggestion was shown (ledger at `plugins/local-indexer/` under the former data home). The
   routine's prePrompt requests on-demand activation (`request_plugin`) if the
   plugin is disabled at fire time. Requires the host capabilities in app 0.4.2.
   Adds `host:overlay` + `lifecycle-observer` capabilities; re-pins the SDK to
@@ -329,7 +330,8 @@ Ave 0.11.x and earlier keep 0.6.8.
   attacker-controlled documents and runs a large transitive dependency tree
   in-process). It previously held the real provider key in memory across four
   holders and could open arbitrary outbound sockets. The new `EgressBroker`
-  (`src/egressBroker.ts`, owned by `LocalIndexerPlugin`) closes both:
+  (`src/egressBroker.ts`, owned by the plugin class, now `LocalIndexerPlugin`)
+  closes both:
   - The plugin starts a loopback broker BEFORE spawning the worker and passes
     the worker only the broker base URL (`--egress-broker-url`) plus a
     per-session token (pushed over the control channel). The worker's four
@@ -343,7 +345,8 @@ Ave 0.11.x and earlier keep 0.6.8.
     (`resolveEmbeddingKeyForEndpoint` / `resolveCaptionKeyForEndpoint`): a
     custom untrusted endpoint still receives the plugin-own key, never the
     host key.
-  - Token auth via `x-ave-egress-token` + `crypto.timingSafeEqual` (missing /
+  - Token auth via the former-prefix egress-token header (now
+    `x-ave-egress-token`) + `crypto.timingSafeEqual` (missing /
     wrong ⇒ 403, blocking other local processes). The broker uses an
     allow-list to drop all worker-supplied headers (preventing gzip-confusion
     attacks and arbitrary header injection) then injects the real provider auth
@@ -621,7 +624,7 @@ Ave 0.11.x and earlier keep 0.6.8.
 
   **Migration required for saved routines / keywords.** This is a hard cut
   (owner decision A): there are **no compatibility aliases**. Any saved routine
-  in `~/.ave/routine/routines.json` or external keyword binding that references
+  in `routine/routines.json` under the former data home or external keyword binding that references
   an old tool id (`chat_preview`, `document_index_scan`, `index_refresh_folder`,
   `index_add_folder`, `index_add_folders`, `index_remove_folder`) will hard-fail
   with "tool not found" and must be rewritten to the new call shown above.
@@ -632,7 +635,8 @@ Ave 0.11.x and earlier keep 0.6.8.
 
 ### Security
 - **Removed the env LLM-key channel.** The host no longer injects the embedding
-  API key into the worker process environment (`INDEXER_API_KEY`). That
+  API key into the worker process environment (the former-prefix
+  `*_INDEXER_API_KEY` variable). That
   channel exposed the key via `/proc/<pid>/environ`, child-process inheritance,
   and crash dumps. The key now reaches the worker **only** through the runtime
   `POST /indexer/set_embedding_api_key` push and lives solely in worker-process
@@ -667,10 +671,10 @@ Ave 0.11.x and earlier keep 0.6.8.
   `resolveEmbeddingKeyForEndpoint`, so an untrusted custom `embeddingEndpoint`
   withholds the host LLM key and routes the plugin-own key instead.
 - The `OPENAI_API_KEY` fallback in `embedding_client.py` (gated by
-  `AVE_ALLOW_ENV_API_KEY=1`) is preserved. **This is a standalone-worker dev
+  the former-prefix `*_ALLOW_ENV_API_KEY=1`, now `AVE_ALLOW_ENV_API_KEY=1`) is preserved. **This is a standalone-worker dev
   affordance only** — the host's whitelist-only spawn env (`localIndexerPlugin.ts`)
   excludes `OPENAI_API_KEY`, so this path is unreachable through the host. Only
-  the host-injected `INDEXER_API_KEY` channel was removed.
+  the host-injected `*_INDEXER_API_KEY` channel was removed.
 
 ## [0.5.6] - 2026-06-28
 
@@ -715,7 +719,7 @@ Ave 0.11.x and earlier keep 0.6.8.
 ### Changed
 - `LocalIndexer._init_schema` now runs an idempotent `ALTER TABLE documents ADD
   COLUMN content_state TEXT NOT NULL DEFAULT 'ok'` migration guarded by
-  `PRAGMA table_info`, so pre-existing `~/.ave` index databases gain the column
+  `PRAGMA table_info`, so pre-existing index databases under the former data home gain the column
   on next boot with every legacy row backfilled to `'ok'` and zero row loss.
 
 ## [0.5.4] - 2026-06-28
@@ -746,7 +750,8 @@ Ave 0.11.x and earlier keep 0.6.8.
 
 ### Removed
 - Dead worker-side `cloud_index_adapter.py` (Mock/Disabled `CloudIndexAdapter`
-  + `CloudIndexFactory`) and its `AppState.cloud` wiring + `CLOUD_INDEX_MODE`
+  + `CloudIndexFactory`) and its `AppState.cloud` wiring + the former-prefix
+  `*_CLOUD_INDEX_MODE`
   env switch. The adapter was always constructed in `disabled` mode and never
   read on any search/index path — pure dead code. The `"cloud"` RRF weight was
   also dropped from `DEFAULT_RRF_WEIGHTS` (no source ever emitted it).
@@ -818,7 +823,7 @@ Ave 0.11.x and earlier keep 0.6.8.
 - 검증: typecheck + test + build 통과 (209 tests pass)
 - 검증: legacy theme symbol grep (`applyThemeFromHostEvent`/`bootstrapHostTheme`/
   `setupThemeSync`/`applyHostThemePayload`/`applyThemePayload`) → 0건 (단,
-  `src/ui/ave-tokens.css.js:28` 의 주석 안 `applyThemeFromHostEvent` 는
+  UI 토큰 파일(당시 옛 접두사 이름, 현재 `src/ui/ave-tokens.css.js`) 28행 주석 안 `applyThemeFromHostEvent` 는
   host 의 동작 설명 — 본 plugin 호출 아님)
 
 Reference: plugin SDK CHANGELOG [5.10.0].

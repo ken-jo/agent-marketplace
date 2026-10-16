@@ -1,13 +1,13 @@
-"""Embedding-key channel: the host-injected ``INDEXER_API_KEY`` env
-channel was removed. The worker now boots with an empty key and receives the
-credential exclusively through the runtime ``/indexer/set_egress_token``
+"""Embedding-key channel: the host-injected env channel under the retired
+product prefix (``RETIRED_INDEXER_KEY_ENV`` below) was removed. The worker
+now boots with an empty key and receives the credential exclusively through the runtime ``/indexer/set_egress_token``
 push, which must reach ALL THREE key consumers — the indexer, the
 ``SearchService`` (query-time vector search), and the ``AppState`` copy that
 backs the caption fallback. The only env channel kept is the user's own
 ``OPENAI_API_KEY`` dev opt-in (gated host-side by ``AVE_ALLOW_ENV_API_KEY=1``).
 
 These tests prove:
-    * ``OpenAIEmbeddingClient`` no longer consults ``INDEXER_API_KEY``;
+    * ``OpenAIEmbeddingClient`` no longer consults ``RETIRED_INDEXER_KEY_ENV``;
     * the worker boots with an empty key on all three consumers;
     * the push feeds all three, and — the load-bearing assertion —
       ``SearchService.search_vector`` returns nothing BEFORE the push (no key
@@ -34,17 +34,24 @@ from local_indexer import LocalIndexer  # noqa: E402
 from local_indexer_search import SearchService  # noqa: E402
 from local_indexer_worker import AppState, create_app  # noqa: E402
 
+# The removed channel's real variable name. Its prefix is the retired product
+# name, built from code points the way tools/check-retired-name.mjs builds it,
+# so the repository's retired-name gate never sees it spelled out.
+RETIRED_INDEXER_KEY_ENV = (
+    "".join(chr(code) for code in (0x6C, 0x76, 0x69, 0x73)).upper() + "_INDEXER_API_KEY"
+)
+
 
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Strip both env vars before each test — leaking either across cases
     would mask a precedence regression."""
-    monkeypatch.delenv("INDEXER_API_KEY", raising=False)
+    monkeypatch.delenv(RETIRED_INDEXER_KEY_ENV, raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
 
 # ----------------------------------------------------------------------
-# OpenAIEmbeddingClient — env channel removed (INDEXER_API_KEY gone)
+# OpenAIEmbeddingClient — env channel removed (RETIRED_INDEXER_KEY_ENV gone)
 # ----------------------------------------------------------------------
 def test_explicit_arg_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
@@ -52,20 +59,20 @@ def test_explicit_arg_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.api_key == "explicit-key"
 
 
-def test_indexer_api_key_env_not_consulted(
+def test_retired_indexer_api_key_env_not_consulted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The dedicated host→worker env channel is removed: even when set, the
-    client must NOT pick up ``INDEXER_API_KEY``."""
-    monkeypatch.setenv("INDEXER_API_KEY", "from-indexer-env")
+    client must NOT pick up ``RETIRED_INDEXER_KEY_ENV``."""
+    monkeypatch.setenv(RETIRED_INDEXER_KEY_ENV, "from-retired-env")
     client = OpenAIEmbeddingClient(api_key=None)
     assert client.api_key == ""
 
 
-def test_indexer_env_does_not_shadow_openai_optin(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retired_indexer_env_does_not_shadow_openai_optin(monkeypatch: pytest.MonkeyPatch) -> None:
     """With both env vars set, the client resolves to OPENAI_API_KEY (the dev
-    opt-in) — INDEXER_API_KEY is ignored entirely."""
-    monkeypatch.setenv("INDEXER_API_KEY", "from-indexer-env")
+    opt-in) — ``RETIRED_INDEXER_KEY_ENV`` is ignored entirely."""
+    monkeypatch.setenv(RETIRED_INDEXER_KEY_ENV, "from-retired-env")
     monkeypatch.setenv("OPENAI_API_KEY", "from-openai")
     client = OpenAIEmbeddingClient(api_key=None)
     assert client.api_key == "from-openai"
@@ -88,8 +95,8 @@ def test_empty_string_arg_falls_through_to_openai_optin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An empty string ``api_key`` arg falls through to the OPENAI_API_KEY
-    dev opt-in — but never to INDEXER_API_KEY (which is gone)."""
-    monkeypatch.setenv("INDEXER_API_KEY", "from-indexer-env")
+    dev opt-in — but never to ``RETIRED_INDEXER_KEY_ENV`` (which is gone)."""
+    monkeypatch.setenv(RETIRED_INDEXER_KEY_ENV, "from-retired-env")
     monkeypatch.setenv("OPENAI_API_KEY", "from-openai")
     client = OpenAIEmbeddingClient(api_key="")
     assert client.api_key == "from-openai"

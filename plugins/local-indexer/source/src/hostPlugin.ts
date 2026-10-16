@@ -2620,7 +2620,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       }
       // Push the embedding key to the freshly-started worker so query-time
       // vector search has a credential immediately. The env key channel was
-      // removed (no INDEXER_API_KEY in the worker process), so without
+      // removed (no *_INDEXER_API_KEY in the worker process), so without
       // this warmup push the SearchService would boot with an empty key and
       // silently degrade to BM25-only for any query that runs outside an
       // index_scan window. The bearer is supplied as a thunk and flows through
