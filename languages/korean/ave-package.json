@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "language",
   "name": "korean",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minAppVersion": "0.14.0",
   "displayName": "한국어 (Korean)",
   "description": "Korean interface translation for Ave 0.14.0 and later.",
