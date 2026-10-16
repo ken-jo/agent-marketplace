@@ -16,6 +16,22 @@
     },
     {
       "kind": "mcp",
+      "name": "airtable-mcp",
+      "path": "mcp/airtable-mcp",
+      "displayName": "Airtable MCP",
+      "description": "Adds the community Airtable MCP server for bases, tables and records. Needs an Airtable personal access token; read-only scopes limit it to reading.",
+      "latest": "1.14.0",
+      "versions": [
+        {
+          "version": "1.14.0",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "aws-kb-retrieval-mcp",
       "path": "mcp/aws-kb-retrieval-mcp",
       "displayName": "AWS KB Retrieval MCP",
@@ -37,6 +53,22 @@
     },
     {
       "kind": "mcp",
+      "name": "confluence-mcp",
+      "path": "mcp/confluence-mcp",
+      "displayName": "Confluence MCP",
+      "description": "Adds the community mcp-atlassian server for Confluence Cloud and Data Center pages, in read-only mode. Needs your wiki URL, account email and an API token.",
+      "latest": "0.23.1",
+      "versions": [
+        {
+          "version": "0.23.1",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "context-mode-mcp",
       "path": "mcp/context-mode-mcp",
       "displayName": "Context Mode MCP",
@@ -51,10 +83,42 @@
     },
     {
       "kind": "mcp",
+      "name": "discord-mcp",
+      "path": "mcp/discord-mcp",
+      "displayName": "Discord MCP",
+      "description": "Adds the community Discord MCP server for servers, channels, threads and messages through a bot. Needs a bot token; the bot's own permissions are the only limit.",
+      "latest": "0.1.1",
+      "versions": [
+        {
+          "version": "0.1.1",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "fetch-mcp",
       "path": "mcp/fetch-mcp",
       "displayName": "Fetch MCP",
       "description": "Adds the official Fetch MCP server for retrieving web pages and converting content to markdown for agent context."
+    },
+    {
+      "kind": "mcp",
+      "name": "figma-context-mcp",
+      "path": "mcp/figma-context-mcp",
+      "displayName": "Figma Context MCP",
+      "description": "Adds the Framelink Figma MCP server, which reads Figma file layout and styles for implementing designs. Needs a Figma personal access token; usage telemetry is off.",
+      "latest": "0.13.2",
+      "versions": [
+        {
+          "version": "0.13.2",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
     },
     {
       "kind": "mcp",
@@ -79,6 +143,22 @@
     },
     {
       "kind": "mcp",
+      "name": "gitlab-community-mcp",
+      "path": "mcp/gitlab-community-mcp",
+      "displayName": "GitLab Community MCP",
+      "description": "Adds the community GitLab MCP server for projects, issues, merge requests and pipelines, in read-only permission mode. Needs a GitLab personal access token.",
+      "latest": "2.3.1",
+      "versions": [
+        {
+          "version": "2.3.1",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "gitlab-mcp",
       "path": "mcp/gitlab-mcp",
       "displayName": "GitLab MCP",
@@ -90,6 +170,38 @@
       "path": "mcp/google-maps-mcp",
       "displayName": "Google Maps MCP",
       "description": "Adds the official Google Maps MCP server for geocoding, places, directions, and distance data."
+    },
+    {
+      "kind": "mcp",
+      "name": "google-workspace-mcp",
+      "path": "mcp/google-workspace-mcp",
+      "displayName": "Google Workspace MCP",
+      "description": "Adds the community Google Workspace MCP server for Gmail, Calendar, Drive, Docs and Sheets with read-only scopes. Needs your own Google Cloud OAuth desktop client.",
+      "latest": "2.1.0",
+      "versions": [
+        {
+          "version": "2.1.0",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
+      "name": "jira-mcp",
+      "path": "mcp/jira-mcp",
+      "displayName": "Jira MCP",
+      "description": "Adds the community mcp-atlassian server for Jira Cloud and Data Center issues, in read-only mode. Needs your site URL, account email and an API token.",
+      "latest": "0.23.1",
+      "versions": [
+        {
+          "version": "0.23.1",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
     },
     {
       "kind": "mcp",
@@ -107,10 +219,42 @@
     },
     {
       "kind": "mcp",
+      "name": "ms-365-mcp",
+      "path": "mcp/ms-365-mcp",
+      "displayName": "Microsoft 365 MCP",
+      "description": "Adds the community Microsoft 365 MCP server for Outlook mail, calendar, OneDrive, contacts and To Do through Microsoft Graph, in read-only mode. Needs your own Entra app registration.",
+      "latest": "0.168.0",
+      "versions": [
+        {
+          "version": "0.168.0",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "notion-mcp",
       "path": "mcp/notion-mcp",
       "displayName": "Notion MCP",
       "description": "Adds Notion's MCP server for searching, reading, and updating Notion workspace content."
+    },
+    {
+      "kind": "mcp",
+      "name": "obsidian-mcp",
+      "path": "mcp/obsidian-mcp",
+      "displayName": "Obsidian MCP",
+      "description": "Adds the community Obsidian MCP server for searching and editing notes through the Local REST API community plugin on this computer. Needs that plugin's API key.",
+      "latest": "0.2.3",
+      "versions": [
+        {
+          "version": "0.2.3",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
     },
     {
       "kind": "mcp",
@@ -149,6 +293,22 @@
     },
     {
       "kind": "mcp",
+      "name": "slack-community-mcp",
+      "path": "mcp/slack-community-mcp",
+      "displayName": "Slack Community MCP",
+      "description": "Adds the community Slack MCP server with a bot token only, limited to reading channels, threads and user groups. Posting and reactions stay off.",
+      "latest": "1.3.0",
+      "versions": [
+        {
+          "version": "1.3.0",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "slack-mcp",
       "path": "mcp/slack-mcp",
       "displayName": "Slack MCP",
@@ -174,6 +334,54 @@
       "path": "mcp/supabase-mcp",
       "displayName": "Supabase MCP",
       "description": "Adds the Supabase MCP server for project, database, migration, branch, and log workflows."
+    },
+    {
+      "kind": "mcp",
+      "name": "todoist-mcp",
+      "path": "mcp/todoist-mcp",
+      "displayName": "Todoist MCP",
+      "description": "Adds Doist's Todoist MCP server for tasks, projects, sections, labels and comments. Needs a Todoist API token.",
+      "latest": "13.5.0",
+      "versions": [
+        {
+          "version": "13.5.0",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
+      "name": "trello-mcp",
+      "path": "mcp/trello-mcp",
+      "displayName": "Trello MCP",
+      "description": "Adds the community Trello MCP server for boards, lists, cards and checklists. Needs a Trello API key and a user token.",
+      "latest": "1.8.1",
+      "versions": [
+        {
+          "version": "1.8.1",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
+      "name": "youtube-mcp",
+      "path": "mcp/youtube-mcp",
+      "displayName": "YouTube MCP",
+      "description": "Adds the community YouTube MCP server for read-only video, channel, playlist and transcript lookups. Needs a YouTube Data API v3 key.",
+      "latest": "1.0.2",
+      "versions": [
+        {
+          "version": "1.0.2",
+          "commit": "2a2f0856752e86b3a49e36b6b5918c263f361934",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-16T08:06:29Z"
+        }
+      ]
     },
     {
       "kind": "skill",
