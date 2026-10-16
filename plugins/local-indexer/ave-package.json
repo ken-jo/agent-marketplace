@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 2,
+  "kind": "plugin",
+  "name": "local-indexer",
+  "version": "0.7.2",
+  "minAppVersion": "0.14.0",
+  "hostProtocol": "3",
+  "displayName": "Ave Local Indexer",
+  "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 익스텐션 데이터 디렉터리의 index/",
+  "payload": {
+    "authority": {
+      "capabilities": [
+        "knowledge-index",
+        "document-indexer",
+        "external-auth-consumer",
+        "host:overlay",
+        "lifecycle-observer"
+      ],
+      "networkAccess": {
+        "allowedDomains": [
+          "api.openai.com",
+          "openai.azure.com",
+          "cognitiveservices.azure.com",
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ],
+        "reasoning": "워커의 임베딩/비전 캡셔닝 egress. 이 정적 allow-list는 디폴트 OpenAI/Azure 호스트(api.openai.com, *.openai.azure.com, *.cognitiveservices.azure.com — dot-boundary suffix-match)만 커버한다. host-mediated egress broker(P3 ⑬, src/egressBroker.ts) 도입 후, 워커는 provider 키를 보유하지 않고 broker(<base>/egress/embedding, <base>/egress/caption)로만 egress하며, 실제 provider 호출은 호스트-측 broker가 hostApi.hostFetch chokepoint를 통해 수행한다. 따라서 provider egress는 이 manifest networkAccess.allowedDomains, HTTPS-only, SSRF guard, effect-boundary audit를 모두 통과한다. 워커는 임의 host를 지정할 수 없고, suffix에 맞지 않는 사용자-설정 커스텀 OpenAI-호환 endpoint는 hostFetch 단계에서 hard-deny된다. 루프백 리터럴(localhost / 127.0.0.1 / ::1)은 embeddingProvider=\"openai\" 일 때 사용자가 embeddingEndpoint 설정에 직접 적어 넣는 로컬 추론 서버(LM Studio, LiteLLM, 사내 프록시)를 위한 선언이다. 이 선언이 없으면 해당 설정은 hostFetch에서 항상 거부되어 조작할 수 없는 설정이 된다. 호스트는 이 리터럴에 한해 http cleartext를 허용하되(바이트가 기기 밖으로 나가지 않으므로 https 규칙이 보호할 대상이 없다) 이름이 실제로 루프백으로만 resolve되는지 증명한 뒤에만 허용하며, 이 선언은 LAN(RFC1918)이나 다른 어떤 host도 열지 않는다."
+      },
+      "hostSecrets": {
+        "read": [
+          "llm.apiKey.openai",
+          "llm.apiKey.azure-foundry"
+        ]
+      },
+      "requires": {
+        "minAppVersion": "0.14.0",
+        "hostProtocol": "3"
+      },
+      "sandbox": {
+        "read": [
+          {
+            "kind": "hostDirectory",
+            "segments": [
+              "runtime"
+            ],
+            "why": "the Python interpreter the worker executes"
+          },
+          {
+            "kind": "hostDirectory",
+            "segments": [
+              "certs"
+            ],
+            "why": "the corporate CA bundle used by the worker"
+          }
+        ],
+        "write": [
+          {
+            "kind": "userChosenDirectory",
+            "configKey": "indexStorageRoot",
+            "why": "where the local index is written"
+          },
+          {
+            "kind": "userChosenDirectory",
+            "configKey": "workspace",
+            "why": "the workers scratch and state directory"
+          }
+        ]
+      }
+    },
+    "artifact": {
+      "release": {
+        "repo": "ken-jo/agent-marketplace",
+        "tag": "local-indexer-v0.7.2",
+        "asset": "local-indexer-0.7.2.zip",
+        "sha256": "722462aae27a7ee8c30768e7ea5f649d29cc34a60244cb8822f80dc34727e9d0"
+      }
+    }
+  }
+}

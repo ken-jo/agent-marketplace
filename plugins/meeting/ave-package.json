@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "kind": "plugin",
+  "name": "meeting",
+  "version": "0.10.2",
+  "minAppVersion": "0.14.0",
+  "hostProtocol": "3",
+  "displayName": "Ave Meeting",
+  "description": "회의 녹음·음성 전사(STT)·요약 생성 익스텐션. 녹음 시작/중지, 실시간 오디오 청크 전사(OpenAI Whisper), AI 요약·하이라이트·액션 아이템 자동 추출. 액션 아이템은 meeting.summary.created 이벤트의 actionItems 페이로드로 broadcast 되며, 요약은 로컬 SessionStore(JSON)에 영속화. MS Teams·Zoom 등 회의 후처리 지원.",
+  "payload": {
+    "authority": {
+      "capabilities": [
+        "meeting-recorder",
+        "external-auth-consumer"
+      ],
+      "networkAccess": {
+        "allowedDomains": [
+          "openai.azure.com",
+          "cognitiveservices.azure.com",
+          "services.ai.azure.com",
+          "api.openai.com",
+          "github.com",
+          "release-assets.githubusercontent.com"
+        ],
+        "reasoning": "STT transcription egress to Azure OpenAI / OpenAI Whisper endpoints via host-mediated fetch. github.com and release-assets.githubusercontent.com carry the FFmpeg runtime archive that a marketplace install downloads on first use: the release URL is on github.com and answers 302 to release-assets.githubusercontent.com, and because the host re-runs the full gate on every hop, BOTH hosts have to be declared for the download to complete."
+      },
+      "hostSecrets": {
+        "read": [
+          "llm.apiKey.openai",
+          "llm.apiKey.azure-foundry"
+        ]
+      },
+      "pluginAccess": {
+        "plugins": [
+          {
+            "pluginId": "ms-graph",
+            "events": [
+              "calendar.events.loaded",
+              "calendar.event.added",
+              "calendar.event.upcoming",
+              "calendar.event.starting"
+            ]
+          }
+        ]
+      },
+      "requires": {
+        "minAppVersion": "0.14.0",
+        "hostProtocol": "3"
+      }
+    },
+    "artifact": {
+      "release": {
+        "repo": "ken-jo/agent-marketplace",
+        "tag": "meeting-v0.10.2",
+        "asset": "meeting-0.10.2.zip",
+        "sha256": "a0918d0abd0f8e2938caf4f8e45b2bc075852acab401a14f9fd6ec8b4a832898"
+      }
+    }
+  }
+}

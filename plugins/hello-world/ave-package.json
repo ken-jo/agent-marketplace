@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "plugin",
+  "name": "hello-world",
+  "version": "0.3.2",
+  "minAppVersion": "0.14.0",
+  "hostProtocol": "3",
+  "displayName": "Hello World",
+  "description": "Hello World demo extension for checking marketplace install and dynamic UI load.",
+  "payload": {
+    "authority": {
+      "capabilities": [],
+      "requires": {
+        "hostProtocol": "3",
+        "minAppVersion": "0.14.0"
+      }
+    },
+    "artifact": {
+      "release": {
+        "repo": "ken-jo/agent-marketplace",
+        "tag": "hello-world-v0.3.2",
+        "asset": "hello-world-0.3.2.zip",
+        "sha256": "623c20110e1ae01d06333edc03d59876258d1b486af3a0370ec8da482747088c"
+      }
+    }
+  }
+}
