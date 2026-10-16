@@ -25,7 +25,7 @@ This repository starts from a single public import commit. Its initial catalog l
 | `templates/extension/` | Starting point for a new extension. |
 | `contract/` | The public types, manifest schema, and protocol-3 schema vendored from Ave at the ref in `contract/sources.json`. Development commit pins support review; publication requires an Ave release tag and its signed [contract bundle](#contract-bundle). |
 | `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, at the same ref as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. |
-| `tools/` | Validator, index generator, release tooling, extension build helper, vendoring. |
+| `tools/` | Validator, index generator, release tooling, extension build helper, vendoring, and the retired-name gate (`check-retired-name.mjs`), whose allowlist holds only the signed vendored contract files until the next Ave tag sync. |
 
 ## Publishing
 
