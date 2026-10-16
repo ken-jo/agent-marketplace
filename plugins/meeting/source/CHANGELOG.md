@@ -1,5 +1,28 @@
 # Changelog  
 
+## [0.10.2] - Unreleased
+
+Removes the retired product name from the plugin. Requires Ave 0.14.0 and
+host protocol 3, as before.
+
+### Changed — breaking for local overrides
+
+- The ffmpeg overrides are read as `AVE_MEETING_FFMPEG_PATH`,
+  `AVE_MEETING_FFPROBE_PATH`, `AVE_MEETING_FFMPEG_DIR`,
+  `AVE_MEETING_FFMPEG_AUTO_INSTALL` and `AVE_MEETING_FFMPEG_VENDOR_URL`.
+  A variable exported under the former prefix is no longer read.
+- The panel keeps its choices under `ave.meeting.*`: the preferred
+  microphone, capture mode, summary length and session category filter
+  return to their defaults once.
+- The UI root class is `.ave-meeting-ui` and the package name is
+  `@ave/plugin-meeting`.
+
+### Fixed
+
+- The `meeting-summary` alert inherits the `work-assistant` choice from the
+  official source `ave`. It named a source id the app no longer uses, so a
+  still-installed `work-assistant` never held the choice.
+
 ## [0.10.0] - Unreleased
 
 Requires Ave 0.14.0 and host protocol 3 (`requires.hostProtocol: "3"`).
@@ -16,7 +39,7 @@ Apps that serve protocol 2 (0.12.x, 0.13.x) keep 0.9.3.
 ## [0.9.3] - 2026-10-09
 
 Requires Ave 0.12.0 and host protocol 2 (`requires.hostProtocol: "2"`).
-AVE 0.11.x keeps 0.9.0.
+Ave 0.11.x keeps 0.9.0.
 
 ### Changed — speech-to-text through host credential leases
 
@@ -102,7 +125,7 @@ Requires Ave 0.11.0, the release that carries the host alert contract.
 
 ### Changed
 
-- Dev: vitest 4 → 5.0.1, ported from ave-plugin-meeting.
+- Dev: vitest 4 → 5.0.1, ported from the former standalone meeting repository.
 - CLAUDE.md points at the current extension contract.
 
 ## [0.8.5] - 2026-09-24
@@ -113,8 +136,8 @@ Requires Ave 0.11.0, the release that carries the host alert contract.
   `plugins/<name>/source/`, and releases are built there: the zip is a
   release asset of that repository, pinned by sha256 in the plugin's
   descriptor.
-- `@ave/plugin-sdk` is gone. Types and `flattenAgentPluginsManifest` come
-  from the host's own contract, vendored at ave v0.10.0
+- The plugin SDK is gone. Types and `flattenAgentPluginsManifest` come
+  from the host's own contract, vendored at Ave v0.10.0
   (`@ave/plugin-contract`), and the tsup preset from `@ave/plugin-build`.
 - `installPolicy` and `publisher` are removed from `plugin.json`: the git
   marketplace installs and locks nothing through a package's own manifest.
@@ -185,7 +208,7 @@ nav wraps instead of clipping.
 
 ### Changed — the floating recorder is a slot in the host's dock
 
-Requires Ave with `hostApi.attachFloatingPanel`, and `@ave/plugin-sdk`
+Requires Ave with `hostApi.attachFloatingPanel`, and the plugin SDK
 v12.9.0. There is no fallback: on a host without the dock, `meeting_start`
 refuses and says so. A sidebar-only degradation would leave a recording running
 with nothing on screen driving it, which is the failure a user cannot see.
@@ -318,13 +341,13 @@ arrive. A successful chunk clears it, so the banner clears itself.
 ### Changed — event-only work-assistant integration and SDK v11.0.0
 
 - Replace the work-assistant integration's direct plugin-tool path with event request/response handling.
-- Bump SDK pin `github:former_org/ave-plugin-sdk#v8.0.0` → `#v11.0.0`; refresh `bun.lock`.
+- Bump the plugin SDK pin `v8.0.0` → `v11.0.0`; refresh `bun.lock`.
 
 ## [0.5.33] - 2026-07-11
 
-### Changed — align to `@ave/plugin-sdk` v8.0.0
+### Changed — align to the plugin SDK v8.0.0
 
-- Bump SDK pin `github:former_org/ave-plugin-sdk#v7.0.0` → `#v8.0.0`; refresh `bun.lock`.
+- Bump the plugin SDK pin `v7.0.0` → `v8.0.0`; refresh `bun.lock`.
 - v8 removed the `runtime/electron` and `runtime/network` shim modules (their behavior moved into the host `hostApi`). This plugin has **no** shim call sites, so this is a pure pin bump — no source changes, no `minAppVersion` floor change.
 
 ## [0.5.26] - 2026-06-21
@@ -444,7 +467,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 
 ### Cross-plugin 영향
 
-- agent-hub / ave / work-assistant 모두 옛 이름 (`meeting_*_briefing`, `meeting.briefing.opened`) 호출/구독 0 hits (사전 확인 + v0.4.19 sweep 결과 그대로 유효)
+- agent-hub / Ave / work-assistant 모두 옛 이름 (`meeting_*_briefing`, `meeting.briefing.opened`) 호출/구독 0 hits (사전 확인 + v0.4.19 sweep 결과 그대로 유효)
 - meeting plugin 단독 변경
 
 ### 검증
@@ -464,7 +487,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - 5 도구 rename — `meeting_*_briefing` → `meeting_*_prep` (5건). 이벤트 `meeting.briefing.opened` → `meeting.prep.opened` 동반 rename.
 - 모든 meeting 플러그인 도구 description 첫 줄에 negative anchor: "이 도구는 회의 *내용·녹음·요약* 용. 회의실(공간/시설 단위 자원) 예약·조회와 무관." — LLM routing 분기 명시.
 - 내부 var / class / type / 주석 / UI 한국어 text 일관 sweep.
-- agent-hub / ave / work-assistant 모두 옛 이름 호출/구독 0건 확인. hard rename — compat alias 안 둠.
+- agent-hub / Ave / work-assistant 모두 옛 이름 호출/구독 0건 확인. hard rename — compat alias 안 둠.
 
 ## Unreleased (#893)
 
@@ -498,7 +521,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - `plugin.json`: `configSchema.sttApiKey` 에 `format: "secret"`
 - `plugin.json`: main-process 핸들러가 없던 `eventSubscriptions[host.theme.changed]` 제거 (webview 측 `bridge.onEvent` 가 처리)
 - `package.json`: 사용하지 않는 `openai`/`ws` 를 `peerDependencies` + `devDependencies` 양쪽에서 제거 (어댑터는 `fetch()` 직접 사용)
-- `src/hostPlugin.ts`: local `HostPluginContext` shadow type 제거 → `@ave/plugin-sdk` 의 `PluginRuntimeContext` 채택 (SoT 일원화)
+- `src/hostPlugin.ts`: local `HostPluginContext` shadow type 제거 → the plugin SDK 의 `PluginRuntimeContext` 채택 (SoT 일원화)
 - `src/hostPlugin.ts`: 사용 안 하던 `OpenAISummaryProvider` / `MockSummaryProvider` fallback 경로 삭제 — 단일 `HostLlmSummaryProvider` 경로
 
 ### Fixed
@@ -507,7 +530,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - "No Fallback Code" optional-chain 일괄 제거 — `hostApi.config?.get`, `hostApi.logEvent?.(...)` 35+ 사이트, `hostApi.callLlm` 분기, `hostApi.onShutdown?.()` 모두 required 로 사용
 
 ### Security
-- **STT API key 암호화**: Electron `safeStorage` (`@ave/plugin-sdk/runtime/electron`) 로 sidecar 에 ciphertext + mask 만 저장. 기존 plaintext 사이드카 자동 감지 → 1회 마이그레이션. `safeStorage` 없을 때 plaintext 키 저장 거부
+- **STT API key 암호화**: Electron `safeStorage` (`plugin-sdk/runtime/electron`) 로 sidecar 에 ciphertext + mask 만 저장. 기존 plaintext 사이드카 자동 감지 → 1회 마이그레이션. `safeStorage` 없을 때 plaintext 키 저장 거부
 - legacy `.meeting-sessions` host-root 마이그레이션을 `<pluginDataDir>/.legacy-migration-done` marker 로 게이트 → 반복 호스트 네임스페이스 스캔 제거 (CLAUDE.md "Storage Namespace per Feature" 준수)
 - floating recorder window 의 자동 `webContents.openDevTools({ mode: "detach" })` 제거 — production 빌드에서 DevTools 가 열리는 회귀 차단
 

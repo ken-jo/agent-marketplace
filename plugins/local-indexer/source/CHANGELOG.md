@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.7.2] - Unreleased
+
+Removes the retired product name from the plugin. Requires Ave 0.14.0 and
+host protocol 3, as before. Stored indexes are unchanged.
+
+### Changed — breaking for local overrides
+
+- The worker environment and control headers use the `AVE_` and `x-ave-`
+  prefixes: `AVE_INDEX_ALLOWED_ROOTS`, `AVE_SHUTDOWN_TOKEN`,
+  `x-ave-shutdown-token` and `x-ave-egress-token`. The plugin sets both
+  sides itself; a standalone worker started by hand needs the new names.
+- The `OPENAI_API_KEY` developer opt-in is gated by
+  `AVE_ALLOW_ENV_API_KEY=1`, and dev sync by `AVE_DEV_SYNC=1`.
+- The UI root class is `.ave-local-indexer-ui`, the main class is
+  `LocalIndexerPlugin`, and the package name is `@ave/plugin-local-indexer`.
+
 ## [0.7.0] - Unreleased
 
 Requires Ave 0.14.0 and host protocol 3 (`requires.hostProtocol: "3"`).
@@ -11,8 +27,8 @@ Apps that serve protocol 2 (0.12.x, 0.13.x) keep 0.6.9.
   the Python runtime as `managedBy: "ave"`, and the path-bearing tool
   arguments under the `ave/pathFields` annotation.
 - The host home comes from `PluginRuntimeContext.aveHome`; the default
-  home, the corporate CA path and the Kiwi user dictionary move from
-  `~/.ave` to `~/.ave` with the host.
+  home, the corporate CA path and the Kiwi user dictionary move to
+  `~/.ave` with the host.
 - The panel reads the host's `--ave-*` theme tokens.
 - The display name is "Ave Local Indexer". Tools, settings, events and
   stored data are unchanged.
@@ -20,7 +36,7 @@ Apps that serve protocol 2 (0.12.x, 0.13.x) keep 0.6.9.
 ## [0.6.9] - 2026-10-09
 
 Requires Ave 0.12.0 and host protocol 2 (`requires.hostProtocol: "2"`).
-AVE 0.11.x and earlier keep 0.6.8.
+Ave 0.11.x and earlier keep 0.6.8.
 
 ### Changed — provider egress through per-request leases
 
@@ -52,7 +68,7 @@ AVE 0.11.x and earlier keep 0.6.8.
 
 ## [0.6.8] - 2026-10-09
 
-### Changed — dependency bumps ported from ave-plugin-local-indexer
+### Changed — dependency bumps ported from the former standalone local-indexer repository
 
 - Python worker: openai 2.54.0 → 3.14.1. openai 3 uses HTTPX2 and no
   longer installs `httpx`, so the egress-broker Unix-socket transport in
@@ -72,8 +88,8 @@ AVE 0.11.x and earlier keep 0.6.8.
   `plugins/<name>/source/`, and releases are built there: the zip is a
   release asset of that repository, pinned by sha256 in the plugin's
   descriptor.
-- `@ave/plugin-sdk` is gone. Types and `flattenAgentPluginsManifest` come
-  from the host's own contract, vendored at ave v0.10.0
+- The plugin SDK is gone. Types and `flattenAgentPluginsManifest` come
+  from the host's own contract, vendored at Ave v0.10.0
   (`@ave/plugin-contract`), and the tsup preset from `@ave/plugin-build`.
 - `installPolicy` and `publisher` are removed from `plugin.json`: the git
   marketplace installs and locks nothing through a package's own manifest.
@@ -182,7 +198,7 @@ AVE 0.11.x and earlier keep 0.6.8.
 
 ### Changed
 
-- Run the shared `plugin-ci.yml` from `former_org/.github` instead of the
+- Run the shared `plugin-ci.yml` from the shared workflow repository instead of the
   copy of it that lived in this repo. The copy had drifted: unpinned action
   refs (`@v7`, `@v2.2.0`), a GitHub-hosted runner instead of the CI runner
   group, and no job timeout.
@@ -193,10 +209,10 @@ AVE 0.11.x and earlier keep 0.6.8.
 
 - Pin the shared reusable workflows to `6200e124`, a commit that is still
   reachable. The previous pins were orphaned by a history rewrite in
-  `former_org/.github`, so every Actions run — including the `0.5.34` publish
+  the shared workflow repository, so every Actions run — including the `0.5.34` publish
   — died in 0s with *workflow was not found*. The workflow files are
   byte-identical at the old and new SHAs; only the name of the commit changed.
-- Move the `@ave/plugin-sdk` devDependency pin to `v12.1.0`, the first release
+- Move the plugin SDK devDependency pin to `v12.1.0`, the first release
   carrying the loopback grant `plugin.json` relies on. This supersedes the
   unpublished `0.5.34`, whose contents it otherwise matches.
 
@@ -250,9 +266,9 @@ AVE 0.11.x and earlier keep 0.6.8.
 
 ## [0.5.23] - 2026-07-11
 
-### Changed — align to `@ave/plugin-sdk` v8.0.0
+### Changed — align to the plugin SDK v8.0.0
 
-- Bump SDK pin `github:former_org/ave-plugin-sdk#v7.0.0` → `#v8.0.0`; refresh `bun.lock`.
+- Bump the plugin SDK pin `v7.0.0` → `v8.0.0`; refresh `bun.lock`.
 - v8 removed the `runtime/electron` and `runtime/network` shim modules (they moved into the host's `hostApi`). This plugin has **no** shim call sites, so this is a pure pin bump — no source changes, no `minAppVersion` floor change.
 
 ## [0.5.18] - 2026-06-29
@@ -284,7 +300,7 @@ AVE 0.11.x and earlier keep 0.6.8.
 - **minAppVersion corrected to `0.4.2`.** 0.5.16 declared `minAppVersion: 0.5.0`
   as a forward reference, but the host capabilities this plugin depends on
   (`hasRoutineBySource`, the routine `source` marker, and session-scoped
-  on-demand plugin activation) shipped in ave **0.4.2** (released
+  on-demand plugin activation) shipped in Ave **0.4.2** (released
   2026-06-29). The 0.5.0 floor would have made the plugin refuse to install on
   the released app. `0.4.2` is the first released app version containing those
   capabilities (capability-before-publish ordering).
@@ -313,7 +329,7 @@ AVE 0.11.x and earlier keep 0.6.8.
   attacker-controlled documents and runs a large transitive dependency tree
   in-process). It previously held the real provider key in memory across four
   holders and could open arbitrary outbound sockets. The new `EgressBroker`
-  (`src/egressBroker.ts`, owned by `AveLocalIndexerPlugin`) closes both:
+  (`src/egressBroker.ts`, owned by `LocalIndexerPlugin`) closes both:
   - The plugin starts a loopback broker BEFORE spawning the worker and passes
     the worker only the broker base URL (`--egress-broker-url`) plus a
     per-session token (pushed over the control channel). The worker's four
@@ -513,7 +529,7 @@ AVE 0.11.x and earlier keep 0.6.8.
   `setIdleScheduler` setter, and the host plugin's `setIdleScheduler` method —
   the file-event queue branch is gone, so events flow straight through
   `indexIfChanged`.
-- **Companion host change** (`ave`): the indexer's idle-scheduler wiring
+- **Companion host change** (`Ave`): the indexer's idle-scheduler wiring
   (`idleWorkerAdapter` + `setIdleScheduler` call). The shared
   `IdleSchedulerService` state machine is preserved for its non-indexer
   consumers (preference-refresh, post-turn, conversation-loop).
@@ -616,7 +632,7 @@ AVE 0.11.x and earlier keep 0.6.8.
 
 ### Security
 - **Removed the env LLM-key channel.** The host no longer injects the embedding
-  API key into the worker process environment (`AVE_INDEXER_API_KEY`). That
+  API key into the worker process environment (`INDEXER_API_KEY`). That
   channel exposed the key via `/proc/<pid>/environ`, child-process inheritance,
   and crash dumps. The key now reaches the worker **only** through the runtime
   `POST /indexer/set_embedding_api_key` push and lives solely in worker-process
@@ -654,7 +670,7 @@ AVE 0.11.x and earlier keep 0.6.8.
   `AVE_ALLOW_ENV_API_KEY=1`) is preserved. **This is a standalone-worker dev
   affordance only** — the host's whitelist-only spawn env (`localIndexerPlugin.ts`)
   excludes `OPENAI_API_KEY`, so this path is unreachable through the host. Only
-  the host-injected `AVE_INDEXER_API_KEY` channel was removed.
+  the host-injected `INDEXER_API_KEY` channel was removed.
 
 ## [0.5.6] - 2026-06-28
 
@@ -730,7 +746,7 @@ AVE 0.11.x and earlier keep 0.6.8.
 
 ### Removed
 - Dead worker-side `cloud_index_adapter.py` (Mock/Disabled `CloudIndexAdapter`
-  + `CloudIndexFactory`) and its `AppState.cloud` wiring + `AVE_CLOUD_INDEX_MODE`
+  + `CloudIndexFactory`) and its `AppState.cloud` wiring + `CLOUD_INDEX_MODE`
   env switch. The adapter was always constructed in `disabled` mode and never
   read on any search/index path — pure dead code. The `"cloud"` RRF weight was
   also dropped from `DEFAULT_RRF_WEIGHTS` (no source ever emitted it).
@@ -798,14 +814,14 @@ AVE 0.11.x and earlier keep 0.6.8.
 잔존 drift 정리. 본 plugin 은 이미 `primeTheme(bridge, { target: scope })`
 를 mount 안에서 정상 사용 중이라 코드 변경 없이 dep pin + version bump 만.
 
-- `package.json` `@ave/plugin-sdk` pin → `github:former_org/ave-plugin-sdk#v5.10.0`
+- `package.json` plugin SDK pin → `v5.10.0`
 - 검증: typecheck + test + build 통과 (209 tests pass)
 - 검증: legacy theme symbol grep (`applyThemeFromHostEvent`/`bootstrapHostTheme`/
   `setupThemeSync`/`applyHostThemePayload`/`applyThemePayload`) → 0건 (단,
   `src/ui/ave-tokens.css.js:28` 의 주석 안 `applyThemeFromHostEvent` 는
   host 의 동작 설명 — 본 plugin 호출 아님)
 
-Reference: ave-plugin-sdk CHANGELOG [5.10.0].
+Reference: plugin SDK CHANGELOG [5.10.0].
 
 ## [0.4.1] - 2026-05-13
 

@@ -30,10 +30,10 @@ import { checkVendored } from "./vendor.mjs";
 import { verifiedRuntime } from "./verified-import.mjs";
 import {
   ALERTS_RELEASE_VERSION,
+  AVE_EXTENSION,
   DESCRIPTOR,
   INDEX_PATH,
   KIND_DIRS,
-  Ave,
   REPOSITORY,
   MUTABLE_VERSION_FIELDS,
   ROOT,
@@ -111,7 +111,7 @@ function checkOfficialPlugins(problems) {
     // A source without a descriptor is a plugin the release workflow has not published yet.
     const manifest = readJson(manifestPath);
     const pkg = readJson(`${dir}/source/package.json`);
-    const ave = manifest.extensions?.[Ave] ?? {};
+    const ave = manifest.extensions?.[AVE_EXTENSION] ?? {};
     if (manifest.name !== name) problems.push(`${subject}: ${manifestPath} names it ${manifest.name}; the directory must carry the plugin name`);
     if (manifest.version !== pkg.version) problems.push(`${subject}: plugin.json ${manifest.version} and package.json ${pkg.version} must carry one version`);
     if (descriptor && compareVersions(manifest.version, descriptor.version) < 0) {
@@ -193,7 +193,7 @@ function checkHostProtocolCatalog(problems, releasedManifests) {
       const subject = `plugin/${entry.name}@${version.version}`;
       if (version.hostProtocol !== required) problems.push(`${subject}: ${INDEX_PATH} requires hostProtocol ${required} for minAppVersion ${version.minAppVersion}`);
       const released = releasedManifests.get(`${entry.name}@${version.version}`);
-      if (released && released.extensions?.[Ave]?.requires?.hostProtocol !== required) {
+      if (released && released.extensions?.[AVE_EXTENSION]?.requires?.hostProtocol !== required) {
         problems.push(`${subject}: released plugin.json requires hostProtocol ${required} for minAppVersion ${version.minAppVersion}`);
       }
     }

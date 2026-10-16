@@ -3,7 +3,7 @@
  *
  * Bundled UI JavaScript vendors its own theme helper locally
  * (src/ui/prime-theme.js) since SDK v7.0.0 removed the whole
- * @ave/plugin-sdk/ui/* surface. This script only copies non-bundled static
+ * plugin-sdk/ui/* surface. This script only copies non-bundled static
  * assets such as HTML and preload files, and intentionally does not rewrite
  * JavaScript sentinels.
  */

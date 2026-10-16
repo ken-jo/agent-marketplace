@@ -2,7 +2,7 @@
   "name": "@ave/plugin-contract",
   "version": "0.0.0",
   "private": true,
-  "description": "The Ave host's plugin contract, vendored unchanged from ave at the ref in sources.json. Do not edit; sync a new ref.",
+  "description": "The Ave host's plugin contract, vendored unchanged from Ave at the ref in sources.json. Do not edit; sync a new ref.",
   "type": "module",
   "exports": {
     ".": "./public-contract.ts",

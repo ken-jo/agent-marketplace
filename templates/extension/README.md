@@ -306,7 +306,7 @@ rule 4.
 4. **Declare events** under `extensions["ai.agent-connector.ave"]` (optional):
    - `emittedEvents[]` — event type names this extension publishes (e.g. `"my-plugin.item.created"`).
    - `eventSubscriptions[]` — events this extension subscribes to. Each entry is either a plain
-     string (`"ave:routine:completed"`) or an object `{ type, hint? }` with structured metadata
+     string (`"other-plugin.item.completed"`) or an object `{ type, hint? }` with structured metadata
      the host surfaces in its UI.
 
 5. **Self-register via HostApi** inside `createPlugin`:
@@ -332,7 +332,7 @@ An extension that uses a member first shipped in release X sets
 `requires.minAppVersion` in `plugin.json` to X or later, and the descriptor's
 `minAppVersion` to the same value. Declare `requires.hostProtocol` for the
 oldest supported app release, following the repository's [manifest rules](https://github.com/ken-jo/agent-marketplace#contract-bundle).
-This template targets protocol `"2"`.
+This template targets protocol `"3"`, which Ave 0.14.0 and later serve.
 
 ---
 

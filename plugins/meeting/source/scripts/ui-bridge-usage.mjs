@@ -31,7 +31,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-// mirrors ave src/plugins/capabilities.ts PUBLIC_HOST_EVENT_TYPES
+// mirrors Ave src/plugins/capabilities.ts PUBLIC_HOST_EVENT_TYPES
 /**
  * Events the host sends to every registered plugin webview without any
  * manifest declaration. `host.theme.changed` is fanned out by main on webview

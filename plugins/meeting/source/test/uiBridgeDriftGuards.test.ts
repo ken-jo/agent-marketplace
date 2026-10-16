@@ -32,27 +32,27 @@ const GUARDS = {
 
 type Json = Record<string, unknown>;
 type Tool = { name: string; _meta?: { ui?: { visibility?: string[] } } };
-type AveBlock = { tools: Tool[]; emittedEvents: string[]; eventSubscriptions: Array<string | { type: string }> };
+type ExtensionBlock = { tools: Tool[]; emittedEvents: string[]; eventSubscriptions: Array<string | { type: string }> };
 
 /**
  * The manifest is Agent Plugins 1.0.0, so the Ave fields sit under an
  * extension key. Find the object that owns `tools` rather than spelling the
  * path, so the fixture survives the key being renamed.
  */
-function aveBlock(node: unknown): AveBlock | null {
+function extensionBlock(node: unknown): ExtensionBlock | null {
   if (!node || typeof node !== "object" || Array.isArray(node)) return null;
-  if ("tools" in node && "emittedEvents" in node) return node as AveBlock;
+  if ("tools" in node && "emittedEvents" in node) return node as ExtensionBlock;
   for (const child of Object.values(node as Json)) {
-    const found = aveBlock(child);
+    const found = extensionBlock(child);
     if (found) return found;
   }
   return null;
 }
 
 /** A plugin root whose TypeScript side agrees with the manifest it is given. */
-function pluginRoot(mutate: (block: AveBlock) => void, uiSource: string, uiFile = "panel.js"): string {
+function pluginRoot(mutate: (block: ExtensionBlock) => void, uiSource: string, uiFile = "panel.js"): string {
   const raw = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Json;
-  const block = aveBlock(raw);
+  const block = extensionBlock(raw);
   if (!block) throw new Error("plugin.json has no block owning tools + emittedEvents");
   mutate(block);
   const flat = flattenAgentPluginsManifest(raw as never) as unknown as {

@@ -39,7 +39,6 @@ import {
   canonicalJson,
   compareVersions,
   contentPaths,
-  descriptorPathAt,
   git,
   isAncestor,
   isPrerelease,
@@ -93,7 +92,7 @@ function keptEntryProblems(dir, kind, subject, version) {
   const paths = contentPaths(dir, kind);
   const published = lastCommit(paths, version.commit);
   if (published?.commit !== version.commit) return [`${at}: ${version.commit} did not change ${dir}; an entry names the commit that published it`];
-  const descriptorPath = descriptorPathAt(dir, version.commit) ?? `${dir}/${DESCRIPTOR}`;
+  const descriptorPath = `${dir}/${DESCRIPTOR}`;
   let descriptor;
   try {
     descriptor = JSON.parse(git(["show", `${version.commit}:${descriptorPath}`], { stdio: ["ignore", "pipe", "ignore"] }));
@@ -118,27 +117,20 @@ function keptEntryProblems(dir, kind, subject, version) {
 
 /**
  * Whether only the descriptor changed since `from`, and only in form: the
- * schemaVersion 1 to 2 migration, or a plugin descriptor's rename from
- * ave-package.json to ave-package.json. A plugin's version is pinned to its
- * release asset, so the rename cannot raise it; its next release does. Every
- * other kind raises its version, since Ave reads the descriptor at the
- * version's commit under its new name only.
+ * schemaVersion 1 to 2 migration.
  */
 function descriptorOnlyMigration(dir, kind, from) {
   const paths = contentPaths(dir, kind);
   const descriptorPath = `${dir}/${DESCRIPTOR}`;
-  const before = descriptorPathAt(dir, from);
-  if (uncommitted(paths) || before === undefined) return false;
+  if (uncommitted(paths)) return false;
   const changed = git(["diff", "--name-only", from, "HEAD", "--", ...paths]).trim().split("\n").filter(Boolean);
-  if (changed.some((path) => path !== descriptorPath && path !== before)) return false;
+  if (changed.some((path) => path !== descriptorPath)) return false;
   try {
-    const old = JSON.parse(git(["show", `${from}:${before}`]));
+    const old = JSON.parse(git(["show", `${from}:${descriptorPath}`], { stdio: ["ignore", "pipe", "ignore"] }));
     const now = readJson(descriptorPath);
-    if (before !== descriptorPath && kind !== "plugin") return false;
-    if (old.schemaVersion === 1 && now.schemaVersion === 2) {
-      delete old.schemaVersion;
-      delete now.schemaVersion;
-    } else if (before === descriptorPath) return false;
+    if (old.schemaVersion !== 1 || now.schemaVersion !== 2) return false;
+    delete old.schemaVersion;
+    delete now.schemaVersion;
     return canonicalJson(old) === canonicalJson(now);
   } catch {
     return false;

@@ -61,7 +61,7 @@ function repo() {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}\n`);
   };
-  write("marketplace.json", { schemaVersion: 2, name: "retiredname", displayName: "Ave Official", packages: [] });
+  write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [] });
   const commit = (message) => {
     git("add", "-A");
     git("commit", "-q", "-m", message);
@@ -117,7 +117,7 @@ describe("index generation", () => {
     r.write("skills/review/SKILL.md", "# Review\nReview code carefully.\n");
     r.write("marketplace.json", {
       schemaVersion: 2,
-      name: "retiredname",
+      name: "ave",
       displayName: "Ave Official",
       packages: [{ kind: "skill", name: "review", path: "skills/review" }],
     });
@@ -196,47 +196,38 @@ describe("index generation", () => {
     assert.match(r.tool("index.mjs", "--check").stderr, /every entry needs kind, name and reason/u);
   });
 
-  it("reads versions published under ave-package.json and raises every kind but a release-pinned plugin across the rename", () => {
+  it("keeps published versions across the descriptor schemaVersion 1 to 2 migration", () => {
     const r = repo();
     withSourcePlugin(r, "1.0.0");
     r.write("skills/review/SKILL.md", "---\nname: review\ndescription: Review.\n---\nBody.\n");
-    // Published plugin descriptors were still at schemaVersion 1 under the old name.
-    r.write("plugins/alpha/retiredname-package.json", { ...plugin("1.0.0"), schemaVersion: 1 });
-    rmSync(join(r.root, "plugins/alpha/ave-package.json"));
-    r.write("skills/review/retiredname-package.json", skill("1.0.0"));
-    const legacy = r.commit("published under the old name");
-    const publishedAt = new Date(Number(r.git("log", "-1", "--format=%ct", legacy).trim()) * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z");
-    // The index the old name generated: both versions at the legacy commit.
+    // Both descriptors were published at schemaVersion 1.
+    r.write("plugins/alpha/ave-package.json", { ...plugin("1.0.0"), schemaVersion: 1 });
+    r.write("skills/review/ave-package.json", { ...skill("1.0.0"), schemaVersion: 1 });
+    const published = r.commit("published at schemaVersion 1");
+    const publishedAt = new Date(Number(r.git("log", "-1", "--format=%ct", published).trim()) * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z");
     r.write("marketplace.json", {
-      schemaVersion: 2, name: "retiredname", displayName: "Ave Official",
+      schemaVersion: 2, name: "ave", displayName: "Ave Official",
       packages: [
         { kind: "plugin", name: "alpha", path: "plugins/alpha", latest: "1.0.0",
-          versions: [{ version: "1.0.0", commit: legacy, minAppVersion: "0.10.0", authority: AUTHORITY, artifact: plugin("1.0.0").payload.artifact, publishedAt }] },
+          versions: [{ version: "1.0.0", commit: published, minAppVersion: "0.10.0", authority: AUTHORITY, artifact: plugin("1.0.0").payload.artifact, publishedAt }] },
         { kind: "skill", name: "review", path: "skills/review", latest: "1.0.0",
-          versions: [{ version: "1.0.0", commit: legacy, minAppVersion: "0.10.0", publishedAt }] },
+          versions: [{ version: "1.0.0", commit: published, minAppVersion: "0.10.0", publishedAt }] },
       ],
     });
     const indexed = r.commit("index");
-    r.git("mv", "plugins/alpha/retiredname-package.json", "plugins/alpha/ave-package.json");
-    r.git("mv", "skills/review/retiredname-package.json", "skills/review/ave-package.json");
     r.write("plugins/alpha/ave-package.json", plugin("1.0.0"));
-    r.commit("rename");
-    const stderr = r.tool("index.mjs", "--check").stderr;
-    assert.doesNotMatch(stderr, /plugin\/alpha/u, "a pure rename keeps the release-pinned plugin version");
-    assert.doesNotMatch(stderr, /does not parse/u, "kept entries are read under the name their commit carries");
-    assert.match(stderr, /skill\/review: skills\/review changed after 1\.0\.0 was published at .*; raise the version/u);
-
-    r.write("skills/review/ave-package.json", skill("1.0.1"));
-    const raised = r.commit("review 1.0.1");
-    const result = r.tool("index.mjs");
-    assert.equal(result.status, 0, result.stderr);
-    const review = r.index().packages.find((entry) => entry.name === "review");
-    assert.deepEqual(review.versions.map((v) => [v.version, v.commit]), [["1.0.1", raised], ["1.0.0", legacy]]);
-    r.commit("index review 1.0.1");
-    assert.equal(r.tool("index.mjs", "--check").status, 0);
+    r.write("skills/review/ave-package.json", skill("1.0.0"));
+    r.commit("migrate the descriptors to schemaVersion 2");
+    const migrated = r.tool("index.mjs", "--check");
+    assert.equal(migrated.status, 0, migrated.stderr);
     const check = r.tool("check.mjs", "--base", indexed);
     assert.equal(check.status, 0, check.stderr);
 
+    r.write("skills/review/ave-package.json", { ...skill("1.0.0"), minAppVersion: "0.11.0" });
+    r.commit("change review without a version");
+    assert.match(r.tool("index.mjs", "--check").stderr, /skill\/review: skills\/review changed after 1\.0\.0 was published at .*; raise the version/u);
+
+    r.write("skills/review/ave-package.json", skill("1.0.0"));
     r.write("plugins/alpha/ave-package.json", plugin("1.0.0", "c".repeat(64)));
     r.commit("change alpha without a version");
     assert.match(r.tool("index.mjs", "--check").stderr, /plugin\/alpha: plugins\/alpha changed after 1\.0\.0 was published/u);
@@ -378,7 +369,7 @@ describe("repository check", () => {
 
   it("refuses a catalog at a schemaVersion the app does not read", () => {
     const r = repo();
-    r.write("marketplace.json", { schemaVersion: 3, name: "retiredname", displayName: "Ave Official", packages: [] });
+    r.write("marketplace.json", { schemaVersion: 3, name: "ave", displayName: "Ave Official", packages: [] });
     const result = r.tool("check.mjs");
     assert.equal(result.status, 1);
     assert.match(result.stderr, /^marketplace\.json: schemaVersion 3; the app reads schemaVersion 2$/mu);
@@ -410,7 +401,7 @@ describe("repository check", () => {
     const messages = JSON.parse(readFileSync(join(REAL_ROOT, "languages/korean/messages.json"), "utf8"));
     assert.equal(Object.hasOwn(messages, "overlayCard.pluginNotice"), false);
     assert.equal(messages["alerts.pluginIdOnly"], "익스텐션: {id}");
-    const languageProblems = checkMarketplaceRepository(workingTree(), { sourceId: "retiredname", official: true, alertsReleaseVersion: "0.11.0", releasedManifests: new Map() })
+    const languageProblems = checkMarketplaceRepository(workingTree(), { sourceId: "ave", official: true, alertsReleaseVersion: "0.11.0", releasedManifests: new Map() })
       .filter((problem) => problem.subject === "language/korean");
     assert.deepEqual(languageProblems, []);
   });
@@ -715,7 +706,7 @@ describe("vendored sources", () => {
   it("never checks out or clones the Ave source in a workflow, and verifies the bundle with a pinned cosign", () => {
     for (const name of ["validate.yml", "release.yml"]) {
       const workflow = readFileSync(join(REAL_ROOT, ".github/workflows", name), "utf8");
-      assert.doesNotMatch(workflow, /ken-jo\/ave|retiredname-app|git clone|^\s+repository:/mu, name);
+      assert.doesNotMatch(workflow, /ken-jo\/ave|git clone|^\s+repository:/mu, name);
       assert.doesNotMatch(workflow, /--app|--release-tag|refs\/tags\/v\d/u, name);
       assert.match(workflow, /tools\/install-cosign\.sh "\$RUNNER_TEMP\/cosign"\n\s+echo "\$RUNNER_TEMP\/cosign" >> "\$GITHUB_PATH"\n(?:.*\n)*?\s+run: node tools\/vendor\.mjs verify\n/u, name);
     }
@@ -941,7 +932,7 @@ describe("releases", () => {
 
     // The tag comes from sources.json alone: a schema for any other tag or protocol is refused.
     for (const id of [
-      "https://former-site.invalid/schemas/plugin-host-protocol/2/v0.12.0/protocol.schema.json",
+      "https://ave.agent-connector.ai/schemas/plugin-host-protocol/2/v0.12.0/protocol.schema.json",
       "https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/v0.13.0/protocol.schema.json",
     ]) {
       const bytes = `${JSON.stringify({ ...schema, $id: id }, null, 2)}\n`;
@@ -1090,7 +1081,7 @@ describe("releases", () => {
     rmSync(join(r.root, "marketplace.json"));
     const base = r.commit("before the format-2 catalog");
     r.git("update-ref", "refs/remotes/origin/main", base);
-    r.write("marketplace.json", { schemaVersion: 2, name: "retiredname", displayName: "Ave Official", packages: [] });
+    r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [] });
     withSourcePlugin(r, "1.0.0");
     r.commit("alpha");
     assert.equal(r.tool("index.mjs").status, 0);
@@ -1135,7 +1126,7 @@ describe("releases", () => {
     withSourcePlugin(r, "1.0.0");
     r.write("marketplace.json", "{not json\n");
     const base = r.commit("invalid catalog");
-    r.write("marketplace.json", { schemaVersion: 2, name: "retiredname", displayName: "Ave Official", packages: [] });
+    r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [] });
     assert.equal(r.tool("index.mjs").status, 0);
     r.commit("index");
 

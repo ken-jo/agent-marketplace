@@ -1,6 +1,6 @@
 {
   "name": "@ave/plugin-meeting",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Ave meeting extension for recording, transcription, and summaries.",
   "type": "module",
   "main": "dist/index.cjs",

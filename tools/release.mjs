@@ -42,7 +42,7 @@ import { fileURLToPath } from "node:url";
 import { checkRepository, releasedManifestsNeeded } from "./check.mjs";
 import { checkVendored, isCommitPin, isReleaseTag } from "./vendor.mjs";
 import { runPluginChecks, verifiedRuntime } from "./verified-import.mjs";
-import { DESCRIPTOR, INDEX_PATH, Ave, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson } from "./repo.mjs";
+import { AVE_EXTENSION, DESCRIPTOR, INDEX_PATH, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson } from "./repo.mjs";
 
 const TRUSTED_RUNTIME = await verifiedRuntime();
 
@@ -86,7 +86,7 @@ export function publicationProblems() {
   const tag = contract.ref;
   const source = contract.files?.["protocol.schema.json"];
   const manifestSchema = readJson("contract/plugin-manifest.schema.json");
-  const extension = manifestSchema.properties?.extensions?.properties?.[Ave];
+  const extension = manifestSchema.properties?.extensions?.properties?.[AVE_EXTENSION];
   if (!Object.hasOwn(extension?.properties?.requires?.properties ?? {}, "hostProtocol")) {
     problems.push("contract/plugin-manifest.schema.json: publication requires requires.hostProtocol in the vendored manifest schema");
   }
@@ -212,7 +212,7 @@ export function pin(name, zip) {
   if (manifest.name !== name) throw new Error(`${zip} does not hold plugin ${name}`);
   const { authority, minAppVersion, hostProtocol, problems } = pluginAuthority(manifest);
   if (problems) throw new Error(`${name}: ${problems.join("; ")}`);
-  const ave = manifest.extensions[Ave];
+  const ave = manifest.extensions[AVE_EXTENSION];
   const path = join("plugins", name, DESCRIPTOR);
   const previous = existsSync(join(ROOT, path)) ? readJson(path) : {};
   const descriptor = {

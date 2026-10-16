@@ -392,7 +392,7 @@ export class WorkerClient implements WorkerSearchClient, KnowledgeWorkerClient {
   /**
    * Convenience: 파일을 인덱싱하고 doc_id를 반환.
    * 내부적으로 reindex(synchronous)을 호출하여 결과에서 doc_id 추출.
-   * (AveLocalIndexerPlugin.indexDocument의 single source of truth)
+   * (LocalIndexerPlugin.indexDocument의 single source of truth)
    */
   async indexDocument(filePath: string, mode = "auto"): Promise<string> {
     const result = await this.reindex(filePath, mode);

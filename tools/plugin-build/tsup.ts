@@ -4,7 +4,7 @@ import {
   HOST_EXTERNAL_MODULES,
 } from "@ave/plugin-contract";
 
-// The host owns these values (ave `src/plugins/public-contract.ts`); the
+// The host owns these values (Ave `src/plugins/public-contract.ts`); the
 // helper reads them from the vendored contract and re-exports them for
 // plugin build tests.
 export { BUNDLE_EVERYTHING_REGEX, HOST_BROWSER_EXTERNAL_MODULES, HOST_EXTERNAL_MODULES };

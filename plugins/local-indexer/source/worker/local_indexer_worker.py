@@ -922,7 +922,7 @@ def main() -> None:
     args = build_arg_parser().parse_args()
 
     # The embedding key is NOT read from the environment. The host-injected
-    # AVE_INDEXER_API_KEY channel was removed (it exposed the key via
+    # INDEXER_API_KEY channel was removed (it exposed the key via
     # /proc/<pid>/environ, child-process inheritance, and crash dumps). The
     # worker boots with an empty key; the host pushes the credential at
     # runtime via /indexer/set_embedding_api_key (on worker warmup, per scan,

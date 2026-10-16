@@ -1,7 +1,7 @@
 /**
  * Manifest regression test — plugin.json UI-callable allowlist.
  *
- * The host (ave) gates renderer → plugin IPC through
+ * The host (Ave) gates renderer → plugin IPC through
  * PluginRuntime.callFromUi(), which rejects any tool call whose
  * `_meta.ui.visibility` does not include "app" (pure v6 manifest: tools[]
  * is Tool[] with per-tool visibility, no more separate uiActions[] map).

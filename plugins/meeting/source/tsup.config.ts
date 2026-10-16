@@ -2,12 +2,12 @@ import { defineAvePluginConfig } from "@ave/plugin-build";
 
 // Two build targets:
 //   1. Node host plugin (src/hostPlugin.ts + src/index.ts) — runs in
-//      ave's main process.
+//      Ave's main process.
 //   2. Browser UI bundles (src/ui/meeting-control.js + src/ui/recorder-card.js)
 //      — loaded by the host's plugin UI shell: the sidebar panel and the
 //      recorder's slot in the host's floating dock. Bundled because they import
 //      the vendored ./prime-theme.js helper (SDK v7.0.0 removed
-//      @ave/plugin-sdk/ui/hooks/primeTheme); with `platform: "browser"` tsup
+//      plugin-sdk/ui/hooks/primeTheme); with `platform: "browser"` tsup
 //      auto-marks react/react-dom external, which is harmless since neither
 //      UI file uses React.
 export default defineAvePluginConfig([

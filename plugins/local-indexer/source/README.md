@@ -88,7 +88,7 @@ FTS5: "규정" 검색 → "규정집", "규정은", "규정한다" 모두 hit
 
 ```
 Ave Client (Electron/TypeScript)
-  └── ave-plugin-local-indexer
+  └── local-indexer plugin
         ├── hostPlugin.ts        — 통합 도구 dispatch, HostApi/설정/egress 관리
         ├── localIndexerPlugin.ts — Python worker 실행 + lifecycle
         ├── workerClient.ts      — Python worker 내부 HTTP 클라이언트

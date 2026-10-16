@@ -68,7 +68,7 @@ export interface LocalIndexerWorkerOptions {
    * Host 의 active LLM vendor 식별자 (예: "openai", "azure-foundry",
    * "azure-openai", "claude"). 명시 embeddingProvider / model 이 없을 때
    * `resolveEmbeddingProvider` 가 azure 계열 호스트를 감지하여 Azure
-   * embedding deployment 로 자동 매핑하기 위해 사용한다 (ave #955).
+   * embedding deployment 로 자동 매핑하기 위해 사용한다.
    * hostPlugin 이 `hostApi.config.get("hostApiVendor")` 에서 읽어 주입.
    */
   hostVendor?: string;

@@ -17,7 +17,7 @@ BM25-only search rather than failing the index run.
 
 Architecture
 ------------
-- ``OpenAIEmbeddingClient``: wraps ``OpenAI``/``AzureOpenAI`` ``embeddings.create``.  # egress-gate: allow Tier A Python-worker embedding egress carve-out (ave#1281): the spawned worker has no JS hostApi.hostFetch handle; this is a doc mention, real egress is grandfathered
+- ``OpenAIEmbeddingClient``: wraps ``OpenAI``/``AzureOpenAI`` ``embeddings.create``.  # egress-gate: allow Tier A Python-worker embedding egress carve-out: the spawned worker has no JS hostApi.hostFetch handle; this is a doc mention, real egress is grandfathered
 - ``create_embedding_client(provider, model, ...)``: factory that selects the
   backend from ``provider``. Call sites use it so provider changes are
   transparent.
@@ -130,7 +130,7 @@ def broker_http_client(egress_uds: Optional[str]) -> Optional[Any]:
 
 
 class OpenAIEmbeddingClient:
-    """Thin wrapper around ``OpenAI``/``AzureOpenAI`` ``embeddings.create``.  # egress-gate: allow Tier A Python-worker embedding egress carve-out (ave#1281): doc mention only, the actual SDK egress below is grandfathered
+    """Thin wrapper around ``OpenAI``/``AzureOpenAI`` ``embeddings.create``.  # egress-gate: allow Tier A Python-worker embedding egress carve-out: doc mention only, the actual SDK egress below is grandfathered
 
     Backs both the ``openai`` provider (api.openai.com or an OpenAI-compatible
     base URL) and the ``azure`` provider (Azure OpenAI Service). Outbound HTTPS

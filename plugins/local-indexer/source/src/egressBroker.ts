@@ -27,7 +27,7 @@
  * address is reachable without it.
  *
  * This module is intentionally a clean, self-contained interface owned by the
- * plugin adapter so it can later be lifted into ave as a host capability
+ * plugin adapter so it can later be lifted into Ave as a host capability
  * (and unified with `hostApi.hostFetch`) without a rewrite.
  */
 

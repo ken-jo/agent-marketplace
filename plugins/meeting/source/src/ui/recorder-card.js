@@ -35,7 +35,7 @@
 // already on it. There is no plugin-owned theme channel any more: two
 // sources for one value means one of them can be stale, and the stale one
 // would have been the plugin's.
-// The vendored ./prime-theme.js (copied from @ave/plugin-sdk v6.1.0 — SDK
+// The vendored ./prime-theme.js (copied from plugin-sdk v6.1.0 — SDK
 // v7.0.0 removed its UI surface)
 // handles validation + token paint on document.documentElement, so this
 // file no longer hand-rolls applyTheme / OS-preference cold-start /
