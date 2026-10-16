@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "youtube-mcp",
+  "version": "1.0.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "YouTube MCP",
+  "description": "Adds the community YouTube MCP server for read-only video, channel, playlist and transcript lookups. Needs a YouTube Data API v3 key.",
+  "author": {
+    "name": "Zubeid Hendricks",
+    "url": "https://github.com/ZubeidHendricks/youtube-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ZubeidHendricks/youtube-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "zubeid-youtube-mcp-server@1.0.2"
+      ],
+      "auth": "api-key",
+      "apiKeyEnv": "YOUTUBE_API_KEY"
+    }
+  }
+}

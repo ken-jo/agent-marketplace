@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "trello-mcp",
+  "version": "1.8.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Trello MCP",
+  "description": "Adds the community Trello MCP server for boards, lists, cards and checklists. Needs a Trello API key and a user token.",
+  "author": {
+    "name": "delorenj",
+    "url": "https://github.com/delorenj/mcp-server-trello"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/delorenj/mcp-server-trello",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@delorenj/mcp-server-trello@1.8.1"
+      ],
+      "env": {
+        "TRELLO_API_KEY": ""
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "TRELLO_TOKEN"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "ms-365-mcp",
+  "version": "0.168.0",
+  "minAppVersion": "0.14.0",
+  "displayName": "Microsoft 365 MCP",
+  "description": "Adds the community Microsoft 365 MCP server for Outlook mail, calendar, OneDrive, contacts and To Do through Microsoft Graph, in read-only mode. Needs your own Entra app registration.",
+  "author": {
+    "name": "Softeria",
+    "url": "https://github.com/Softeria/ms-365-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Softeria/ms-365-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@softeria/ms-365-mcp-server@0.168.0",
+        "--read-only",
+        "--allowed-scopes",
+        "User.Read Mail.Read Calendars.Read Contacts.Read Files.Read Tasks.Read MailboxSettings.Read Notes.Read"
+      ],
+      "env": {
+        "MS365_MCP_TENANT_ID": "common",
+        "MS365_MCP_TOKEN_CACHE_PATH": "$DATA_DIR/token-cache.json",
+        "MS365_MCP_SELECTED_ACCOUNT_PATH": "$DATA_DIR/selected-account.json"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "MS365_MCP_CLIENT_ID"
+    }
+  }
+}

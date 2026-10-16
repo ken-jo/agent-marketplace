@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "todoist-mcp",
+  "version": "13.5.0",
+  "minAppVersion": "0.14.0",
+  "displayName": "Todoist MCP",
+  "description": "Adds Doist's Todoist MCP server for tasks, projects, sections, labels and comments. Needs a Todoist API token.",
+  "author": {
+    "name": "Doist",
+    "url": "https://github.com/Doist/todoist-mcp"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Doist/todoist-mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@doist/todoist-mcp@13.5.0"
+      ],
+      "auth": "api-key",
+      "apiKeyEnv": "TODOIST_API_KEY"
+    }
+  }
+}

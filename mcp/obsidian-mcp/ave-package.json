@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "obsidian-mcp",
+  "version": "0.2.3",
+  "minAppVersion": "0.14.0",
+  "displayName": "Obsidian MCP",
+  "description": "Adds the community Obsidian MCP server for searching and editing notes through the Local REST API community plugin on this computer. Needs that plugin's API key.",
+  "author": {
+    "name": "Markus Pfundstein",
+    "url": "https://github.com/MarkusPfundstein/mcp-obsidian"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/MarkusPfundstein/mcp-obsidian",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-obsidian==0.2.3"
+      ],
+      "env": {
+        "OBSIDIAN_HOST": "127.0.0.1",
+        "OBSIDIAN_PORT": "27124"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "OBSIDIAN_API_KEY"
+    }
+  }
+}

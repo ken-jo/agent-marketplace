@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "figma-context-mcp",
+  "version": "0.13.2",
+  "minAppVersion": "0.14.0",
+  "displayName": "Figma Context MCP",
+  "description": "Adds the Framelink Figma MCP server, which reads Figma file layout and styles for implementing designs. Needs a Figma personal access token; usage telemetry is off.",
+  "author": {
+    "name": "GLips",
+    "url": "https://github.com/GLips/Figma-Context-MCP"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/GLips/Figma-Context-MCP",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp@0.13.2",
+        "--stdio"
+      ],
+      "env": {
+        "FRAMELINK_TELEMETRY": "off"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "FIGMA_API_KEY"
+    }
+  }
+}

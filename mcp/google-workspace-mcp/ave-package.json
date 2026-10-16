@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "google-workspace-mcp",
+  "version": "2.1.0",
+  "minAppVersion": "0.14.0",
+  "displayName": "Google Workspace MCP",
+  "description": "Adds the community Google Workspace MCP server for Gmail, Calendar, Drive, Docs and Sheets with read-only scopes. Needs your own Google Cloud OAuth desktop client.",
+  "author": {
+    "name": "Taylor Wilsdon",
+    "url": "https://github.com/taylorwilsdon/google_workspace_mcp"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/taylorwilsdon/google_workspace_mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "workspace-mcp==2.1.0",
+        "--single-user",
+        "--read-only",
+        "--tool-tier",
+        "core"
+      ],
+      "env": {
+        "GOOGLE_OAUTH_CLIENT_ID": "",
+        "USER_GOOGLE_EMAIL": "",
+        "WORKSPACE_MCP_CREDENTIALS_DIR": "$DATA_DIR/credentials"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "GOOGLE_OAUTH_CLIENT_SECRET"
+    }
+  }
+}

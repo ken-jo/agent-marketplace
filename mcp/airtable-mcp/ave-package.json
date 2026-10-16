@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "airtable-mcp",
+  "version": "1.14.0",
+  "minAppVersion": "0.14.0",
+  "displayName": "Airtable MCP",
+  "description": "Adds the community Airtable MCP server for bases, tables and records. Needs an Airtable personal access token; read-only scopes limit it to reading.",
+  "author": {
+    "name": "domdomegg",
+    "url": "https://github.com/domdomegg/airtable-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/domdomegg/airtable-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "airtable-mcp-server@1.14.0"
+      ],
+      "auth": "api-key",
+      "apiKeyEnv": "AIRTABLE_API_KEY"
+    }
+  }
+}

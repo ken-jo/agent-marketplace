@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "slack-community-mcp",
+  "version": "1.3.0",
+  "minAppVersion": "0.14.0",
+  "displayName": "Slack Community MCP",
+  "description": "Adds the community Slack MCP server with a bot token only, limited to reading channels, threads and user groups. Posting and reactions stay off.",
+  "author": {
+    "name": "Dmitrii Korotovskii",
+    "url": "https://github.com/korotovsky/slack-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/korotovsky/slack-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "slack-mcp-server@1.3.0",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "SLACK_MCP_ENABLED_TOOLS": "conversations_history,conversations_replies,channels_list,usergroups_list,usergroups_me"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "SLACK_MCP_XOXB_TOKEN"
+    }
+  }
+}

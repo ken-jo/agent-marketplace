@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "discord-mcp",
+  "version": "0.1.1",
+  "minAppVersion": "0.14.0",
+  "displayName": "Discord MCP",
+  "description": "Adds the community Discord MCP server for servers, channels, threads and messages through a bot. Needs a bot token; the bot's own permissions are the only limit.",
+  "author": {
+    "name": "ngoctranfire",
+    "url": "https://github.com/ngoctranfire/discord-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ngoctranfire/discord-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@ncodelife/discord-mcp-server@0.1.1"
+      ],
+      "env": {
+        "DISCORD_GUILD_ID": ""
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "DISCORD_TOKEN"
+    }
+  }
+}
