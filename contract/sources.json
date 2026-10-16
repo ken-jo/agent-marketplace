@@ -1,20 +1,20 @@
 {
-  "comment": "Development pin of ken-jo/ave main for host protocol 3 (Ave 0.14.0). A commit has no contract bundle, so publication refuses it. Once the v0.14.0 tag build publishes its signed bundle, `node tools/vendor.mjs sync --ref v0.14.0` replaces these copies with the bundle bytes; never edit a copy.",
+  "comment": "Ave v0.14.0, from its signed contract bundle. Never edit a copy: `node tools/vendor.mjs verify` holds every byte to the bundle, and a new tag arrives with `node tools/vendor.mjs sync --ref <tag>`.",
   "repository": "ken-jo/ave",
-  "ref": "8079fca60d03397f91e5a3fe46f05334ba73a605",
-  "bundle": null,
+  "ref": "v0.14.0",
+  "bundle": "https://downloads.agent-connector.ai/contract/v0.14.0/",
   "files": {
     "public-contract.ts": {
       "from": "src/plugins/public-contract.ts",
-      "sha256": "3008ea20a57e6dfe8bda0d7b4dfbdd97aab7327b12540d9e8c6d2ffb616f0a63"
+      "sha256": "04258544d056a18bbae3d9354cb9200bee475a59f0d8e24dc32a17aabd292c37"
     },
     "plugin-manifest.schema.json": {
       "from": "schemas/plugin-manifest.schema.json",
-      "sha256": "8014f0785336bf83b70378c03e36032adc6149622cc044ac4ae160be9ebe833d"
+      "sha256": "fb3866f77cc55059e05698ea4f2da56348fd7b433bac929642b08ea76766c0e9"
     },
     "protocol.schema.json": {
       "from": "schemas/plugin-host-protocol/3/protocol.schema.json",
-      "sha256": "8e54512111bf6f03570438afb3337e4772b63149e9e4c60e0360115595e2aa7e"
+      "sha256": "3e92239b7d7a6ac517040c3cfe6909b1c959edb176af4c3a34f5a2aabea18d7a"
     }
   }
 }

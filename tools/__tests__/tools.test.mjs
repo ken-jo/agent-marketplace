@@ -165,7 +165,7 @@ describe("index generation", () => {
     assert.match(r.tool("check.mjs").stderr, /agent-plugin components differ from the package tree/u);
     r.write("agent-plugins/meeting-notes-kit/ai.agent-connector.ave/prompts/meeting-notes.md", "No frontmatter.\n");
     r.commit("invalid prompt");
-    assert.match(r.tool("index.mjs", "--check").stderr, /agent-plugins\/meeting-notes-kit: xyz\.ave\/prompts\/meeting-notes\.md/u);
+    assert.match(r.tool("index.mjs", "--check").stderr, /agent-plugins\/meeting-notes-kit: ai\.agent-connector\.ave\/prompts\/meeting-notes\.md/u);
   });
 
   it("drops a published package only when tools/withdrawn.json withdraws it", () => {

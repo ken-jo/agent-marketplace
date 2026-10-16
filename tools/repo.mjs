@@ -31,7 +31,7 @@ export const DESCRIPTOR = "ave-package.json";
 export const LEGACY_DESCRIPTOR = "retiredname-package.json";
 /** Packages deliberately taken out of the catalog, published versions included, and why. */
 export const WITHDRAWN_PATH = "tools/withdrawn.json";
-export const RETIREDNAME = "xyz.retiredname-namespace";
+export const RETIREDNAME = "ai.agent-connector.ave";
 /** First stable app release with the full alerts contract. */
 export const ALERTS_RELEASE_VERSION = "0.11.0";
 /** The manifest fields a descriptor copies as the plugin's authority (design §5.2). */

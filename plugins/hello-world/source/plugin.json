@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "hello-world",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Hello World demo extension for checking marketplace install and dynamic UI load.",
   "extensions": {
     "ai.agent-connector.ave": {

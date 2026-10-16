@@ -36,6 +36,14 @@ function fixture() {
   scratch.push(root);
   for (const path of [...ARTIFACTS, ...INVENTORIES, "tools/check.mjs", "tools/repo.mjs", "tools/release.mjs", "tools/vendor.mjs"]) write(root, path, source(path));
   if (!BASELINE) write(root, "tools/verified-import.mjs", source("tools/verified-import.mjs"));
+  // The fixture is a development-pinned checkout whatever the repository itself pins;
+  // signedBundle() turns it into a tag-pinned one when a test needs the signed path.
+  for (const path of INVENTORIES) {
+    const inventory = JSON.parse(readFileSync(join(root, path), "utf8"));
+    inventory.ref = "a".repeat(40);
+    inventory.bundle = null;
+    write(root, path, JSON.stringify(inventory));
+  }
   write(root, "package.json", '{"type":"module"}\n');
   write(root, "marketplace.json", '{"schemaVersion":2,"name":"ave","packages":[]}\n');
   return root;

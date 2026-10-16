@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "local-indexer",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 익스텐션 데이터 디렉터리의 index/",
   "extensions": {
     "ai.agent-connector.ave": {
