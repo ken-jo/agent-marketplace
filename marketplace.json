@@ -373,8 +373,14 @@
       "path": "mcp/github-official-mcp",
       "displayName": "GitHub Official MCP",
       "description": "Adds GitHub's official MCP server for repository, issue, pull request, Actions, and security workflows.",
-      "latest": "1.0.5",
+      "latest": "2.0.3",
       "versions": [
+        {
+          "version": "2.0.3",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "1.0.5",
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
@@ -388,9 +394,15 @@
       "name": "gitlab-mcp",
       "path": "mcp/gitlab-mcp",
       "displayName": "GitLab MCP",
-      "description": "Adds the GitLab MCP server for project, repository, issue, and merge request workflows.",
-      "latest": "2025.4.26",
+      "description": "Adds zereight/gitlab-mcp for GitLab project, repository, issue, merge request, and pipeline workflows on gitlab.com or a self-managed instance. GITLAB_PERMISSION_MODE is modify: create and update tools are on, delete tools are off; set it to readonly or full to change that. From 2026.10.25 it replaces the archived reference GitLab server and reads the same GITLAB_PERSONAL_ACCESS_TOKEN and GITLAB_API_URL.",
+      "latest": "2026.10.25",
       "versions": [
+        {
+          "version": "2026.10.25",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "2025.4.26",
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
@@ -452,9 +464,15 @@
       "name": "notion-mcp",
       "path": "mcp/notion-mcp",
       "displayName": "Notion MCP",
-      "description": "Adds Notion's MCP server for searching, reading, and updating Notion workspace content.",
-      "latest": "2.2.2",
+      "description": "Adds Notion's self-hosted MCP server for searching, reading, and updating Notion workspace content with an integration token. Notion no longer actively maintains this server and recommends its hosted, OAuth-based Notion MCP.",
+      "latest": "2.5.2",
       "versions": [
+        {
+          "version": "2.5.2",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "2.2.2",
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
@@ -469,8 +487,14 @@
       "path": "mcp/playwright-mcp",
       "displayName": "Playwright MCP",
       "description": "Adds Microsoft Playwright MCP for local browser automation through a stdio subprocess. No LLM API key is required.",
-      "latest": "0.0.76",
+      "latest": "0.0.83",
       "versions": [
+        {
+          "version": "0.0.83",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "0.0.76",
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
@@ -484,9 +508,15 @@
       "name": "postgres-mcp",
       "path": "mcp/postgres-mcp",
       "displayName": "PostgreSQL MCP",
-      "description": "Adds the official PostgreSQL MCP server for read-only schema inspection and SQL queries.",
-      "latest": "0.6.3",
+      "description": "Adds Google's MCP Toolbox for Databases with its prebuilt PostgreSQL tools for schema inspection, SQL queries, and health and performance views. Sessions start with default_transaction_read_only on, so writes fail by default; this is a session default, not a permission boundary, so connect with a read-only database role. From 1.15.0 it replaces the archived reference server: set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER and POSTGRES_PASSWORD instead of a connection URL. Toolbox ships no Linux arm64 build.",
+      "latest": "1.15.0",
       "versions": [
+        {
+          "version": "1.15.0",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "0.6.3",
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
@@ -548,9 +578,15 @@
       "name": "slack-mcp",
       "path": "mcp/slack-mcp",
       "displayName": "Slack MCP",
-      "description": "Adds the Slack MCP server for channel discovery, messages, threads, reactions, and user profiles.",
-      "latest": "2025.4.26",
+      "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. Posting messages and adding reactions stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
+      "latest": "2026.10.25",
       "versions": [
+        {
+          "version": "2026.10.25",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "2025.4.26",
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
@@ -564,9 +600,15 @@
       "name": "sqlite-mcp",
       "path": "mcp/sqlite-mcp",
       "displayName": "SQLite MCP",
-      "description": "Adds the official SQLite MCP server for local database querying and analysis. From 2025.4.27 the database is ave.sqlite in the package's data folder. Earlier versions used a differently named .sqlite file there; it is not migrated, so copy it to ave.sqlite to keep its data.",
-      "latest": "2025.4.27",
+      "description": "Adds Google's MCP Toolbox for Databases with its prebuilt SQLite tools (execute_sql, list_tables) for local database querying and analysis. The database is ave.sqlite in the package's data folder. From 2026.10.25 it replaces the archived reference SQLite server and keeps the same file, so existing data stays. Toolbox ships no Linux arm64 build.",
+      "latest": "2026.10.25",
       "versions": [
+        {
+          "version": "2026.10.25",
+          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "minAppVersion": "0.14.0",
+          "publishedAt": "2026-10-25T13:29:59Z"
+        },
         {
           "version": "2025.4.27",
           "commit": "25f3bb5e2d4c8ab5617a2994fac29cc2376cf474",
