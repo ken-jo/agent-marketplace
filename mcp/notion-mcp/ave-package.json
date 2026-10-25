@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "notion-mcp",
-  "version": "2.2.2",
+  "version": "2.5.2",
   "minAppVersion": "0.14.0",
   "displayName": "Notion MCP",
-  "description": "Adds Notion's MCP server for searching, reading, and updating Notion workspace content.",
+  "description": "Adds Notion's self-hosted MCP server for searching, reading, and updating Notion workspace content with an integration token. Notion no longer actively maintains this server and recommends its hosted, OAuth-based Notion MCP.",
   "author": {
     "name": "Notion",
     "url": "https://github.com/makenotion/notion-mcp-server"
@@ -18,7 +18,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@notionhq/notion-mcp-server@2.2.1"
+        "@notionhq/notion-mcp-server@2.5.2"
       ],
       "env": {
         "NOTION_TOKEN": ""

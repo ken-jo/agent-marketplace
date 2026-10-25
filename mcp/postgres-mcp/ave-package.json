@@ -2,26 +2,35 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "postgres-mcp",
-  "version": "0.6.3",
+  "version": "1.15.0",
   "minAppVersion": "0.14.0",
   "displayName": "PostgreSQL MCP",
-  "description": "Adds the official PostgreSQL MCP server for read-only schema inspection and SQL queries.",
+  "description": "Adds Google's MCP Toolbox for Databases with its prebuilt PostgreSQL tools for schema inspection, SQL queries, and health and performance views. Sessions start with default_transaction_read_only on, so writes fail by default; this is a session default that SQL can turn off, not a permission boundary, so connect with a read-only database role. Ave asks for the database password as a secret: passwordless trust or peer logins are not supported, and a password with YAML-special characters ({, *, a colon followed by a space, or a space followed by #) can break or truncate Toolbox's config. From 1.15.0 it replaces the archived reference server: set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE and POSTGRES_USER instead of a connection URL. Toolbox ships no Linux arm64 build.",
   "author": {
-    "name": "Model Context Protocol",
-    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+    "name": "Google",
+    "url": "https://github.com/googleapis/mcp-toolbox"
   },
-  "license": "MIT",
-  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/googleapis/mcp-toolbox",
   "payload": {
     "server": {
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-postgres@0.6.2",
-        "postgresql://localhost/postgres"
+        "@toolbox-sdk/server@1.15.0",
+        "--prebuilt=postgres",
+        "--stdio"
       ],
-      "auth": "none"
+      "env": {
+        "POSTGRES_HOST": "localhost",
+        "POSTGRES_PORT": "5432",
+        "POSTGRES_DATABASE": "postgres",
+        "POSTGRES_USER": "",
+        "POSTGRES_QUERY_PARAMS": "{\"default_transaction_read_only\": \"on\"}"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "POSTGRES_PASSWORD"
     }
   }
 }
