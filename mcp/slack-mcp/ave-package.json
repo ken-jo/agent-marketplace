@@ -5,7 +5,7 @@
   "version": "2026.10.25",
   "minAppVersion": "0.14.0",
   "displayName": "Slack MCP",
-  "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. Posting messages and adding reactions stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
+  "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, users, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. SLACK_MCP_ENABLED_TOOLS lists only read tools, so posting, reactions, joining or leaving channels, and user-group or saved-item changes stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
   "author": {
     "name": "korotovsky",
     "url": "https://github.com/korotovsky/slack-mcp-server"
@@ -24,6 +24,7 @@
       ],
       "env": {
         "SLACK_MCP_XOXB_TOKEN": "",
+        "SLACK_MCP_ENABLED_TOOLS": "conversations_history,conversations_replies,conversations_search_messages,conversations_unreads,channels_list,channels_me,users_search,usergroups_list,usergroups_me,saved_list",
         "SLACK_MCP_USERS_CACHE": "$DATA_DIR/users_cache.json",
         "SLACK_MCP_CHANNELS_CACHE": "$DATA_DIR/channels_cache_v2.json"
       },

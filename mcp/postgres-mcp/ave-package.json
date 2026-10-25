@@ -5,7 +5,7 @@
   "version": "1.15.0",
   "minAppVersion": "0.14.0",
   "displayName": "PostgreSQL MCP",
-  "description": "Adds Google's MCP Toolbox for Databases with its prebuilt PostgreSQL tools for schema inspection, SQL queries, and health and performance views. Sessions start with default_transaction_read_only on, so writes fail by default; this is a session default, not a permission boundary, so connect with a read-only database role. From 1.15.0 it replaces the archived reference server: set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER and POSTGRES_PASSWORD instead of a connection URL. Toolbox ships no Linux arm64 build.",
+  "description": "Adds Google's MCP Toolbox for Databases with its prebuilt PostgreSQL tools for schema inspection, SQL queries, and health and performance views. Sessions start with default_transaction_read_only on, so writes fail by default; this is a session default, not a permission boundary, so connect with a read-only database role. From 1.15.0 it replaces the archived reference server: set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER and POSTGRES_PASSWORD instead of a connection URL; the server does not start with an empty password. Toolbox ships no Linux arm64 build.",
   "author": {
     "name": "Google",
     "url": "https://github.com/googleapis/mcp-toolbox"
