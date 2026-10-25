@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "minAppVersion": "0.14.1",
   "displayName": "GitLab.com (hosted)",
-  "description": "Connects to GitLab's official MCP server on GitLab.com. You sign in with GitLab in the browser and grant the mcp scope. The server can read and change issues, merge requests, pipelines and repositories, as far as your GitLab access allows. Your top-level group must allow MCP server access. For a self-managed instance, use GitLab MCP.",
+  "description": "Connects to GitLab's official MCP server on GitLab.com. You sign in with GitLab in the browser and grant the mcp scope. The server can read and change issues, merge requests, pipelines and repositories, as far as your GitLab access allows. Your top-level group must allow MCP server access. GitLab allows 10 client registrations per hour per IP, and Ave registers again at each sign-in, so sign-ins behind a shared NAT or VPN can hit that limit. For a self-managed instance, use GitLab MCP.",
   "author": {
     "name": "GitLab",
     "url": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/"
