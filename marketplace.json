@@ -508,14 +508,14 @@
       "name": "postgres-mcp",
       "path": "mcp/postgres-mcp",
       "displayName": "PostgreSQL MCP",
-      "description": "Adds Google's MCP Toolbox for Databases with its prebuilt PostgreSQL tools for schema inspection, SQL queries, and health and performance views. Sessions start with default_transaction_read_only on, so writes fail by default; this is a session default, not a permission boundary, so connect with a read-only database role. From 1.15.0 it replaces the archived reference server: set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER and POSTGRES_PASSWORD instead of a connection URL. Toolbox ships no Linux arm64 build.",
+      "description": "Adds Google's MCP Toolbox for Databases with its prebuilt PostgreSQL tools for schema inspection, SQL queries, and health and performance views. Sessions start with default_transaction_read_only on, so writes fail by default; this is a session default, not a permission boundary, so connect with a read-only database role. From 1.15.0 it replaces the archived reference server: set POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER and POSTGRES_PASSWORD instead of a connection URL; the server does not start with an empty password. Toolbox ships no Linux arm64 build.",
       "latest": "1.15.0",
       "versions": [
         {
           "version": "1.15.0",
-          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "commit": "72dbc3293eac16e3df4654243ba759b5c53c0cb1",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-25T13:29:59Z"
+          "publishedAt": "2026-10-25T13:39:18Z"
         },
         {
           "version": "0.6.3",
@@ -578,14 +578,14 @@
       "name": "slack-mcp",
       "path": "mcp/slack-mcp",
       "displayName": "Slack MCP",
-      "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. Posting messages and adding reactions stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
+      "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, users, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. SLACK_MCP_ENABLED_TOOLS lists only read tools, so posting, reactions, joining or leaving channels, and user-group or saved-item changes stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
       "latest": "2026.10.25",
       "versions": [
         {
           "version": "2026.10.25",
-          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "commit": "72dbc3293eac16e3df4654243ba759b5c53c0cb1",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-25T13:29:59Z"
+          "publishedAt": "2026-10-25T13:39:18Z"
         },
         {
           "version": "2025.4.26",
