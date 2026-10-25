@@ -385,6 +385,22 @@
     },
     {
       "kind": "mcp",
+      "name": "gitlab-hosted-mcp",
+      "path": "mcp/gitlab-hosted-mcp",
+      "displayName": "GitLab.com (hosted)",
+      "description": "Connects to GitLab's official MCP server on GitLab.com. You sign in with GitLab in the browser and grant the mcp scope. The server can read and change issues, merge requests, pipelines and repositories, as far as your GitLab access allows. Your top-level group must allow MCP server access. For a self-managed instance, use GitLab MCP.",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "commit": "1719e6252ec32dc4038ea1a54b263b240ff812f5",
+          "minAppVersion": "0.14.1",
+          "publishedAt": "2026-10-25T14:32:37Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
       "name": "gitlab-mcp",
       "path": "mcp/gitlab-mcp",
       "displayName": "GitLab MCP",
@@ -444,6 +460,22 @@
           "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
           "minAppVersion": "0.14.0",
           "publishedAt": "2026-10-15T09:49:59Z"
+        }
+      ]
+    },
+    {
+      "kind": "mcp",
+      "name": "notion-hosted-mcp",
+      "path": "mcp/notion-hosted-mcp",
+      "displayName": "Notion (hosted)",
+      "description": "Connects to Notion's hosted MCP server at mcp.notion.com. You sign in with Notion in the browser, so there is no token to paste. It can search, read, create and update pages, as far as your Notion access allows. The server is in beta.",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "commit": "1719e6252ec32dc4038ea1a54b263b240ff812f5",
+          "minAppVersion": "0.14.1",
+          "publishedAt": "2026-10-25T14:32:37Z"
         }
       ]
     },
