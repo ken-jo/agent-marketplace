@@ -394,14 +394,14 @@
       "name": "gitlab-mcp",
       "path": "mcp/gitlab-mcp",
       "displayName": "GitLab MCP",
-      "description": "Adds zereight/gitlab-mcp for GitLab project, repository, issue, merge request, and pipeline workflows on gitlab.com or a self-managed instance. GITLAB_PERMISSION_MODE is modify: create and update tools are on, delete tools are off; set it to readonly or full to change that. From 2026.10.25 it replaces the archived reference GitLab server and reads the same GITLAB_PERSONAL_ACCESS_TOKEN and GITLAB_API_URL.",
+      "description": "Adds zereight/gitlab-mcp for GitLab projects, repositories, issues, merge requests, and pipelines on gitlab.com or a self-managed instance, in read-only permission mode. Needs a GitLab personal access token. From 2026.10.25 it replaces the archived reference GitLab server, which could also create issues, merge requests and commits; Ave asks for the token again and passes it as GITLAB_PERSONAL_ACCESS_TOKEN.",
       "latest": "2026.10.25",
       "versions": [
         {
           "version": "2026.10.25",
-          "commit": "d5c7a872535a872a3483b2c132521b61ec835ea5",
+          "commit": "bfe33de56669cc438f28c6c76002ef01f18eaae2",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-25T13:29:59Z"
+          "publishedAt": "2026-10-25T13:45:43Z"
         },
         {
           "version": "2025.4.26",
@@ -578,14 +578,14 @@
       "name": "slack-mcp",
       "path": "mcp/slack-mcp",
       "displayName": "Slack MCP",
-      "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, users, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. SLACK_MCP_ENABLED_TOOLS lists only read tools, so posting, reactions, joining or leaving channels, and user-group or saved-item changes stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
+      "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, and user groups with a Slack bot token. A bot sees only the channels it was invited to. Only read tools are enabled, so posting, reactions, and user-group changes stay off. From 2026.10.25 it replaces the archived reference Slack server: Ave asks for the xoxb- bot token again and passes it as SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
       "latest": "2026.10.25",
       "versions": [
         {
           "version": "2026.10.25",
-          "commit": "72dbc3293eac16e3df4654243ba759b5c53c0cb1",
+          "commit": "bfe33de56669cc438f28c6c76002ef01f18eaae2",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-25T13:39:18Z"
+          "publishedAt": "2026-10-25T13:45:43Z"
         },
         {
           "version": "2025.4.26",
