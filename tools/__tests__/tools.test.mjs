@@ -5,7 +5,7 @@
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
@@ -44,7 +44,17 @@ function skill(version) {
   return { schemaVersion: 2, kind: "skill", name: "review", version, minAppVersion: "0.10.0", payload: { entry: "SKILL.md" } };
 }
 
-function repo() {
+/**
+ * A scratch marketplace repository with its own copy of the tools. Its vendored
+ * inventories are pinned to a development commit, and `tool` and `call` run
+ * that copy, so every tool subprocess uses the offline inventory integrity
+ * check. Run from the checkout, a subprocess would verify the committed release
+ * tag: it would download and cosign-verify the real contract bundle in each
+ * run, and any network or Sigstore hiccup would fail whichever test was
+ * running. Tests of the tag path pass `{ tagged: true }` or pin a tag with
+ * `pinVendored`, and serve a test-signed bundle.
+ */
+function repo({ tagged = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "marketplace-tools-"));
   scratch.push(root);
   const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -54,7 +64,7 @@ function repo() {
   git("config", "commit.gpgsign", "false");
   cpSync(join(REAL_ROOT, "contract"), join(root, "contract"), { recursive: true });
   cpSync(join(REAL_ROOT, "tools/vendor"), join(root, "tools/vendor"), { recursive: true });
-  for (const script of ["check.mjs", "release.mjs", "repo.mjs", "vendor.mjs", "verified-import.mjs"]) {
+  for (const script of readdirSync(TOOLS).filter((name) => name.endsWith(".mjs"))) {
     cpSync(join(TOOLS, script), join(root, "tools", script));
   }
   const write = (path, value) => {
@@ -67,33 +77,57 @@ function repo() {
     git("commit", "-q", "-m", message);
     return git("rev-parse", "HEAD").trim();
   };
-  const tool = (script, ...args) => spawnSync("node", [join(TOOLS, script), ...args], { env: { ...process.env, MARKETPLACE_ROOT: root }, encoding: "utf8" });
-  const publishTool = (script, ...args) => {
-    const env = { ...process.env };
-    delete env.MARKETPLACE_ROOT;
-    const target = realpathSync(join(root, "tools", script));
+  // Tools run from this repository's copy, so they verify its own vendored
+  // inventories, never the installation's tag bundle.
+  const installed = (script) => realpathSync(join(root, "tools", script));
+  /**
+   * Module code that, while this repository pins a release tag, first verifies
+   * its tools against a test-signed bundle of its own vendored files. Test
+   * signatures are available only through the function API: the production CLI
+   * and environment cannot replace signature verification. A development pin
+   * needs no preamble; the tools check its inventory integrity offline.
+   */
+  const signedPreamble = (allowDevelopment) => {
     const sources = JSON.parse(readFileSync(join(root, "contract/sources.json"), "utf8"));
-    if (!sources.ref.startsWith("v")) return spawnSync("node", [target, ...args], { env, encoding: "utf8" });
-    // Test signatures are available only through the function API. The
-    // production CLI and environment cannot replace signature verification.
+    if (!sources.ref.startsWith("v")) return "";
     const keys = testKeys();
     const { served } = publishBundle({ root }, sources.ref, keys);
+    return `
+      const t = await import(${JSON.stringify(join(TOOLS, "__tests__/fake-sigstore.mjs"))});
+      const loader = await import(${JSON.stringify(installed("verified-import.mjs"))});
+      await loader.verifiedRuntime({ allowDevelopment: ${allowDevelopment}, get: t.servedFrom(${JSON.stringify(served)}, []), verifySignature: t.testVerifier(${JSON.stringify(keys.publicKey)}) });`;
+  };
+  const runTool = (script, args, env, allowDevelopment) => {
+    const target = installed(script);
+    const preamble = signedPreamble(allowDevelopment);
+    if (!preamble) return spawnSync("node", [target, ...args], { env, encoding: "utf8" });
     const code = `
       process.argv = [process.execPath, ${JSON.stringify(target)}, ...${JSON.stringify(args)}];
-      const t = await import(${JSON.stringify(join(TOOLS, "__tests__/fake-sigstore.mjs"))});
-      const loader = await import(${JSON.stringify(join(root, "tools/verified-import.mjs"))});
-      await loader.verifiedRuntime({ allowDevelopment: false, get: t.servedFrom(${JSON.stringify(served)}, []), verifySignature: t.testVerifier(${JSON.stringify(keys.publicKey)}) });
+      ${preamble}
       await import(${JSON.stringify(target)});`;
     return spawnSync("node", ["--input-type=module", "-e", code], { env, encoding: "utf8" });
   };
+  const tool = (script, ...args) => runTool(script, args, { ...process.env, MARKETPLACE_ROOT: root }, true);
+  const publishTool = (script, ...args) => {
+    const env = { ...process.env };
+    delete env.MARKETPLACE_ROOT;
+    return runTool(script, args, env, false);
+  };
+  /** Run `body` as a module with the tools module `script`'s exports in scope as `m`, against this repository. */
+  const evaluate = (script, body) => spawnSync("node", ["--input-type=module", "-e",
+    `${signedPreamble(true)}
+    const m = await import(${JSON.stringify(installed(script))}); ${body}`,
+  ], { env: { ...process.env, MARKETPLACE_ROOT: root }, encoding: "utf8" });
   const index = () => JSON.parse(readFileSync(join(root, "marketplace.json"), "utf8"));
   /** Evaluate `expression` with the tools module `script`'s exports in scope as `m`, against this repository. */
   const call = (script, expression) => {
-    const code = `const m = await import(${JSON.stringify(join(TOOLS, script))}); console.log(JSON.stringify(${expression}));`;
-    const out = execFileSync("node", ["--input-type=module", "-e", code], { env: { ...process.env, MARKETPLACE_ROOT: root }, encoding: "utf8" });
-    return JSON.parse(out);
+    const out = evaluate(script, `console.log(JSON.stringify(${expression}));`);
+    if (out.status !== 0) throw new Error(`${script}: ${expression} failed: ${out.stderr}`);
+    return JSON.parse(out.stdout);
   };
-  return { root, git, write, commit, tool, publishTool, index, call };
+  const r = { root, git, write, commit, tool, publishTool, evaluate, index, call };
+  if (!tagged) pinVendored(r, DEV_PIN);
+  return r;
 }
 
 function withSourcePlugin(r, version) {
@@ -1071,9 +1105,7 @@ describe("releases", () => {
   });
 
   /** Run `expression` against `r` with release.mjs as `m`, keeping stdout and stderr apart. */
-  const releaseCall = (r, expression) => spawnSync("node", ["--input-type=module", "-e",
-    `const m = await import(${JSON.stringify(join(TOOLS, "release.mjs"))}); console.log(JSON.stringify(await (${expression})));`,
-  ], { env: { ...process.env, MARKETPLACE_ROOT: r.root }, encoding: "utf8" });
+  const releaseCall = (r, expression) => r.evaluate("release.mjs", `console.log(JSON.stringify(await (${expression})));`);
 
   it("lists new versions against a base without a catalog quietly, and refuses a base that is not a commit", () => {
     const r = repo();
