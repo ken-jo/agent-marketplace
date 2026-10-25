@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "notion-hosted-mcp",
+  "version": "1.0.0",
+  "minAppVersion": "0.14.1",
+  "displayName": "Notion (hosted)",
+  "description": "Connects to Notion's hosted MCP server at mcp.notion.com. You sign in with Notion in the browser, so there is no token to paste. It can search, read, create and update pages, as far as your Notion access allows. The server is in beta.",
+  "author": {
+    "name": "Notion",
+    "url": "https://developers.notion.com/docs/mcp"
+  },
+  "homepage": "https://developers.notion.com/docs/mcp",
+  "payload": {
+    "server": {
+      "transport": "http",
+      "url": "https://mcp.notion.com/mcp",
+      "auth": "oauth"
+    }
+  }
+}
