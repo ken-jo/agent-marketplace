@@ -2,28 +2,30 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "slack-mcp",
-  "version": "2025.4.26",
+  "version": "2026.10.25",
   "minAppVersion": "0.14.0",
   "displayName": "Slack MCP",
-  "description": "Adds the Slack MCP server for channel discovery, messages, threads, reactions, and user profiles.",
+  "description": "Adds korotovsky/slack-mcp-server for reading channels, message history, threads, and user groups with a Slack bot token. A bot sees only the channels it was invited to and cannot search. Posting messages and adding reactions stay off. From 2026.10.25 it replaces the archived reference Slack server: put the xoxb- bot token in SLACK_MCP_XOXB_TOKEN; SLACK_BOT_TOKEN, SLACK_TEAM_ID and SLACK_CHANNEL_IDS are no longer read.",
   "author": {
-    "name": "Model Context Protocol",
-    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack"
+    "name": "korotovsky",
+    "url": "https://github.com/korotovsky/slack-mcp-server"
   },
   "license": "MIT",
-  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack",
+  "homepage": "https://github.com/korotovsky/slack-mcp-server",
   "payload": {
     "server": {
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-slack@2025.4.25"
+        "slack-mcp-server@1.3.0",
+        "--transport",
+        "stdio"
       ],
       "env": {
-        "SLACK_BOT_TOKEN": "",
-        "SLACK_TEAM_ID": "",
-        "SLACK_CHANNEL_IDS": ""
+        "SLACK_MCP_XOXB_TOKEN": "",
+        "SLACK_MCP_USERS_CACHE": "$DATA_DIR/users_cache.json",
+        "SLACK_MCP_CHANNELS_CACHE": "$DATA_DIR/channels_cache_v2.json"
       },
       "auth": "none"
     }

@@ -2,25 +2,29 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "sqlite-mcp",
-  "version": "2025.4.27",
+  "version": "2026.10.25",
   "minAppVersion": "0.14.0",
   "displayName": "SQLite MCP",
-  "description": "Adds the official SQLite MCP server for local database querying and analysis. From 2025.4.27 the database is ave.sqlite in the package's data folder. Earlier versions used a differently named .sqlite file there; it is not migrated, so copy it to ave.sqlite to keep its data.",
+  "description": "Adds Google's MCP Toolbox for Databases with its prebuilt SQLite tools (execute_sql, list_tables) for local database querying and analysis. The database is ave.sqlite in the package's data folder. From 2026.10.25 it replaces the archived reference SQLite server and keeps the same file, so existing data stays. Toolbox ships no Linux arm64 build.",
   "author": {
-    "name": "Model Context Protocol",
-    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+    "name": "Google",
+    "url": "https://github.com/googleapis/mcp-toolbox"
   },
-  "license": "MIT",
-  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/googleapis/mcp-toolbox",
   "payload": {
     "server": {
       "transport": "stdio",
-      "command": "uvx",
+      "command": "npx",
       "args": [
-        "mcp-server-sqlite==2025.4.25",
-        "--db-path",
-        "$DATA_DIR/ave.sqlite"
+        "-y",
+        "@toolbox-sdk/server@1.15.0",
+        "--prebuilt=sqlite",
+        "--stdio"
       ],
+      "env": {
+        "SQLITE_DATABASE": "$DATA_DIR/ave.sqlite"
+      },
       "auth": "none"
     }
   }

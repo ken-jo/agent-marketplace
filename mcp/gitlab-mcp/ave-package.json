@@ -2,27 +2,28 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "gitlab-mcp",
-  "version": "2025.4.26",
+  "version": "2026.10.25",
   "minAppVersion": "0.14.0",
   "displayName": "GitLab MCP",
-  "description": "Adds the GitLab MCP server for project, repository, issue, and merge request workflows.",
+  "description": "Adds zereight/gitlab-mcp for GitLab project, repository, issue, merge request, and pipeline workflows on gitlab.com or a self-managed instance. GITLAB_PERMISSION_MODE is modify: create and update tools are on, delete tools are off; set it to readonly or full to change that. From 2026.10.25 it replaces the archived reference GitLab server and reads the same GITLAB_PERSONAL_ACCESS_TOKEN and GITLAB_API_URL.",
   "author": {
-    "name": "Model Context Protocol",
-    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab"
+    "name": "zereight",
+    "url": "https://github.com/zereight/gitlab-mcp"
   },
   "license": "MIT",
-  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab",
+  "homepage": "https://github.com/zereight/gitlab-mcp",
   "payload": {
     "server": {
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-gitlab@2025.4.25"
+        "@zereight/mcp-gitlab@2.3.11"
       ],
       "env": {
         "GITLAB_PERSONAL_ACCESS_TOKEN": "",
-        "GITLAB_API_URL": "https://gitlab.com/api/v4"
+        "GITLAB_API_URL": "https://gitlab.com/api/v4",
+        "GITLAB_PERMISSION_MODE": "modify"
       },
       "auth": "none"
     }
