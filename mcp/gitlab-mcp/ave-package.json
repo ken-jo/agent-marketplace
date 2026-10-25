@@ -5,7 +5,7 @@
   "version": "2026.10.25",
   "minAppVersion": "0.14.0",
   "displayName": "GitLab MCP",
-  "description": "Adds zereight/gitlab-mcp for GitLab project, repository, issue, merge request, and pipeline workflows on gitlab.com or a self-managed instance. GITLAB_PERMISSION_MODE is modify: create and update tools are on, delete tools are off; set it to readonly or full to change that. From 2026.10.25 it replaces the archived reference GitLab server and reads the same GITLAB_PERSONAL_ACCESS_TOKEN and GITLAB_API_URL.",
+  "description": "Adds zereight/gitlab-mcp for GitLab projects, repositories, issues, merge requests, and pipelines on gitlab.com or a self-managed instance, in read-only permission mode. Needs a GitLab personal access token. From 2026.10.25 it replaces the archived reference GitLab server, which could also create issues, merge requests and commits; Ave asks for the token again and passes it as GITLAB_PERSONAL_ACCESS_TOKEN.",
   "author": {
     "name": "zereight",
     "url": "https://github.com/zereight/gitlab-mcp"
@@ -21,11 +21,12 @@
         "@zereight/mcp-gitlab@2.3.11"
       ],
       "env": {
-        "GITLAB_PERSONAL_ACCESS_TOKEN": "",
         "GITLAB_API_URL": "https://gitlab.com/api/v4",
-        "GITLAB_PERMISSION_MODE": "modify"
+        "GITLAB_PERMISSION_MODE": "readonly",
+        "GITLAB_DISABLE_VERSION_CHECK": "true"
       },
-      "auth": "none"
+      "auth": "api-key",
+      "apiKeyEnv": "GITLAB_PERSONAL_ACCESS_TOKEN"
     }
   }
 }
