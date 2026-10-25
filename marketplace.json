@@ -377,9 +377,9 @@
       "versions": [
         {
           "version": "2.0.3",
-          "commit": "e358f0c24926d1a43d23f2f797d573b13bf77045",
+          "commit": "beeafa9c1b3e57456ad2dd50bf59dabb16e5e9ca",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-25T14:20:33Z"
+          "publishedAt": "2026-10-25T14:28:16Z"
         },
         {
           "version": "1.0.5",
