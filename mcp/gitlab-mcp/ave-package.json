@@ -18,7 +18,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@zereight/mcp-gitlab@2.3.11"
+        "@zereight/mcp-gitlab@2.3.10"
       ],
       "env": {
         "GITLAB_API_URL": "https://gitlab.com/api/v4",
