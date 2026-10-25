@@ -2,29 +2,31 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "gitlab-mcp",
-  "version": "2025.4.26",
+  "version": "2026.10.25",
   "minAppVersion": "0.14.0",
   "displayName": "GitLab MCP",
-  "description": "Adds the GitLab MCP server for project, repository, issue, and merge request workflows.",
+  "description": "Adds zereight/gitlab-mcp for GitLab projects, repositories, issues, merge requests, and pipelines on gitlab.com or a self-managed instance, in read-only permission mode. Needs a GitLab personal access token. From 2026.10.25 it replaces the archived reference GitLab server, which could also create issues, merge requests and commits; Ave asks for the token again and passes it as GITLAB_PERSONAL_ACCESS_TOKEN.",
   "author": {
-    "name": "Model Context Protocol",
-    "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab"
+    "name": "zereight",
+    "url": "https://github.com/zereight/gitlab-mcp"
   },
   "license": "MIT",
-  "homepage": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab",
+  "homepage": "https://github.com/zereight/gitlab-mcp",
   "payload": {
     "server": {
       "transport": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-gitlab@2025.4.25"
+        "@zereight/mcp-gitlab@2.3.10"
       ],
       "env": {
-        "GITLAB_PERSONAL_ACCESS_TOKEN": "",
-        "GITLAB_API_URL": "https://gitlab.com/api/v4"
+        "GITLAB_API_URL": "https://gitlab.com/api/v4",
+        "GITLAB_PERMISSION_MODE": "readonly",
+        "GITLAB_DISABLE_VERSION_CHECK": "true"
       },
-      "auth": "none"
+      "auth": "api-key",
+      "apiKeyEnv": "GITLAB_PERSONAL_ACCESS_TOKEN"
     }
   }
 }
