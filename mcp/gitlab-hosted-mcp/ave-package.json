@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "gitlab-hosted-mcp",
+  "version": "1.0.0",
+  "minAppVersion": "0.14.1",
+  "displayName": "GitLab.com (hosted)",
+  "description": "Connects to GitLab's official MCP server on GitLab.com. You sign in with GitLab in the browser and grant the mcp scope. The server can read and change issues, merge requests, pipelines and repositories, as far as your GitLab access allows. Your top-level group must allow MCP server access. For a self-managed instance, use GitLab MCP.",
+  "author": {
+    "name": "GitLab",
+    "url": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/"
+  },
+  "homepage": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+  "payload": {
+    "server": {
+      "transport": "http",
+      "url": "https://gitlab.com/api/v4/mcp",
+      "auth": "oauth"
+    }
+  }
+}
