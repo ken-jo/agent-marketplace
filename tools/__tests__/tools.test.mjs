@@ -548,7 +548,15 @@ describe("repository check", () => {
 
   it("refuses an edited vendored file", () => {
     const { r } = published();
-    writeFileSync(join(r.root, "contract/public-contract.ts"), "// edited\n", { flag: "a" });
+    const edited = join(r.root, "contract/public-contract.ts");
+    // Edit after the loader has verified and loaded the tools, so checkVendored itself must notice.
+    const checked = r.evaluate("check.mjs", `
+      const { appendFileSync } = await import("node:fs");
+      appendFileSync(${JSON.stringify(edited)}, "// edited\\n");
+      console.log(JSON.stringify(m.checkRepository()));`);
+    assert.equal(checked.status, 0, checked.stderr);
+    assert.ok(JSON.parse(checked.stdout).some((problem) => /^contract\/public-contract\.ts: bytes differ from sources\.json/u.test(problem)), checked.stdout);
+    // A later run refuses before evaluating anything.
     assert.match(r.tool("check.mjs").stderr, /contract\/public-contract\.ts: bytes differ from sources\.json/u);
   });
 
