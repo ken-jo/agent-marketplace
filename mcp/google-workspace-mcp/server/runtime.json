@@ -1,0 +1,37 @@
+{
+  "id": "google-workspace-mcp",
+  "kind": "python",
+  "secret": {
+    "env": "GOOGLE_WORKSPACE_CREDENTIALS",
+    "fields": {
+      "email": "USER_GOOGLE_EMAIL",
+      "client_id": "GOOGLE_OAUTH_CLIENT_ID",
+      "client_secret": "GOOGLE_OAUTH_CLIENT_SECRET",
+      "refresh_token": "GOOGLE_REFRESH_TOKEN"
+    }
+  },
+  "args": [],
+  "files": {
+    "requirements.lock": "e4564a59120fed06279c5567cc53631e9d4747d6065c4a17009284706a867a8f",
+    "launch.py": "f5b203501c71f7bab3af0d5c21759830640a874c746d8f98e92b134f8efaa800",
+    "wheels/workspace_mcp-2.2.0-py3-none-any.whl": "e121e8f198924b73d69d247101592b49aa53b33aec46c7391fc518e4ef006edc"
+  },
+  "entry": "launch.py",
+  "source": {
+    "repository": "https://github.com/taylorwilsdon/google_workspace_mcp",
+    "commit": "b5cf07e6078ae10a596710d77569e9430e01ebd4"
+  },
+  "artifact": {
+    "name": "workspace-mcp",
+    "version": "2.2.0",
+    "wheel": "wheels/workspace_mcp-2.2.0-py3-none-any.whl",
+    "sha256": "e121e8f198924b73d69d247101592b49aa53b33aec46c7391fc518e4ef006edc",
+    "build": {
+      "sourceArchiveSha256": "ac4cd6cfe93dbe10320b74e8e569054d66bf5512b0046e04a21eb6dbb3f7c882",
+      "builder": "uv 0.11.28",
+      "command": "uv build --wheel",
+      "reproducibleBuild": false
+    }
+  },
+  "pythonVersion": "3.12.12"
+}

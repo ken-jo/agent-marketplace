@@ -1,3 +1,7 @@
 #!/bin/sh
 set -eu
-exec uvx --from 'git+https://github.com/MarkusPfundstein/mcp-obsidian@5ee0b84fa8319fd2fdf0db0ee1febb065e712a15' mcp-obsidian
+if ! command -v node >/dev/null 2>&1; then
+  printf '%s\n' "This locked connector requires Node.js 24+ on Ave's PATH. Install Node.js or add its bin directory to Ave's PATH before enabling the connector." >&2
+  exit 1
+fi
+exec node "${0%/*}/launch.mjs"

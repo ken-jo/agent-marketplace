@@ -1,0 +1,114 @@
+{
+  "id": "trello-mcp",
+  "kind": "npm",
+  "secret": {
+    "env": "TRELLO_CREDENTIALS",
+    "split": true,
+    "fields": {
+      "apiKey": "TRELLO_API_KEY",
+      "token": "TRELLO_TOKEN"
+    }
+  },
+  "args": [],
+  "files": {
+    "package.json": "7f3a978906a7a1b90c750888029474c7510ded283fe94451030a49f194dd081a",
+    "package-lock.json": "9e656ab8f817c7254af0ee4d0598137d013b8d11b02e22defd8abd72f555232f",
+    "policy.mjs": "4df7b9df573092a93209d8af06cb6dadd23511c5692efe28fd2a54ba44f356de",
+    "artifacts/trello.mjs": "e3049c192bc25479525bfe8efed5ca8d96da5dd3b4ea7a819d778058a77e079e",
+    "artifacts/LICENSE.trello": "6d7237212b2cc9c1bebf56da424a7365d4b03dc7a77466c4b30d182c16f16d98"
+  },
+  "source": {
+    "repository": "git+https://github.com/delorenj/mcp-server-trello.git",
+    "commit": "c3e1e92e715a71e1142c21e8ced520dc1b33ef60",
+    "gitHead": null
+  },
+  "artifact": {
+    "name": "@delorenj/mcp-server-trello",
+    "version": "1.8.1",
+    "url": "https://registry.npmjs.org/@delorenj/mcp-server-trello/-/mcp-server-trello-1.8.1.tgz",
+    "integrity": "sha512-qzKm4vbsOc4QR1zJpFA1E/pk9c1kpRsKd2LhD1H6YTWX8LymW3vdF8CFtD4ByCdGadXfEwFvUAhy61BDOEKVUg==",
+    "sha256": "6be49098ef48d3548ae735738e2793c7b98da48305c7b255e8d426e5b1eede47",
+    "license": {
+      "path": "package/LICENSE",
+      "sha256": "6d7237212b2cc9c1bebf56da424a7365d4b03dc7a77466c4b30d182c16f16d98"
+    },
+    "rebuilt": {
+      "file": "artifacts/trello.mjs",
+      "sha256": "e3049c192bc25479525bfe8efed5ca8d96da5dd3b4ea7a819d778058a77e079e",
+      "sourceCommit": "c3e1e92e715a71e1142c21e8ced520dc1b33ef60",
+      "sourceArchiveSha256": "64726e11642c9e0f0524d9b655058514f991077a5fa8b353624d2a8f3d90db3b",
+      "builder": "Bun 1.3.14",
+      "command": "bun build src/index.ts --packages external --target node --format esm --outfile trello.mjs",
+      "license": "artifacts/LICENSE.trello"
+    }
+  },
+  "entry": "ave-reviewed-entry.mjs",
+  "tools": {
+    "sdk": "@modelcontextprotocol/sdk/server/mcp.js",
+    "read": [
+      "get_cards_by_list_id",
+      "get_lists",
+      "get_recent_activity",
+      "get_my_cards",
+      "list_boards",
+      "list_workspaces",
+      "list_boards_in_workspace",
+      "get_active_board_info",
+      "get_card",
+      "get_card_comments",
+      "get_checklist_items",
+      "find_checklist_items_by_description",
+      "get_acceptance_criteria",
+      "get_checklist_by_name",
+      "get_board_members",
+      "get_board_labels",
+      "get_board_custom_fields",
+      "get_card_history",
+      "get_health",
+      "get_health_detailed",
+      "get_health_metadata",
+      "get_health_performance"
+    ],
+    "write": [
+      "add_card_to_list",
+      "update_card_details",
+      "archive_card",
+      "watch_card",
+      "watch_list",
+      "move_card",
+      "add_list_to_board",
+      "archive_list",
+      "update_list",
+      "update_list_position",
+      "attach_image_to_card",
+      "attach_file_to_card",
+      "attach_data_to_card",
+      "attach_image_data_to_card",
+      "create_board",
+      "add_comment",
+      "update_comment",
+      "delete_comment",
+      "create_checklist",
+      "add_checklist_item",
+      "update_checklist_item",
+      "delete_checklist_item",
+      "assign_member_to_card",
+      "remove_member_from_card",
+      "create_label",
+      "update_label",
+      "delete_label",
+      "copy_card",
+      "copy_checklist",
+      "add_cards_to_list",
+      "update_card_custom_field"
+    ],
+    "local": [
+      "download_attachment"
+    ],
+    "never": [
+      "set_active_board",
+      "set_active_workspace",
+      "perform_system_repair"
+    ]
+  }
+}

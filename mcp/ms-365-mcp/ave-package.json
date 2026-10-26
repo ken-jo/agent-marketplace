@@ -2,11 +2,14 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "ms-365-mcp",
-  "version": "2026.10.26",
+  "version": "2026.10.27",
   "minAppVersion": "0.14.0",
-  "platforms": ["darwin", "linux"],
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
   "displayName": "Microsoft 365 MCP",
-  "description": "Adds the community Microsoft 365 server for Outlook mail, calendar, OneDrive, contacts, To Do and OneNote through Microsoft Graph, in read-only mode. Enter an existing delegated Graph access token through Ave’s secret prompt. File token caches and local login persistence are disabled; replace the token in Ave when it expires. This preset does not run interactive OAuth.",
+  "description": "Reads Microsoft 365 data through Microsoft Graph with an existing delegated access token supplied through Ave's secret prompt. Interactive login and account mutation tools are absent; replace expired tokens in Ave. Token-cache files are disabled. Local file downloads require an explicit local-write opt-in. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
   "author": {
     "name": "Softeria",
     "url": "https://github.com/Softeria/ms-365-mcp-server"
@@ -16,11 +19,14 @@
   "payload": {
     "server": {
       "transport": "stdio",
-      "command": "server/launch.mjs",
+      "command": "server/launch.sh",
       "env": {
         "MS365_MCP_TENANT_ID": "common",
         "MS365_MCP_LOG_DIR": "$DATA_DIR/logs",
-        "MS365_MCP_REDACT_PII": "true"
+        "MS365_MCP_REDACT_PII": "true",
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
       },
       "auth": "api-key",
       "apiKeyEnv": "MS365_MCP_OAUTH_TOKEN"

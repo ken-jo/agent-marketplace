@@ -1,0 +1,30 @@
+{
+  "id": "jira-mcp",
+  "kind": "python",
+  "secret": {
+    "env": "JIRA_API_TOKEN"
+  },
+  "args": [
+    "-c",
+    "from mcp_atlassian import main; main()",
+    "--read-only"
+  ],
+  "files": {
+    "requirements.lock": "ec78e6d766e6df292e1a3bb809f4b69fb8769c805799b0c315293a1fddca6034"
+  },
+  "source": {
+    "repository": "https://github.com/sooperset/mcp-atlassian",
+    "commit": "5be93a041385e2ba076478787946d93ae02c663f"
+  },
+  "artifact": {
+    "name": "mcp-atlassian",
+    "version": "0.23.1",
+    "url": "https://files.pythonhosted.org/packages/50/74/a95465af44260561a01eff12d6f5da7e74e61bba3d758c5b6e0af9dc020e/mcp_atlassian-0.23.1-py3-none-any.whl",
+    "sha256": "2c00820dabb6d39d9356025a52689cbc411ec4f7d7dd87a64589099084da471a",
+    "license": {
+      "path": "mcp_atlassian-0.23.1.dist-info/licenses/LICENSE",
+      "sha256": "e990a8422c25876d76b9dce9ee720ff2b662d5ca10a842afb0f787a0573276db"
+    }
+  },
+  "pythonVersion": "3.12.12"
+}

@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "figma-context-mcp",
-  "version": "2026.10.26",
+  "version": "2026.10.27",
   "minAppVersion": "0.14.0",
   "displayName": "Figma Context MCP",
-  "description": "Adds the community Framelink server to read Figma file layout and styles and download design images for implementation. It does not edit Figma files; image downloads write local files. Needs a Figma personal access token entered through Ave’s secret prompt. Usage telemetry is disabled.",
+  "description": "Reads Figma layout and styles through Framelink. Image downloads and the local-write download tool are disabled by default and require an explicit local-write opt-in. Supply a Figma personal token through Ave's secret prompt. Telemetry is off. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
   "author": {
     "name": "GLips",
     "url": "https://github.com/GLips/Figma-Context-MCP"
@@ -15,19 +15,20 @@
   "payload": {
     "server": {
       "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "figma-developer-mcp@0.13.2",
-        "--stdio",
-        "--no-telemetry"
-      ],
+      "command": "server/launch.sh",
       "env": {
         "FRAMELINK_TELEMETRY": "off",
-        "IMAGE_DIR": "$DATA_DIR/images"
+        "IMAGE_DIR": "$DATA_DIR/images",
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
       },
       "auth": "api-key",
       "apiKeyEnv": "FIGMA_API_KEY"
     }
-  }
+  },
+  "platforms": [
+    "darwin",
+    "linux"
+  ]
 }

@@ -12,7 +12,14 @@ import launch
 
 class HostCredentialsTest(unittest.TestCase):
     def test_bad_secrets_fail_without_disclosing_the_value(self):
-        for value in ("private-invalid-json", "null", "[]", '{"email":"private-email"}'):
+        import json
+        malformed = ["private-invalid-json", "null", "[]", '{"email":"private-email"}']
+        for field in ("email", "client_id", "client_secret", "refresh_token"):
+            for control in ("\0", "\n", "\t", "\x7f", "\u202e"):
+                credential = dict(email="test@example.invalid", client_id="test-client", client_secret="test-secret", refresh_token="test-refresh")
+                credential[field] = "private-value" + control
+                malformed.append(json.dumps(credential))
+        for value in malformed:
             with self.subTest(value=value), patch.dict(os.environ, {"GOOGLE_WORKSPACE_CREDENTIALS": value}):
                 with self.assertRaises(SystemExit) as error:
                     launch.read_secret()
@@ -42,6 +49,8 @@ class HostCredentialsTest(unittest.TestCase):
                     OAuth21SessionStore().store_oauth_state("state", {})
             self.assertIn("--read-only", sys.argv)
             self.assertIn("start_google_auth", sys.argv)
+            self.assertIn("get_gmail_message_content", sys.argv)
+            self.assertIn("get_drive_file_download_url", sys.argv)
             self.assertNotIn("test-refresh", str(sys.argv))
             self.assertNotIn("GOOGLE_WORKSPACE_CREDENTIALS", os.environ)
             observed.append(True)

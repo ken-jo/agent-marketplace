@@ -2,14 +2,20 @@
 import json
 import os
 import sys
+import unicodedata
 
 
 def read_secret():
     try:
-        value = json.loads(os.environ.pop("GOOGLE_WORKSPACE_CREDENTIALS", ""))
+        raw = os.environ.pop("GOOGLE_WORKSPACE_CREDENTIALS", "")
+        if any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in raw):
+            raise ValueError()
+        value = json.loads(raw)
         fields = ("email", "client_id", "client_secret", "refresh_token")
-        if not isinstance(value, dict) or not all(
-            isinstance(value.get(key), str) and value[key].strip() for key in fields
+        if not isinstance(value, dict) or set(value) != set(fields) or not all(
+            isinstance(value.get(key), str) and value[key].strip()
+            and not any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in value[key])
+            for key in fields
         ):
             raise ValueError()
         return value
@@ -74,9 +80,12 @@ def main():
     log_formatter.configure_file_logging = lambda *args, **kwargs: False
     import main as workspace
 
+    disabled = ["start_google_auth"]
+    if os.environ.get("AVE_CONNECTOR_ALLOW_LOCAL_WRITES") != "true":
+        disabled += ["get_gmail_message_content", "get_drive_file_download_url"]
     sys.argv = ["workspace-mcp", "--transport", "stdio", "--single-user", "--read-only",
                 "--tool-tier", "core", "--tools", "gmail", "calendar", "drive", "docs", "sheets",
-                "--disabled-tools", "start_google_auth"]
+                "--disabled-tools", *disabled]
     workspace.main()
 
 

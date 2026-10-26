@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "confluence-mcp",
-  "version": "2026.10.26",
+  "version": "2026.10.27",
   "minAppVersion": "0.14.0",
   "displayName": "Confluence MCP",
-  "description": "Adds the community mcp-atlassian server for Confluence Cloud pages, in read-only mode. Set your wiki URL and account email in Ave; enter the API token through Ave's secret prompt. This preset uses Cloud API-token authentication.",
+  "description": "Reads Confluence Cloud pages through mcp-atlassian in read-only mode. Set the wiki URL and account email in Ave and supply the API token through its secret prompt. Attachment downloads may write local files. Requires Node.js 24+ and uv (or an explicit AVE_CONNECTOR_UV path); installs only hash-locked Python packages.",
   "author": {
     "name": "sooperset",
     "url": "https://github.com/sooperset/mcp-atlassian"
@@ -15,18 +15,21 @@
   "payload": {
     "server": {
       "transport": "stdio",
-      "command": "uvx",
-      "args": [
-        "mcp-atlassian==0.23.1",
-        "--read-only"
-      ],
+      "command": "server/launch.sh",
       "env": {
         "CONFLUENCE_URL": "",
         "CONFLUENCE_USERNAME": "",
-        "READ_ONLY_MODE": "true"
+        "READ_ONLY_MODE": "true",
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
       },
       "auth": "api-key",
       "apiKeyEnv": "CONFLUENCE_API_TOKEN"
     }
-  }
+  },
+  "platforms": [
+    "darwin",
+    "linux"
+  ]
 }

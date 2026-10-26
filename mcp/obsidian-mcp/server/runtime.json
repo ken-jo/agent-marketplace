@@ -1,0 +1,31 @@
+{
+  "id": "obsidian-mcp",
+  "kind": "python",
+  "secret": {
+    "env": "OBSIDIAN_API_KEY"
+  },
+  "args": [],
+  "files": {
+    "requirements.lock": "4458a2877b0dbf341108198954c4e9ddc18e7fa0b1bfd7173b5f6cd2e87c19df",
+    "obsidian.py": "b8e35ec3c834453b129aff4bdb64411a29429c31ef383f54725857b64eea3526",
+    "wheels/mcp_obsidian-0.2.2-py3-none-any.whl": "4bae7be5f385991e76eb6edcc4838b79eac08a585024bb2e91a4fa3f2231177f"
+  },
+  "entry": "obsidian.py",
+  "source": {
+    "repository": "https://github.com/MarkusPfundstein/mcp-obsidian",
+    "commit": "5ee0b84fa8319fd2fdf0db0ee1febb065e712a15"
+  },
+  "artifact": {
+    "name": "mcp-obsidian",
+    "version": "0.2.2",
+    "wheel": "wheels/mcp_obsidian-0.2.2-py3-none-any.whl",
+    "sha256": "4bae7be5f385991e76eb6edcc4838b79eac08a585024bb2e91a4fa3f2231177f",
+    "build": {
+      "sourceArchiveSha256": "75827fcad3b7d7339ec478c413db834111a5b299c7454b3f1e72ad39396b61e5",
+      "builder": "uv 0.11.28",
+      "command": "uv build --wheel",
+      "reproducibleBuild": false
+    }
+  },
+  "pythonVersion": "3.12.12"
+}

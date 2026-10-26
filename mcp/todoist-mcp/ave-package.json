@@ -2,10 +2,10 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "todoist-mcp",
-  "version": "2026.10.26",
+  "version": "2026.10.27",
   "minAppVersion": "0.14.0",
   "displayName": "Todoist MCP",
-  "description": "Adds Doist’s Todoist server for reading and changing tasks, projects, sections, labels, filters and comments. Needs Node 24 or later and a Todoist API token entered through Ave’s secret prompt. This server has no read-only switch and exposes write tools.",
+  "description": "Reads Todoist tasks, projects, labels, filters and comments with a default tool allowlist. Creating, editing, completing and deleting objects requires an explicit write opt-in. Supply the Todoist API token through Ave's secret prompt. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
   "author": {
     "name": "Doist",
     "url": "https://github.com/Doist/todoist-mcp"
@@ -15,13 +15,18 @@
   "payload": {
     "server": {
       "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@doist/todoist-mcp@13.6.3"
-      ],
+      "command": "server/launch.sh",
       "auth": "api-key",
-      "apiKeyEnv": "TODOIST_API_KEY"
+      "apiKeyEnv": "TODOIST_API_KEY",
+      "env": {
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
+      }
     }
-  }
+  },
+  "platforms": [
+    "darwin",
+    "linux"
+  ]
 }

@@ -1,0 +1,44 @@
+{
+  "id": "figma-context-mcp",
+  "kind": "npm",
+  "secret": {
+    "env": "FIGMA_API_KEY"
+  },
+  "args": [
+    "--stdio",
+    "--no-telemetry"
+  ],
+  "files": {
+    "package.json": "99d8cd6db4520ab3e354e24c39e6ee8b074165f1f01d0f320319c9ef3ecac8db",
+    "package-lock.json": "bf11e8164f7ac0127d6ae01daadff841e6823818b7e30c0a0ca66d082c2131dd",
+    "policy.mjs": "4df7b9df573092a93209d8af06cb6dadd23511c5692efe28fd2a54ba44f356de"
+  },
+  "source": {
+    "repository": "git+https://github.com/GLips/Figma-Context-MCP.git",
+    "commit": "24713d888b56bfbec97abf66db3afea4b8ecb9e4",
+    "gitHead": null
+  },
+  "artifact": {
+    "name": "figma-developer-mcp",
+    "version": "0.13.2",
+    "url": "https://registry.npmjs.org/figma-developer-mcp/-/figma-developer-mcp-0.13.2.tgz",
+    "integrity": "sha512-7Flx0S/3gI7dIm+9G6BCogwne0o9LdYaCxtDLappiZZUZgqoNiXws/T1kn2R2tqr1iRzFPStqlwf+bPrcscQ0Q==",
+    "sha256": "475e5d4d753451e087bcb402d67283173d97b671c3f9fe1d46edf9cb80d7a93a",
+    "license": {
+      "path": "package/LICENSE",
+      "sha256": "0b4a760a1cb4ff1cd3dd173d5c66137196773689d35dcbb04ce1a7948f8e2c95"
+    }
+  },
+  "entry": "dist/bin.js",
+  "tools": {
+    "sdk": "@modelcontextprotocol/sdk/server/mcp.js",
+    "read": [
+      "get_figma_data"
+    ],
+    "write": [],
+    "local": [
+      "download_figma_images"
+    ],
+    "never": []
+  }
+}

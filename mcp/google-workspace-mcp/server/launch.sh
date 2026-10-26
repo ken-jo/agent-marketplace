@@ -1,3 +1,7 @@
 #!/bin/sh
 set -eu
-exec uvx --from 'git+https://github.com/taylorwilsdon/google_workspace_mcp@b5cf07e6078ae10a596710d77569e9430e01ebd4' python "$(dirname "$0")/launch.py"
+if ! command -v node >/dev/null 2>&1; then
+  printf '%s\n' "This locked connector requires Node.js 24+ on Ave's PATH. Install Node.js or add its bin directory to Ave's PATH before enabling the connector." >&2
+  exit 1
+fi
+exec node "${0%/*}/launch.mjs"
