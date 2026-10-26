@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "airtable-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "Airtable MCP",
+  "description": "Adds the community Airtable server for bases, tables and records. Enter a personal access token through Ave’s secret prompt with only schema.bases:read and data.records:read scopes and access to the required bases. The server has no read-only switch; write tools remain listed but these token scopes prevent writes.",
+  "author": {
+    "name": "domdomegg",
+    "url": "https://github.com/domdomegg/airtable-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/domdomegg/airtable-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "airtable-mcp-server@1.14.0"
+      ],
+      "auth": "api-key",
+      "apiKeyEnv": "AIRTABLE_API_KEY",
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "figma-context-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "Figma Context MCP",
+  "description": "Adds the community Framelink server to read Figma file layout and styles and download design images for implementation. It does not edit Figma files; image downloads write local files. Needs a Figma personal access token entered through Ave’s secret prompt. Usage telemetry is disabled.",
+  "author": {
+    "name": "GLips",
+    "url": "https://github.com/GLips/Figma-Context-MCP"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/GLips/Figma-Context-MCP",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "figma-developer-mcp@0.13.2",
+        "--stdio",
+        "--no-telemetry"
+      ],
+      "env": {
+        "FRAMELINK_TELEMETRY": "off",
+        "IMAGE_DIR": "$DATA_DIR/images"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "FIGMA_API_KEY"
+    }
+  }
+}

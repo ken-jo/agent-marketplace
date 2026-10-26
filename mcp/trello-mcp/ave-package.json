@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "trello-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "platforms": ["darwin", "linux"],
+  "displayName": "Trello MCP",
+  "description": "Adds the community Trello server for reading and changing boards, lists, cards and checklists. Enter a JSON object with apiKey and token in Ave’s secret prompt; both stay in the child environment. The server has no read-only switch; use a token authorized with scope=read to prevent writes.",
+  "author": {
+    "name": "delorenj",
+    "url": "https://github.com/delorenj/mcp-server-trello"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/delorenj/mcp-server-trello",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.mjs",
+      "auth": "api-key",
+      "apiKeyEnv": "TRELLO_CREDENTIALS"
+    }
+  }
+}

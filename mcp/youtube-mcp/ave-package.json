@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "youtube-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "YouTube MCP",
+  "description": "Adds the community YouTube server for read-only video search, channel and playlist lookups, creator discovery and transcript retrieval. Needs a YouTube Data API v3 key entered through Ave’s secret prompt. Transcript availability depends on the video and upstream service.",
+  "author": {
+    "name": "Zubeid Hendricks",
+    "url": "https://github.com/ZubeidHendricks/youtube-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ZubeidHendricks/youtube-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "zubeid-youtube-mcp-server@1.0.2"
+      ],
+      "auth": "api-key",
+      "apiKeyEnv": "YOUTUBE_API_KEY",
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "confluence-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "Confluence MCP",
+  "description": "Adds the community mcp-atlassian server for Confluence Cloud pages, in read-only mode. Set your wiki URL and account email in Ave; enter the API token through Ave's secret prompt. This preset uses Cloud API-token authentication.",
+  "author": {
+    "name": "sooperset",
+    "url": "https://github.com/sooperset/mcp-atlassian"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/sooperset/mcp-atlassian",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-atlassian==0.23.1",
+        "--read-only"
+      ],
+      "env": {
+        "CONFLUENCE_URL": "",
+        "CONFLUENCE_USERNAME": "",
+        "READ_ONLY_MODE": "true"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "CONFLUENCE_API_TOKEN"
+    }
+  }
+}

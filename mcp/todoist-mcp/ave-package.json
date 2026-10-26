@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "todoist-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "displayName": "Todoist MCP",
+  "description": "Adds Doist’s Todoist server for reading and changing tasks, projects, sections, labels, filters and comments. Needs Node 24 or later and a Todoist API token entered through Ave’s secret prompt. This server has no read-only switch and exposes write tools.",
+  "author": {
+    "name": "Doist",
+    "url": "https://github.com/Doist/todoist-mcp"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Doist/todoist-mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@doist/todoist-mcp@13.6.3"
+      ],
+      "auth": "api-key",
+      "apiKeyEnv": "TODOIST_API_KEY"
+    }
+  }
+}

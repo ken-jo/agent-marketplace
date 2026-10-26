@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "ms-365-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "platforms": ["darwin", "linux"],
+  "displayName": "Microsoft 365 MCP",
+  "description": "Adds the community Microsoft 365 server for Outlook mail, calendar, OneDrive, contacts, To Do and OneNote through Microsoft Graph, in read-only mode. Enter an existing delegated Graph access token through Ave’s secret prompt. File token caches and local login persistence are disabled; replace the token in Ave when it expires. This preset does not run interactive OAuth.",
+  "author": {
+    "name": "Softeria",
+    "url": "https://github.com/Softeria/ms-365-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Softeria/ms-365-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.mjs",
+      "env": {
+        "MS365_MCP_TENANT_ID": "common",
+        "MS365_MCP_LOG_DIR": "$DATA_DIR/logs",
+        "MS365_MCP_REDACT_PII": "true"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "MS365_MCP_OAUTH_TOKEN"
+    }
+  }
+}

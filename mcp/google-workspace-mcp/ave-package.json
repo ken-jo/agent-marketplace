@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "google-workspace-mcp",
+  "version": "2026.10.26",
+  "minAppVersion": "0.14.0",
+  "platforms": ["darwin", "linux"],
+  "displayName": "Google Workspace MCP",
+  "description": "Adds the community Google Workspace server for Gmail, Calendar, Drive, Docs and Sheets in read-only mode. Enter a JSON object with email, client_id, client_secret and refresh_token from your own desktop OAuth client through Ave’s secret prompt. The adapter keeps credentials in memory and disables interactive login; any rotated refresh token must be updated in Ave before restart.",
+  "author": {
+    "name": "Taylor Wilsdon",
+    "url": "https://github.com/taylorwilsdon/google_workspace_mcp"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/taylorwilsdon/google_workspace_mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.sh",
+      "env": {
+        "WORKSPACE_MCP_CREDENTIALS_DIR": "$DATA_DIR/credentials"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "GOOGLE_WORKSPACE_CREDENTIALS"
+    }
+  }
+}
