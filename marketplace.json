@@ -244,14 +244,18 @@
       "name": "airtable-mcp",
       "path": "mcp/airtable-mcp",
       "displayName": "Airtable MCP",
-      "description": "Adds the community Airtable server for bases, tables and records. Enter a personal access token through Ave’s secret prompt with only schema.bases:read and data.records:read scopes and access to the required bases. The server has no read-only switch; write tools remain listed but these token scopes prevent writes.",
-      "latest": "2026.10.26",
+      "description": "Reads Airtable bases, tables, records and comments with a default tool allowlist. Service writes require an explicit opt-in. Supply a PAT through Ave's secret prompt with only the needed read scopes and base access by default. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -308,14 +312,18 @@
       "name": "confluence-mcp",
       "path": "mcp/confluence-mcp",
       "displayName": "Confluence MCP",
-      "description": "Adds the community mcp-atlassian server for Confluence Cloud pages, in read-only mode. Set your wiki URL and account email in Ave; enter the API token through Ave's secret prompt. This preset uses Cloud API-token authentication.",
-      "latest": "2026.10.26",
+      "description": "Reads Confluence Cloud pages through mcp-atlassian in read-only mode. Set the wiki URL and account email in Ave and supply the API token through its secret prompt. Attachment downloads may write local files. Requires Node.js 24+ and uv (or an explicit AVE_CONNECTOR_UV path); installs only hash-locked Python packages.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -372,14 +380,18 @@
       "name": "figma-context-mcp",
       "path": "mcp/figma-context-mcp",
       "displayName": "Figma Context MCP",
-      "description": "Adds the community Framelink server to read Figma file layout and styles and download design images for implementation. It does not edit Figma files; image downloads write local files. Needs a Figma personal access token entered through Ave’s secret prompt. Usage telemetry is disabled.",
-      "latest": "2026.10.26",
+      "description": "Reads Figma layout and styles through Framelink. Image downloads and the local-write download tool are disabled by default and require an explicit local-write opt-in. Supply a Figma personal token through Ave's secret prompt. Telemetry is off. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -496,18 +508,18 @@
       "name": "google-workspace-mcp",
       "path": "mcp/google-workspace-mcp",
       "displayName": "Google Workspace MCP",
-      "description": "Adds the community Google Workspace server for Gmail, Calendar, Drive, Docs and Sheets in read-only mode. Enter a JSON object with email, client_id, client_secret and refresh_token from your own desktop OAuth client through Ave’s secret prompt. The adapter keeps credentials in memory and disables interactive login; any rotated refresh token must be updated in Ave before restart.",
-      "latest": "2026.10.26",
+      "description": "Reads Gmail, Calendar, Drive, Docs and Sheets with memory-only OAuth credentials. Enter JSON with email, client_id, client_secret and refresh_token through Ave's secret prompt. Interactive login is disabled. Local download and full-message export tools require an explicit local-write opt-in. Requires Node.js 24+ and uv (or AVE_CONNECTOR_UV); the source wheel and dependencies are hash-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
           "platforms": [
             "darwin",
             "linux"
           ],
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -516,14 +528,18 @@
       "name": "jira-mcp",
       "path": "mcp/jira-mcp",
       "displayName": "Jira MCP",
-      "description": "Adds the community mcp-atlassian server for Jira Cloud issues, in read-only mode. Set your site URL and account email in Ave; enter the API token through Ave's secret prompt. This preset uses Cloud API-token authentication.",
-      "latest": "2026.10.26",
+      "description": "Reads Jira Cloud issues through mcp-atlassian in read-only mode. Set the site URL and account email in Ave and supply the API token through its secret prompt. Attachment downloads may write local files. Requires Node.js 24+ and uv (or an explicit AVE_CONNECTOR_UV path); installs only hash-locked Python packages.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -564,18 +580,18 @@
       "name": "ms-365-mcp",
       "path": "mcp/ms-365-mcp",
       "displayName": "Microsoft 365 MCP",
-      "description": "Adds the community Microsoft 365 server for Outlook mail, calendar, OneDrive, contacts, To Do and OneNote through Microsoft Graph, in read-only mode. Enter an existing delegated Graph access token through Ave’s secret prompt. File token caches and local login persistence are disabled; replace the token in Ave when it expires. This preset does not run interactive OAuth.",
-      "latest": "2026.10.26",
+      "description": "Reads Microsoft 365 data through Microsoft Graph with an existing delegated access token supplied through Ave's secret prompt. Interactive login and account mutation tools are absent; replace expired tokens in Ave. Token-cache files are disabled. Local file downloads require an explicit local-write opt-in. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
           "platforms": [
             "darwin",
             "linux"
           ],
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -622,18 +638,18 @@
       "name": "obsidian-mcp",
       "path": "mcp/obsidian-mcp",
       "displayName": "Obsidian MCP",
-      "description": "Adds the community Obsidian server for searching, reading, creating, editing and deleting vault notes through the Local REST API community plugin on this computer. Enable that plugin’s HTTPS endpoint on port 27124 and enter its API key through Ave’s secret prompt. No read-only switch is available; write tools are exposed.",
-      "latest": "2026.10.26",
+      "description": "Reads and searches Obsidian vault notes through the Local REST API plugin on this computer, with a default tool allowlist. Creating, editing or deleting notes requires an explicit write opt-in. Supply the plugin API key through Ave's secret prompt. Requires Node.js 24+ and uv (or AVE_CONNECTOR_UV); the reviewed source wheel and Python dependencies are hash-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
           "platforms": [
             "darwin",
             "linux"
           ],
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -810,14 +826,18 @@
       "name": "todoist-mcp",
       "path": "mcp/todoist-mcp",
       "displayName": "Todoist MCP",
-      "description": "Adds Doist’s Todoist server for reading and changing tasks, projects, sections, labels, filters and comments. Needs Node 24 or later and a Todoist API token entered through Ave’s secret prompt. This server has no read-only switch and exposes write tools.",
-      "latest": "2026.10.26",
+      "description": "Reads Todoist tasks, projects, labels, filters and comments with a default tool allowlist. Creating, editing, completing and deleting objects requires an explicit write opt-in. Supply the Todoist API token through Ave's secret prompt. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -826,18 +846,18 @@
       "name": "trello-mcp",
       "path": "mcp/trello-mcp",
       "displayName": "Trello MCP",
-      "description": "Adds the community Trello server for reading and changing boards, lists, cards and checklists. Enter a JSON object with apiKey and token in Ave’s secret prompt; both stay in the child environment. The server has no read-only switch; use a token authorized with scope=read to prevent writes.",
-      "latest": "2026.10.26",
+      "description": "Reads Trello boards, lists, cards and checklists with a default tool allowlist. Service writes and local downloads/configuration changes require separate explicit opt-ins. Enter JSON with apiKey and token through Ave's secret prompt; use a read-scoped token by default. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
           "platforms": [
             "darwin",
             "linux"
           ],
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
@@ -846,14 +866,18 @@
       "name": "youtube-mcp",
       "path": "mcp/youtube-mcp",
       "displayName": "YouTube MCP",
-      "description": "Adds the community YouTube server for read-only video search, channel and playlist lookups, creator discovery and transcript retrieval. Needs a YouTube Data API v3 key entered through Ave’s secret prompt. Transcript availability depends on the video and upstream service.",
-      "latest": "2026.10.26",
+      "description": "Reads YouTube video, channel, playlist and transcript data through the community server. Supply a YouTube Data API v3 key through Ave's secret prompt. Transcript availability depends on the video and service. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+      "latest": "2026.10.27",
       "versions": [
         {
-          "version": "2026.10.26",
-          "commit": "79783c7e3e81a8a540b91af2ee4a41ed8a033943",
+          "version": "2026.10.27",
+          "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
           "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-26T12:48:26Z"
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-10-26T14:18:47Z"
         }
       ]
     },
