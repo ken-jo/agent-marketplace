@@ -75,6 +75,38 @@ jobs:
       - name: Plugin build helper
         run: node tools/verified-import.mjs plugin tools/plugin-build --allow-development --helper
 
+  connectors:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.11.28"
+      - name: Check artifact inventories and frozen dependency closures
+        run: node tools/connector-pins.mjs
+      - name: Check vendored builds against the reviewed source commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/connector-build-check.mjs
+      - name: Check default tool lists and reject direct calls to blocked tools
+        run: node tools/connector-smoke.mjs
+      - name: Check explicit write opt-ins without enabling interactive authentication
+        run: node tools/connector-smoke.mjs --opt-in trello-mcp todoist-mcp airtable-mcp obsidian-mcp figma-context-mcp google-workspace-mcp ms-365-mcp
+      - name: Check the Google credential adapter with the locked Python environment
+        working-directory: mcp/google-workspace-mcp/server
+        run: |
+          uv --no-config venv --python 3.12.12 "$RUNNER_TEMP/google-credential-test"
+          uv --no-config pip sync --python "$RUNNER_TEMP/google-credential-test/bin/python" --require-hashes --only-binary :all: requirements.lock
+          "$RUNNER_TEMP/google-credential-test/bin/python" -B test_launch.py
+
   plugin-dirs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

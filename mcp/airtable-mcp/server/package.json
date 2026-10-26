@@ -1,0 +1,9 @@
+{
+  "name": "ave-airtable-mcp-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "airtable-mcp-server": "1.14.0"
+  }
+}

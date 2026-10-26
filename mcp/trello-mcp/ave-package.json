@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "trello-mcp",
+  "version": "2026.10.27",
+  "minAppVersion": "0.14.0",
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "displayName": "Trello MCP",
+  "description": "Reads Trello boards, lists, cards and checklists with a default tool allowlist. Service writes and local downloads/configuration changes require separate explicit opt-ins. Enter JSON with apiKey and token through Ave's secret prompt; use a read-scoped token by default. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+  "author": {
+    "name": "delorenj",
+    "url": "https://github.com/delorenj/mcp-server-trello"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/delorenj/mcp-server-trello",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.sh",
+      "auth": "api-key",
+      "apiKeyEnv": "TRELLO_CREDENTIALS",
+      "env": {
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
+      }
+    }
+  }
+}

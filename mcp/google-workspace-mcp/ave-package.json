@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "google-workspace-mcp",
+  "version": "2026.10.27",
+  "minAppVersion": "0.14.0",
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "displayName": "Google Workspace MCP",
+  "description": "Reads Gmail, Calendar, Drive, Docs and Sheets with memory-only OAuth credentials. Enter JSON with email, client_id, client_secret and refresh_token through Ave's secret prompt. Interactive login is disabled. Local download and full-message export tools require an explicit local-write opt-in. Requires Node.js 24+ and uv (or AVE_CONNECTOR_UV); the source wheel and dependencies are hash-locked.",
+  "author": {
+    "name": "Taylor Wilsdon",
+    "url": "https://github.com/taylorwilsdon/google_workspace_mcp"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/taylorwilsdon/google_workspace_mcp",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.sh",
+      "env": {
+        "WORKSPACE_MCP_CREDENTIALS_DIR": "$DATA_DIR/credentials",
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "GOOGLE_WORKSPACE_CREDENTIALS"
+    }
+  }
+}

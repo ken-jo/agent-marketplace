@@ -128,6 +128,8 @@ Add or change the package directory, raise `version` in its
 `ave-package.json`, and run `bun run index`. Versions strictly increase, and
 a published version never moves to another commit.
 
+For the third-party connector selection, verified upstream pins, credential setup and access limits, see [Connector wave 1](docs/connectors-wave1.md).
+
 ## Checks
 
 Use a Node version allowed by [`package.json` engines](package.json) and the Bun version pinned in the [validation workflow's `env`](.github/workflows/validate.yml).

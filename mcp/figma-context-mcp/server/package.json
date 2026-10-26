@@ -1,0 +1,9 @@
+{
+  "name": "ave-figma-context-mcp-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "figma-developer-mcp": "0.13.2"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "id": "airtable-mcp",
+  "kind": "npm",
+  "secret": {
+    "env": "AIRTABLE_API_KEY"
+  },
+  "args": [],
+  "files": {
+    "package.json": "7f5dc10f530f7ee0b20d8194768920454ed88b429fd388d6a821366c46680d58",
+    "package-lock.json": "5aa96104b29b7b0a5d78d64abc6366fe2ac6f3d0fb80ed1439eb883428f63a82",
+    "policy.mjs": "4df7b9df573092a93209d8af06cb6dadd23511c5692efe28fd2a54ba44f356de"
+  },
+  "source": {
+    "repository": "git+https://github.com/domdomegg/airtable-mcp-server.git",
+    "commit": "e8b6dc621858becb6e685cab57d00fb2b0cf0ba9",
+    "gitHead": "e8b6dc621858becb6e685cab57d00fb2b0cf0ba9"
+  },
+  "artifact": {
+    "name": "airtable-mcp-server",
+    "version": "1.14.0",
+    "url": "https://registry.npmjs.org/airtable-mcp-server/-/airtable-mcp-server-1.14.0.tgz",
+    "integrity": "sha512-OYUwkrIhXsYRqx39wQ5R7OAM5R0RdDWJRb8CBMLFU8OGPAB1Jmm4oOrLtaH3Qmtd+UG2IAT+nFlFrqfs//2klA==",
+    "sha256": "8ab37fe6ed7504d6bcf9026d524ce6e09995916e91a5dc997768a9fcdeb54c87",
+    "license": {
+      "path": "package/LICENSE",
+      "sha256": "d8d8cea0e4c5d67de7d6ab29b026cb021bd04c82b77455daaced460fdfa56d06"
+    }
+  },
+  "entry": "dist/main.js",
+  "tools": {
+    "sdk": "@modelcontextprotocol/sdk/server/mcp.js",
+    "read": [
+      "list_records",
+      "search_records",
+      "list_bases",
+      "list_tables",
+      "describe_table",
+      "get_record",
+      "list_comments"
+    ],
+    "write": [
+      "create_record",
+      "update_records",
+      "delete_records",
+      "create_table",
+      "update_table",
+      "create_field",
+      "update_field",
+      "create_comment",
+      "upload_attachment"
+    ],
+    "local": [],
+    "never": []
+  }
+}

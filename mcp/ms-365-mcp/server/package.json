@@ -1,0 +1,9 @@
+{
+  "name": "ave-ms-365-mcp-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@softeria/ms-365-mcp-server": "0.172.0"
+  }
+}

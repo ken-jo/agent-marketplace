@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "jira-mcp",
+  "version": "2026.10.27",
+  "minAppVersion": "0.14.0",
+  "displayName": "Jira MCP",
+  "description": "Reads Jira Cloud issues through mcp-atlassian in read-only mode. Set the site URL and account email in Ave and supply the API token through its secret prompt. Attachment downloads may write local files. Requires Node.js 24+ and uv (or an explicit AVE_CONNECTOR_UV path); installs only hash-locked Python packages.",
+  "author": {
+    "name": "sooperset",
+    "url": "https://github.com/sooperset/mcp-atlassian"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/sooperset/mcp-atlassian",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.sh",
+      "env": {
+        "JIRA_URL": "",
+        "JIRA_USERNAME": "",
+        "READ_ONLY_MODE": "true",
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
+      },
+      "auth": "api-key",
+      "apiKeyEnv": "JIRA_API_TOKEN"
+    }
+  },
+  "platforms": [
+    "darwin",
+    "linux"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "kind": "mcp",
+  "name": "airtable-mcp",
+  "version": "2026.10.27",
+  "minAppVersion": "0.14.0",
+  "displayName": "Airtable MCP",
+  "description": "Reads Airtable bases, tables, records and comments with a default tool allowlist. Service writes require an explicit opt-in. Supply a PAT through Ave's secret prompt with only the needed read scopes and base access by default. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
+  "author": {
+    "name": "domdomegg",
+    "url": "https://github.com/domdomegg/airtable-mcp-server"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/domdomegg/airtable-mcp-server",
+  "payload": {
+    "server": {
+      "transport": "stdio",
+      "command": "server/launch.sh",
+      "auth": "api-key",
+      "apiKeyEnv": "AIRTABLE_API_KEY",
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "AVE_CONNECTOR_DATA_DIR": "$DATA_DIR/locked-runtime",
+        "AVE_CONNECTOR_ALLOW_WRITES": "false",
+        "AVE_CONNECTOR_ALLOW_LOCAL_WRITES": "false"
+      }
+    }
+  },
+  "platforms": [
+    "darwin",
+    "linux"
+  ]
+}

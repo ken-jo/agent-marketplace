@@ -1,0 +1,48 @@
+{
+  "id": "youtube-mcp",
+  "kind": "npm",
+  "secret": {
+    "env": "YOUTUBE_API_KEY"
+  },
+  "args": [],
+  "files": {
+    "package.json": "9dcab20fb4a2bc0ee494337ae1399e019e03fee161d3e7b18693e4c75d5989ba",
+    "package-lock.json": "69390a3b608d7f50b814c4faed3d0f9aebaca0cde515c87c479ab5a516ffd868",
+    "policy.mjs": "4df7b9df573092a93209d8af06cb6dadd23511c5692efe28fd2a54ba44f356de"
+  },
+  "source": {
+    "repository": "git+https://github.com/ZubeidHendricks/youtube-mcp-server.git",
+    "commit": "7a3f6e72b8ff7643456f6b6f2cd5dab293cd3551",
+    "gitHead": "7a3f6e72b8ff7643456f6b6f2cd5dab293cd3551"
+  },
+  "artifact": {
+    "name": "zubeid-youtube-mcp-server",
+    "version": "1.0.2",
+    "url": "https://registry.npmjs.org/zubeid-youtube-mcp-server/-/zubeid-youtube-mcp-server-1.0.2.tgz",
+    "integrity": "sha512-l003/ro9Hkb5a1LJ+Ai8mBk9M9LA/yuhOaoNqf2+9e2NVPtVuZkTxpOX+TCsWvgIo8N4oIM+X+dLATvXDhRieQ==",
+    "sha256": "245d36775a47e8f01ddf6c2c725c8529ed8a9a35be7a9574cf5cecb2d588fc40",
+    "license": {
+      "path": "package/LICENSE",
+      "sha256": "debbfc9c0ca42631ce40793acfa0c2e169fa65629070a587439d49ff7a16befd"
+    }
+  },
+  "entry": "dist/cli.js",
+  "tools": {
+    "sdk": "@modelcontextprotocol/sdk/server/mcp.js",
+    "read": [
+      "videos_getVideo",
+      "videos_searchVideos",
+      "transcripts_getTranscript",
+      "channels_getChannel",
+      "channels_getChannels",
+      "channels_searchChannels",
+      "channels_findCreators",
+      "channels_listVideos",
+      "playlists_getPlaylist",
+      "playlists_getPlaylistItems"
+    ],
+    "write": [],
+    "local": [],
+    "never": []
+  }
+}

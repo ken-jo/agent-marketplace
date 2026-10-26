@@ -1,0 +1,86 @@
+{
+  "id": "todoist-mcp",
+  "kind": "npm",
+  "secret": {
+    "env": "TODOIST_API_KEY"
+  },
+  "args": [],
+  "files": {
+    "package.json": "f6c5f181040f39585920346d82714e94ced2712ce137f57290b9647ec0b3bc1f",
+    "package-lock.json": "7388c3cd33d6a75615d4a290b819da28ef73632b4b92538e3b17f44160641c71",
+    "policy.mjs": "4df7b9df573092a93209d8af06cb6dadd23511c5692efe28fd2a54ba44f356de"
+  },
+  "source": {
+    "repository": "git+https://github.com/Doist/todoist-mcp.git",
+    "commit": "788feb35599f7794ed923da41b08060ae8f4976e",
+    "gitHead": "788feb35599f7794ed923da41b08060ae8f4976e"
+  },
+  "artifact": {
+    "name": "@doist/todoist-mcp",
+    "version": "13.6.3",
+    "url": "https://registry.npmjs.org/@doist/todoist-mcp/-/todoist-mcp-13.6.3.tgz",
+    "integrity": "sha512-xicQviSgS9mC8nsvoZOnFCEh7xSqkao9fJYoK1na6GQzBW7GNAv6I5iag3++51oiQwldJLf6OEi3Ac6grjGxNA==",
+    "sha256": "444211d04a50402a5af47489e30e67592a358c61dae3d993dc1282cc379903e9",
+    "license": {
+      "path": "package/LICENSE",
+      "sha256": "4484e3e6a93f87d1bd6d9376323c4ec17b7a30a4b1985b185d958ce17904b4d0"
+    }
+  },
+  "entry": "dist/main.js",
+  "tools": {
+    "sdk": "@modelcontextprotocol/server",
+    "read": [
+      "find-tasks",
+      "find-tasks-by-date",
+      "find-completed-tasks",
+      "find-projects",
+      "find-sections",
+      "find-comments",
+      "find-reminders",
+      "view-attachment",
+      "find-labels",
+      "find-filters",
+      "find-activity",
+      "get-productivity-stats",
+      "get-project-health",
+      "get-project-activity-stats",
+      "analyze-project-health",
+      "get-workspace-insights",
+      "get-overview",
+      "fetch-object",
+      "user-info",
+      "find-project-collaborators",
+      "export-project-template",
+      "list-workspaces",
+      "search",
+      "fetch"
+    ],
+    "write": [
+      "add-tasks",
+      "complete-tasks",
+      "uncomplete-tasks",
+      "update-tasks",
+      "reschedule-tasks",
+      "add-projects",
+      "update-projects",
+      "project-management",
+      "project-move",
+      "add-sections",
+      "update-sections",
+      "add-comments",
+      "update-comments",
+      "add-reminders",
+      "update-reminders",
+      "add-labels",
+      "update-labels",
+      "add-filters",
+      "update-filters",
+      "delete-object",
+      "reorder-objects",
+      "manage-assignments",
+      "import-project-template"
+    ],
+    "local": [],
+    "never": []
+  }
+}
