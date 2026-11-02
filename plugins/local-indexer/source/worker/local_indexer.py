@@ -86,6 +86,11 @@ class IndexResult:
     page_count: Optional[int] = None
     line_count: Optional[int] = None
     errors: List[str] = field(default_factory=list)
+    # For status == "failed": True when the same file may index on a later
+    # try (the caption provider or relay was unavailable, rate limited, timed
+    # out, or refused egress for a runtime reason). False is the worker's
+    # verdict on the file itself: too large, unparseable, missing config.
+    retryable: bool = False
     # True 면 vector(임베딩) 까지 성공적으로 생성. False 면 BM25 / chunk 까지는
     # 가능했지만 임베딩이 생략됐다는 뜻 (caption rejected, embedding client
     # unavailable, network 실패 등). 플러그인은 이 값이 False 면 사용자
@@ -357,6 +362,7 @@ class LocalIndexer:
                 chunk_count=0,
                 status="failed",
                 errors=[str(exc)],
+                retryable=bool(getattr(exc, "retryable", False)),
             )
         except Exception as exc:  # pragma: no cover - parser runtime error
             self._mark_failed(doc_id, abs_path, doc_name, doc_type, mtime_ms)
@@ -976,8 +982,12 @@ class LocalIndexer:
             )
         except Exception as exc:
             _info(log, "indexer.caption.rejected_path", path=image_path, error=str(exc))
+            # Outside the roots is runtime state (the host pushes the roots),
+            # so a later try after a roots sync may pass.
+            outside_roots = type(exc).__name__ == "PathNotAllowed"
             raise CaptionError(
-                f"이미지 경로가 워커 allowed_roots 밖입니다: {exc}"
+                f"이미지 경로가 워커 allowed_roots 밖입니다: {exc}",
+                retryable=outside_roots,
             ) from exc
 
         # The host pushes the api_key matching the active provider via

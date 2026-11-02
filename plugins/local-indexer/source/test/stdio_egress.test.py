@@ -241,3 +241,113 @@ def test_an_image_over_the_cap_is_refused_before_the_relay(tmp_path: Path) -> No
 
 def test_the_cap_is_11_mib() -> None:
     assert CAPTION_IMAGE_BYTES_MAX == 11 * 1024 * 1024
+
+
+# ── retryable caption failures (round 3) ──────────────────────────────────
+_PROVIDERS = [
+    ("openai", {}),
+    ("azure-openai-chat", {"model": "vision"}),
+    ("azure-openai-responses", {"model": "vision"}),
+]
+
+_REFUSALS = {
+    429: _json(429, {"error": {"message": "rate limited"}}, {"retry-after": "1"}),
+    500: _json(500, {"error": {"message": "boom"}}),
+    502: _json(502, {"error": "upstream request failed"}),
+    503: _json(503, {"error": {"message": "overloaded"}}),
+    499: _json(499, {"error": "egress-denied", "reason": "timeout", "terminal": True}),
+    403: _json(403, {"error": "egress-denied", "reason": "lease-unavailable", "terminal": True}),
+}
+
+
+@pytest.mark.parametrize("provider, extra", _PROVIDERS)
+@pytest.mark.parametrize("status", sorted(_REFUSALS))
+def test_a_caption_that_may_pass_later_is_retryable(tmp_path: Path, provider: str, extra: Dict[str, Any], status: int) -> None:
+    plugin = FakePlugin(_REFUSALS[status])
+    with pytest.raises(ic.CaptionError) as excinfo:
+        ic.caption_image(str(_png(tmp_path)), provider=provider, egress_relay=EgressRelay(plugin), **extra)
+    assert excinfo.value.retryable is True, (provider, status, str(excinfo.value))
+
+
+@pytest.mark.parametrize("provider, extra", _PROVIDERS)
+@pytest.mark.parametrize(
+    "failure",
+    [sc.PeerClosed("worker control channel closed (stdin-eof)"), TimeoutError("egress_caption was not answered")],
+)
+def test_a_caption_whose_relay_broke_is_retryable(tmp_path: Path, provider: str, extra: Dict[str, Any], failure: Exception) -> None:
+    plugin = FakePlugin(failure)
+    with pytest.raises(ic.CaptionError) as excinfo:
+        ic.caption_image(str(_png(tmp_path)), provider=provider, egress_relay=EgressRelay(plugin), **extra)
+    assert excinfo.value.retryable is True
+
+
+@pytest.mark.parametrize("status", [400, 401, 404, 413])
+def test_a_caption_the_provider_rejects_outright_is_not_retryable(tmp_path: Path, status: int) -> None:
+    plugin = FakePlugin(_json(status, {"error": {"message": "no"}}))
+    with pytest.raises(ic.CaptionError) as excinfo:
+        ic.caption_image(str(_png(tmp_path)), provider="openai", egress_relay=EgressRelay(plugin))
+    assert excinfo.value.retryable is False
+
+
+def test_deterministic_caption_errors_are_not_retryable(tmp_path: Path) -> None:
+    big = tmp_path / "big.png"
+    big.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * (CAPTION_IMAGE_BYTES_MAX + 1))
+    with pytest.raises(ic.CaptionError) as oversize:
+        ic.caption_image(str(big), provider="openai", egress_relay=EgressRelay(FakePlugin(RESPONSES_OK)))
+    assert oversize.value.retryable is False
+    with pytest.raises(ic.CaptionError) as no_config:
+        ic.caption_image(str(_png(tmp_path)), provider="azure-openai-chat", model="vision", endpoint="", api_key="")
+    assert no_config.value.retryable is False
+
+
+def _relayed_indexer(tmp_path: Path, plugin: FakePlugin) -> Any:
+    from local_indexer import LocalIndexer
+
+    class _Embed:
+        dimensions = 3
+
+        def embed_corpus(self, texts: Any) -> Any:  # pragma: no cover - never reached
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    class _Store:
+        def delete(self, *_a: Any, **_k: Any) -> None:  # pragma: no cover
+            pass
+
+    indexer = LocalIndexer(
+        workspace=str(tmp_path / "ws"),
+        sqlite_path=str(tmp_path / "fts5.sqlite"),
+        lance_path=str(tmp_path / "vectors.lance"),
+        openai_api_key=None,
+        embedding_client=_Embed(),
+        vector_store=_Store(),
+        egress_relay=EgressRelay(plugin),
+    )
+    indexer.set_image_captioning(enabled=True, provider="openai")
+    return indexer
+
+
+def test_a_rate_limited_caption_makes_a_retryable_failed_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The repro: a caption 429 during indexing must not read as the worker's verdict on the file."""
+    import os
+
+    import local_indexer_worker as lw
+
+    monkeypatch.setattr(lw, "_ALLOWED_ROOTS_RUNTIME", [os.path.realpath(str(tmp_path))])
+    plugin = FakePlugin(_REFUSALS[429])
+    result = _relayed_indexer(tmp_path, plugin).index_file(str(_png(tmp_path)), mode="image")
+    assert result.status == "failed"
+    assert result.retryable is True
+    assert any("호출 실패" in e for e in result.errors)
+    assert plugin.calls and plugin.calls[0]["method"] == "egress_caption"
+
+
+def test_an_image_outside_the_current_roots_is_a_retryable_failed_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import local_indexer_worker as lw
+
+    monkeypatch.setattr(lw, "_ALLOWED_ROOTS_RUNTIME", [str(tmp_path / "elsewhere")])
+    plugin = FakePlugin(RESPONSES_OK)
+    result = _relayed_indexer(tmp_path, plugin).index_file(str(_png(tmp_path)), mode="image")
+    assert result.status == "failed"
+    assert result.retryable is True
+    assert plugin.calls == []
+

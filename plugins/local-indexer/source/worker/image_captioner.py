@@ -152,9 +152,71 @@ class CaptionResult:
 
 class CaptionError(RuntimeError):
     """Raised when captioning fails for a recoverable reason (bad input,
-    missing API key, model load failure). The worker endpoint should
-    convert this to a 4xx/5xx HTTP response without crashing the
-    process."""
+    missing API key, model load failure). The worker turns it into a
+    ``failed`` result without crashing the process.
+
+    ``retryable`` is True when the same call may succeed later: the provider
+    or the relay was unavailable, rate limited, timed out, or refused the
+    egress for a runtime reason (a lease that was not issued, a revoked one).
+    Missing configuration, an oversized file and a malformed request are
+    not retryable; they fail the same way every time.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
+# HTTP statuses after which the same caption request may succeed.
+#   403: the plugin's broker refuses egress for runtime reasons (no lease,
+#        revoked lease, endpoint not allow-listed right now);
+#   408/409/425/429: timeout, conflict, too early, rate limited;
+#   499: the relay cancelled or timed out the request;
+#   5xx: provider or relay failure.
+_RETRYABLE_STATUSES = frozenset({403, 408, 409, 425, 429, 499})
+
+
+def _status_of(exc: BaseException) -> Optional[int]:
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    return status if isinstance(status, int) else None
+
+
+def _is_transport_failure(exc: BaseException) -> bool:
+    """A failure to reach the provider at all: connection, timeout, a closed relay."""
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        names = {cls.__name__ for cls in type(current).__mro__}
+        if names & {
+            "APIConnectionError",
+            "APITimeoutError",
+            "TransportError",
+            "ConnectError",
+            "TimeoutException",
+            "PeerClosed",
+        }:
+            return True
+        if isinstance(current, (ConnectionError, TimeoutError)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def is_retryable_provider_failure(exc: BaseException) -> bool:
+    """Whether a provider SDK exception says "try again later" rather than "this cannot work"."""
+    status = _status_of(exc)
+    if status is not None:
+        return status >= 500 or status in _RETRYABLE_STATUSES
+    return _is_transport_failure(exc)
+
+
+def _provider_call_failed(label: str, exc: BaseException) -> CaptionError:
+    return CaptionError(f"{label} 호출 실패: {exc}", retryable=is_retryable_provider_failure(exc))
 
 
 def _image_to_data_url(path: Path) -> str:
@@ -251,7 +313,7 @@ def _caption_openai(
             ],
         )
     except Exception as exc:
-        raise CaptionError(f"OpenAI Vision 호출 실패: {exc}") from exc
+        raise _provider_call_failed("OpenAI Vision", exc) from exc
 
     caption = getattr(res, "output_text", "") or ""
     usage = getattr(res, "usage", None)
@@ -355,7 +417,7 @@ def _caption_azure_openai_chat(
             max_completion_tokens=128,
         )
     except Exception as exc:
-        raise CaptionError(f"Azure OpenAI Vision 호출 실패: {exc}") from exc
+        raise _provider_call_failed("Azure OpenAI Vision", exc) from exc
 
     caption = ""
     try:
@@ -444,7 +506,7 @@ def _caption_azure_openai_responses(
             ],
         )
     except Exception as exc:
-        raise CaptionError(f"Azure OpenAI Responses ?몄텧 ?ㅽ뙣: {exc}") from exc
+        raise _provider_call_failed("Azure OpenAI Responses", exc) from exc
 
     caption = getattr(res, "output_text", "") or ""
     usage = getattr(res, "usage", None)

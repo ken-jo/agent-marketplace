@@ -43,6 +43,7 @@ import argparse
 import asyncio
 import functools
 import hashlib
+import json
 import logging
 import os
 import re
@@ -104,6 +105,7 @@ except Exception as exc:  # pragma: no cover - startup guard
     raise
 
 from stdio_control import (  # type: ignore  # noqa: E402
+    FRAME_BYTES_MAX,
     INVALID_PARAMS,
     NOT_FOUND,
     SERVER_ERROR,
@@ -183,6 +185,16 @@ def _get_allowed_roots() -> List[str]:
     ]
 
 
+class PathNotAllowed(ValueError):
+    """A path outside the allowed roots. The roots are runtime state the host
+    pushes (runtime_allowed_roots), so this refusal may pass after a sync."""
+
+
+# JSON-RPC code for a PathNotAllowed refusal, distinct from invalid params so
+# the plugin can tell "outside the roots right now" from a malformed request.
+PATH_NOT_ALLOWED = -32011
+
+
 def _validate_file_path_within_roots(v: str) -> str:
     if not v or not isinstance(v, str):
         raise ValueError("file_path must be a non-empty string")
@@ -196,7 +208,7 @@ def _validate_file_path_within_roots(v: str) -> str:
                 return real
         except ValueError:
             continue
-    raise ValueError(f"file_path outside allowed roots: {real}")
+    raise PathNotAllowed(f"file_path outside allowed roots: {real}")
 
 
 class ReindexRequest(BaseModel):
@@ -350,9 +362,23 @@ class SearchRequest(BaseModel):
     topK: int = Field(20, ge=1, le=200)
 
 
-# A page of documents_list must fit one control frame with room to spare:
-# 1000 rows of path + name at the 4 KiB path limit stay well under 16 MiB.
+# A page of documents_list holds at most this many rows, and is also cut by
+# bytes (see documents_page_budget) so long multi-byte paths cannot push it
+# past the negotiated frame limit.
 DOCUMENTS_PAGE_MAX = 1000
+# Room left in a frame for the JSON-RPC envelope and the page wrapper.
+DOCUMENTS_FRAME_HEADROOM = 64 * 1024
+
+
+def documents_page_budget(frame_bytes_max: int) -> int:
+    """Bytes of serialized rows one documents_list page may carry: three
+    quarters of the frame, less the envelope headroom."""
+    return max(1, frame_bytes_max * 3 // 4 - DOCUMENTS_FRAME_HEADROOM)
+
+
+def _row_bytes(row: Dict[str, Any]) -> int:
+    # Serialized the way the frame encoder writes it, plus the separating comma.
+    return len(json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) + 1
 
 
 class DocumentsListRequest(BaseModel):
@@ -391,6 +417,10 @@ class AppState:
         self.lock = asyncio.Lock()
         self.started_at = time.time()
         self.storage_closed = False
+        # The frame limit the host announced (serve() points this at the
+        # peer once the hello is answered); answers that grow with the index
+        # are paged to stay inside it.
+        self.frame_bytes_max: Callable[[], int] = lambda: FRAME_BYTES_MAX
         self.metrics: Dict[str, Any] = {
             "processed": 0,
             "failed": 0,
@@ -422,7 +452,9 @@ def _validated(model: Any, params: Any) -> Any:
         first = errors[0] if errors else {}
         where = ".".join(str(part) for part in first.get("loc", ()))
         message = str(first.get("msg", "invalid params"))
-        raise RequestError(INVALID_PARAMS, f"{where}: {message}" if where else message) from None
+        cause = (first.get("ctx") or {}).get("error")
+        code = PATH_NOT_ALLOWED if isinstance(cause, PathNotAllowed) else INVALID_PARAMS
+        raise RequestError(code, f"{where}: {message}" if where else message) from None
 
 
 async def _blocking(fn: Callable[..., Any], *args: Any) -> Any:
@@ -538,8 +570,17 @@ def build_handlers(state: AppState, *, egress_relay: Optional[Any] = None) -> Di
         req = _validated(DocumentsListRequest, params if params is not None else {})
         _open()
         rows = await _blocking(state.indexer.list_documents_page, req.after, req.limit)
-        next_after = rows[-1]["doc_id"] if len(rows) == req.limit else None
-        return {"documents": rows, "next_after": next_after}
+        budget = documents_page_budget(state.frame_bytes_max())
+        page: List[Dict[str, Any]] = []
+        used = 0
+        for row in rows:
+            size = _row_bytes(row)
+            if page and used + size > budget:
+                break
+            page.append(row)
+            used += size
+        more = len(page) < len(rows) or len(rows) == req.limit
+        return {"documents": page, "next_after": page[-1]["doc_id"] if more and page else None}
 
     async def document_get(params: Any) -> Dict[str, Any]:
         req = _validated(DocIdRequest, params)
@@ -689,6 +730,8 @@ def _result_dict(result: Any) -> Dict[str, Any]:
         "page_count": result.page_count,
         "line_count": result.line_count,
         "errors": result.errors,
+        # For a failed result: whether the same file may index on a later try.
+        "retryable": bool(getattr(result, "retryable", False)),
         # 임베딩 성공 여부 — 플러그인은 embedded=false 면 (status="indexed"
         # 이더라도) 사용자 입장에선 실패로 본다. None 은 옛 워커 호환용
         # (필드 미존재) 으로만 발생.
@@ -909,6 +952,7 @@ async def serve(
         ready.set()
         _warning("worker.start_failed", error=str(exc))
         return 1
+    state.frame_bytes_max = lambda: peer.frame_bytes_max
     holder["handlers"] = build_handlers(state, egress_relay=relay)
     ready.set()
     _info("worker.ready", index_root=storage["index_root"], workspace=storage["workspace"])

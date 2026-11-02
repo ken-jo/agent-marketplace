@@ -11,6 +11,7 @@ import {
   WORKER_METHODS,
   WorkerCallError,
   WorkerClient,
+  WORKER_PATH_NOT_ALLOWED,
   WorkerIndexFailure,
   isTransientIndexFailure,
 } from "../src/workerClient";
@@ -221,6 +222,10 @@ describe("WorkerClient.listDocuments paging", () => {
 describe("isTransientIndexFailure", () => {
   it("separates the worker's verdict on a file from failures that may pass", () => {
     expect(isTransientIndexFailure(new WorkerIndexFailure("failed", "/a"))).toBe(false);
+    expect(isTransientIndexFailure(new WorkerIndexFailure("caption 429", "/a", true))).toBe(true);
+    expect(
+      isTransientIndexFailure(new WorkerCallError("outside allowed roots", "worker-request-failed", WORKER_PATH_NOT_ALLOWED)),
+    ).toBe(true);
     expect(isTransientIndexFailure(new WorkerCallError("bad path", "worker-request-failed", -32602))).toBe(false);
     expect(isTransientIndexFailure(new WorkerCallError("not found", "worker-request-failed", -32004))).toBe(false);
     expect(isTransientIndexFailure(new WorkerCallError("too big", "payload-too-large"))).toBe(false);
@@ -239,6 +244,19 @@ describe("isTransientIndexFailure", () => {
     const err = await client.indexDocument("/e.pdf").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(WorkerIndexFailure);
     expect(isTransientIndexFailure(err)).toBe(false);
+  });
+
+  it("indexDocument carries the worker's retryable flag on a failed result", async () => {
+    const { client } = attached({
+      indexer_reindex: () => ({
+        doc_id: "d", doc_name: "c.png", doc_type: "image", chunk_count: 0, status: "failed",
+        errors: ["OpenAI Vision 호출 실패: 429"], retryable: true,
+      }),
+    });
+    const err = await client.indexDocument("/c.png").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WorkerIndexFailure);
+    expect((err as WorkerIndexFailure).retryable).toBe(true);
+    expect(isTransientIndexFailure(err)).toBe(true);
   });
 });
 

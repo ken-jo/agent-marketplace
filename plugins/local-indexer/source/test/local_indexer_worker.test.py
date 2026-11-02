@@ -102,8 +102,14 @@ def test_reindex_refuses_a_path_outside_the_allowed_roots(handlers: Dict[str, An
     _call(handlers, "runtime_allowed_roots", {"roots": [str(tmp_path / "inside")]})
     with pytest.raises(sc.RequestError) as excinfo:
         _call(handlers, "indexer_reindex", {"file_path": str(tmp_path / "outside" / "a.md")})
-    assert excinfo.value.code == sc.INVALID_PARAMS
+    # Its own code: the roots are runtime state, so the plugin may retry.
+    assert excinfo.value.code == w.PATH_NOT_ALLOWED
+    assert excinfo.value.code != sc.INVALID_PARAMS
     assert "outside allowed roots" in excinfo.value.message
+    # A malformed request is still invalid params.
+    with pytest.raises(sc.RequestError) as bad_mode:
+        _call(handlers, "indexer_reindex", {"file_path": str(tmp_path / "inside" / "a.md"), "mode": "exe"})
+    assert bad_mode.value.code == sc.INVALID_PARAMS
 
 
 def test_runtime_info_reports_the_document_count(handlers: Dict[str, Any]) -> None:
@@ -368,3 +374,81 @@ def test_relayed_indexer_stays_bm25_only_until_told_otherwise(tmp_path: Path) ->
     client = indexer.get_embedding_client()
     assert client is not None
     assert client.api_key == "ave-plugin-egress"
+
+
+def _bulk_indexer(tmp_path: Path, rows: List[tuple]) -> Any:
+    import sqlite3
+
+    from worker.local_indexer import LocalIndexer
+
+    class _Embed:
+        def embed_corpus(self, texts: Any) -> Any:  # pragma: no cover
+            return []
+
+    class _Store:
+        def delete(self, *_a: Any, **_k: Any) -> None:  # pragma: no cover
+            pass
+
+    indexer = LocalIndexer(
+        workspace=str(tmp_path / "workspace"),
+        sqlite_path=str(tmp_path / "fts5.sqlite"),
+        lance_path=str(tmp_path / "vectors.lance"),
+        openai_api_key=None,
+        embedding_client=_Embed(),
+        vector_store=_Store(),
+    )
+    with sqlite3.connect(indexer.sqlite_path) as conn:
+        conn.executemany(
+            "INSERT INTO documents (doc_id, path, doc_name, doc_type, mtime_ms, indexed_at, status) "
+            "VALUES (?, ?, ?, 'md', 1, 1, 'indexed')",
+            rows,
+        )
+    return indexer
+
+
+def _walk_pages(handlers: Dict[str, Any], limit: int, frame_limit: int) -> List[List[str]]:
+    pages: List[List[str]] = []
+    after = None
+    while True:
+        params = {"limit": limit} if after is None else {"after": after, "limit": limit}
+        page = _call(handlers, "documents_list", params)
+        sc.encode_frame({"id": 123456789, "result": page}, frame_limit)  # fits the negotiated frame
+        pages.append([d["doc_id"] for d in page["documents"]])
+        if page["next_after"] is None:
+            return pages
+        after = page["next_after"]
+
+
+@pytest.mark.parametrize("frame_limit", [256 * 1024, sc.FRAME_BYTES_MAX])
+def test_documents_list_pages_are_cut_by_bytes_for_long_multibyte_paths(tmp_path: Path, frame_limit: int) -> None:
+    # ~4000-character paths, mostly 4-byte characters (about 15 KiB each in
+    # UTF-8), with Korean file names: 1000 rows (the row cap) would be ~15 MiB,
+    # past the 16 MiB frame's page budget and far past a small negotiated frame.
+    segment = "𠀀𠀁𠀂𠀃𠀄𠀅𠀆𠀇𠀈𠀉𠀊𠀋𠀌𠀍𠀎/"
+    long_dir = "/" + segment * (4000 // len(segment))
+    total = 1500
+    rows = [(f"doc-{i:05d}", f"{long_dir}{i:05d}.md", f"문서-{i:05d}.md") for i in range(total)]
+    indexer = _bulk_indexer(tmp_path, rows)
+    state = w.AppState(indexer=indexer, search=FakeSearch(), runtime_info={})
+    state.frame_bytes_max = lambda: frame_limit
+    pages = _walk_pages(w.build_handlers(state), w.DOCUMENTS_PAGE_MAX, frame_limit)
+    flat = [doc_id for page in pages for doc_id in page]
+    assert flat == sorted(r[0] for r in rows)  # every row once, in cursor order
+    assert all(len(page) < w.DOCUMENTS_PAGE_MAX for page in pages), [len(p) for p in pages]
+    assert len(pages) >= 2
+
+
+def test_documents_page_budget_leaves_headroom() -> None:
+    for frame_limit in (64 * 1024 + 1, 256 * 1024, sc.FRAME_BYTES_MAX):
+        budget = w.documents_page_budget(frame_limit)
+        assert 0 < budget <= frame_limit * 3 // 4
+
+
+def test_reindex_answers_carry_the_retryable_flag() -> None:
+    from worker.local_indexer import IndexResult
+
+    failed = w._result_dict(IndexResult(doc_id="d", doc_name="a.png", doc_type="image", chunk_count=0,
+                                        status="failed", errors=["rate limited"], retryable=True))
+    assert failed["retryable"] is True
+    plain = w._result_dict(IndexResult(doc_id="d", doc_name="a.md", doc_type="md", chunk_count=1, status="indexed"))
+    assert plain["retryable"] is False

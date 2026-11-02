@@ -54,25 +54,35 @@ export class WorkerCallError extends Error {
 }
 
 /**
- * The worker indexed the file and reported `status: "failed"` for it (too
- * large, encrypted, unparseable, …). Retrying the same bytes fails the same
- * way, so a scan counts it as done.
+ * The worker indexed the file and reported `status: "failed"` for it.
+ * `retryable` is the worker's own call: false for a verdict on the file (too
+ * large, encrypted, unparseable, missing config), which fails the same way
+ * every time; true when the same file may index later (the caption provider
+ * or relay was rate limited, down, timed out, refused egress, or the file
+ * was outside the roots the worker held at that moment).
  */
 export class WorkerIndexFailure extends Error {
   readonly filePath: string;
-  constructor(message: string, filePath: string) {
+  readonly retryable: boolean;
+  constructor(message: string, filePath: string, retryable = false) {
     super(message);
     this.name = "WorkerIndexFailure";
     this.filePath = filePath;
+    this.retryable = retryable;
   }
 }
 
 /**
  * Worker refusals that are a verdict on the request itself: invalid params
- * (a path outside the allowed roots, a bad mode) and a file that is not there.
- * Anything else the worker raises (-32000) is an unexpected failure.
+ * (a bad mode, a malformed path) and a file that is not there. A path outside
+ * the allowed roots has its own code (-32011, PATH_NOT_ALLOWED) because the
+ * roots are runtime state a later sync can change, so it is not here; nor is
+ * -32000, an unexpected worker failure.
  */
 const PERMANENT_WORKER_CODES = new Set([-32602, -32004]);
+
+/** The worker's code for a path outside the allowed roots it holds right now. */
+export const WORKER_PATH_NOT_ALLOWED = -32011;
 
 /**
  * Whether an indexing failure may go away on a retry. The worker's own
@@ -81,7 +91,7 @@ const PERMANENT_WORKER_CODES = new Set([-32602, -32004]);
  * error and any error this client does not recognise may.
  */
 export function isTransientIndexFailure(err: unknown): boolean {
-  if (err instanceof WorkerIndexFailure) return false;
+  if (err instanceof WorkerIndexFailure) return err.retryable;
   if (err instanceof WorkerCallError) {
     if (err.code === "worker-request-failed") {
       return err.workerCode === undefined || !PERMANENT_WORKER_CODES.has(err.workerCode);
@@ -191,6 +201,8 @@ export interface IndexResultDict {
   page_count?: number | null;
   line_count?: number | null;
   errors?: string[] | null;
+  /** For a failed result: the same file may index on a later try. */
+  retryable?: boolean;
   /**
    * 임베딩 (벡터) 까지 성공적으로 생성됐는지. `true` 는 검색 인덱스에
    * 사용 가능한 doc, `false` 는 BM25/청크는 만들어졌지만 벡터가 없는
@@ -352,7 +364,11 @@ export class WorkerClient implements WorkerSearchClient, KnowledgeWorkerClient {
     const result = await this.reindex(filePath, mode);
     if (result.status === "failed") {
       const detail = result.errors?.length ? `: ${result.errors.join(", ")}` : "";
-      throw new WorkerIndexFailure(`indexDocument: 인덱싱 실패 (${filePath})${detail}`, filePath);
+      throw new WorkerIndexFailure(
+        `indexDocument: 인덱싱 실패 (${filePath})${detail}`,
+        filePath,
+        result.retryable === true,
+      );
     }
     if (!result?.doc_id) {
       throw new Error(`indexDocument: worker reindex 응답에 doc_id 없음 (${filePath})`);

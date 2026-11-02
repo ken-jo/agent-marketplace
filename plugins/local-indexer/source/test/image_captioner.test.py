@@ -275,17 +275,27 @@ def test_azure_responses_config_errors_read_as_korean() -> None:
         ic._caption_azure_openai_responses("data:image/png;base64,", "https://r.openai.azure.com/", "k", None)
 
 
-def test_worker_sources_carry_no_cp949_mojibake() -> None:
+def test_worker_and_plugin_sources_carry_no_cp949_mojibake() -> None:
     import re
 
-    worker_dir = Path(__file__).resolve().parent.parent / "worker"
-    # Han ideographs and C1 controls do not occur in this code's Korean text;
-    # both are what a UTF-8 → CP949 round trip leaves behind.
-    pattern = re.compile("[一-鿿\u0080-\u009f]")
+    source_dir = Path(__file__).resolve().parent.parent
+    # Han ideographs, C1 controls, and a "?" glued to a Hangul syllable are what
+    # a UTF-8 → CP949 round trip leaves behind; none occurs in this code's
+    # Korean text.
+    pattern = re.compile("[\u4e00-\u9fff\u0080-\u009f]|\\?[가-힣]")
+    files = sorted(source_dir.glob("worker/*.py")) + sorted(
+        p for ext in ("ts", "js", "html") for p in (source_dir / "src").rglob(f"*.{ext}")
+    )
+    assert files
     hits = [
-        f"{path.name}:{number}"
-        for path in sorted(worker_dir.glob("*.py"))
+        f"{path.relative_to(source_dir)}:{number}"
+        for path in files
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         if pattern.search(line)
     ]
     assert hits == []
+
+
+def test_provider_call_failures_read_as_korean_and_say_which_provider() -> None:
+    err = ic._provider_call_failed("Azure OpenAI Responses", RuntimeError("boom"))
+    assert str(err) == "Azure OpenAI Responses 호출 실패: boom"
