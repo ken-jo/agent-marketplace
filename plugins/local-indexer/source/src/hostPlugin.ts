@@ -70,9 +70,11 @@ import {
   RESCAN_LEDGER_FILENAME,
 } from "./rescanSuggestion.js";
 import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
+import { isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
 import {
   MigrationDeferred,
   migrateLegacyIndex,
+  type DirectIndexResult,
   type EmbeddingState,
   type FolderSource,
   type LegacyManifest,
@@ -2746,6 +2748,67 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   }
 
   /**
+   * Whether names under `folder` compare case-insensitively, measured on the
+   * filesystem that holds its contents: one entry's name with its case
+   * swapped must name the same file (dev and ino). False when no entry has a
+   * letter to swap, or the folder cannot be read; the platform default is
+   * not evidence (case-sensitive APFS volumes exist).
+   */
+  async function measureCaseInsensitive(folder: string): Promise<boolean> {
+    const swap = (name: string) =>
+      [...name].map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase())).join("");
+    let names: string[];
+    try {
+      names = await readdir(folder);
+    } catch {
+      return false;
+    }
+    const name = names.find((entry) => swap(entry) !== entry);
+    if (name === undefined) return false;
+    try {
+      const [a, b] = await Promise.all([lstat(join(folder, name)), lstat(join(folder, swap(name)))]);
+      return a.dev === b.dev && a.ino === b.ino;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Index files outside a scan, the way document_index_scan does: blocked
+   * paths are refused, the files' directories are added to the worker's
+   * allowed roots for this call, and each result is recorded.
+   */
+  async function indexFilesDirectly(paths: string[]): Promise<DirectIndexResult[]> {
+    const folders = await loadPersistedFolders();
+    const includeImages = isImageEmbeddingEnabled();
+    const { files, roots, blocked } = await expandDroppedPaths(paths, folders, { ...blockOpts, includeImages });
+    const results: DirectIndexResult[] = blocked.map((path) => ({
+      path, indexed: false, retryable: false, failureKind: "blocked",
+    }));
+    if (files.length === 0) return results;
+    await syncAllowedRootsToWorker(folders, roots);
+    for (const filePath of files) {
+      try {
+        const docId = await workerClient.indexDocument(
+          filePath,
+          getIndexModeForPath(filePath, { includeImages }) ?? "auto",
+        );
+        await recordIndexedState(filePath, docId).catch(() => {});
+        results.push({ path: filePath, indexed: true });
+      } catch (err) {
+        const failureKind = err instanceof WorkerIndexFailure ? err.failureKind : undefined;
+        results.push({
+          path: filePath,
+          indexed: false,
+          retryable: isTransientIndexFailure(err),
+          ...(failureKind !== undefined ? { failureKind } : {}),
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
    * Copy the old index (main file, -wal, -shm) into the worker's workspace as
    * one consistent set. A checkpoint between copying the main file and the
    * -wal would lose rows silently, so every part's size and mtime must be the
@@ -2915,8 +2978,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
               .map((doc) => ({ path: doc.path!, status: doc.status, contentState: doc.content_state })),
           embeddingState: embeddingStateNow,
           realpath: (path) => realpath(path),
-          // The macOS and Windows filesystems fold case by default.
-          caseInsensitive: osPlatform() === "darwin" || osPlatform() === "win32",
+          caseInsensitive: measureCaseInsensitive,
+          indexDirect: indexFilesDirectly,
           fileMtime: async (path) => {
             try {
               return (await stat(path)).mtimeMs;

@@ -23,6 +23,7 @@ import {
   migrateLegacyIndex,
   type FolderSource,
   type IndexMigrationDeps,
+  type DirectIndexResult,
   type EmbeddingState,
   type IndexMigrationStatus,
   type LegacyManifestDocument,
@@ -208,7 +209,20 @@ function scanDeps(
         })),
       embeddingState: async () => opts.embeddingState ?? (opts.embeddingConfigured === false ? "off" : "on"),
       realpath: (path) => realpath(path),
-      caseInsensitive: false,
+      caseInsensitive: async () => false,
+      indexDirect: async (paths) => {
+        const out: DirectIndexResult[] = [];
+        for (const path of paths) {
+          try {
+            await worker.client.indexDocument(path);
+            out.push({ path, indexed: true });
+          } catch (err) {
+            const e = err as { retryable?: boolean; failureKind?: string };
+            out.push({ path, indexed: false, retryable: e.retryable === true, ...(e.failureKind ? { failureKind: e.failureKind } : {}) });
+          }
+        }
+        return out;
+      },
       fileMtime: async (path) => {
         try {
           return (await stat(path)).mtimeMs;
@@ -424,7 +438,9 @@ describe("migrateLegacyIndex — completes when the new index covers the old one
       restart(deps, worker, [docs]);
       const second = await migrateLegacyIndex(deps);
       expect(second).toMatchObject({ phase: "completed", attempt: 2, coverage: { required: 2, excludedCorrupt: [bad] } });
-      expect(worker.reindexCalls().filter((p) => p === bad || p === chart)).toEqual([bad, chart, bad, chart]);
+      // Each attempt: the scan parses both, then the corrupt file is parsed a
+      // second time before it may be excluded.
+      expect(worker.reindexCalls().filter((p) => p === bad || p === chart)).toEqual([bad, chart, bad, bad, chart, bad]);
     });
   });
 
@@ -739,8 +755,15 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
     hadVectors?: boolean;
     /** realpath per folder: a string, or "fails". Default: identity. */
     real?: Record<string, string>;
+    /** Measured case-insensitivity of every root (default: case-sensitive). */
     caseInsensitive?: boolean;
     unreadable?: string[];
+    /** stat of the document's directory, for documents outside every folder. */
+    parentMtime?: number | "gone" | "EIO";
+    /** Answers to direct indexing (outside documents, second parses), in call order. */
+    direct?: Array<"indexed" | { retryable: boolean; failureKind?: string }>;
+    reason?: RegExp;
+    excludedCorrupt?: number;
     walked?: Record<string, number>;
     mtime?: number | "gone" | "EIO";
     held?: { path: string; contentState?: string } | null;
@@ -771,9 +794,16 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
       held: { path: "/Users/u/Documents/a.pdf", contentState: "ok" }, expect: "completed" },
     { name: "case-only rename of the folder, document not rebuilt", manifestFolders: ["/Users/u/documents"],
       folders: ["/Users/u/Documents"], caseInsensitive: true, doc: "/Users/u/documents/a.pdf", expect: "kept-old" },
-    { name: "folder re-registered by its real path, old documents under the symlink spelling",
+    { name: "folder re-registered by its real path, old document under the symlink spelling, not indexable now",
       manifestFolders: ["/Users/u/Docs"], real: { "/Users/u/Docs": "/Volumes/NAS/Docs" },
-      folders: ["/Volumes/NAS/Docs"], doc: "/Users/u/Docs/a.pdf", expect: "kept-old" },
+      folders: ["/Volumes/NAS/Docs"], doc: "/Users/u/Docs/a.pdf", direct: [{ retryable: true, failureKind: "io" }],
+      expect: "kept-old" },
+    { name: "case-sensitive root: A.pdf is not covered by a.pdf", folders: ["/cs"], caseInsensitive: false,
+      doc: "/cs/A.pdf", held: { path: "/cs/a.pdf", contentState: "ok" }, expect: "kept-old" },
+    { name: "case-sensitive root, document in a folder cased differently: outside, indexed directly",
+      folders: ["/cs"], caseInsensitive: false, doc: "/CS/a.pdf", expect: "completed" },
+    { name: "case-insensitive root (measured): A.pdf held as a.pdf (covered)", folders: ["/ci"], caseInsensitive: true,
+      doc: "/ci/A.pdf", held: { path: "/ci/a.pdf", contentState: "ok" }, expect: "completed" },
     { name: "NFD folder, NFC path, unreadable", folders: [nfd("/Users/u/문서")], doc: "/Users/u/문서/a.pdf",
       unreadable: [nfd("/Users/u/문서")], mtime: "gone", expect: "kept-old" },
     { name: "NFD folder, NFC path, readable (covered)", folders: [nfd("/Users/u/문서")], doc: "/Users/u/문서/a.pdf",
@@ -781,15 +811,26 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
     { name: "folder in the manifest-time list and removed since (excluded)", manifestFolders: ["/d/keep", "/d/old"],
       folders: ["/d/keep"], doc: "/d/old/a.pdf", expect: "completed" },
     { name: "removed folder, but a current folder does not resolve", manifestFolders: ["/d/keep", "/d/old"],
-      folders: ["/d/keep"], real: { "/d/keep": "fails" }, doc: "/d/old/a.pdf", expect: "kept-old" },
+      folders: ["/d/keep"], real: { "/d/keep": "fails" }, doc: "/d/old/a.pdf", mtime: "gone", parentMtime: "gone",
+      expect: "kept-old" },
     { name: "folder does not resolve, document under it as registered", folders: ["/d"], real: { "/d": "fails" },
       doc: "/d/a.pdf", mtime: "gone", expect: "kept-old" },
     { name: "symlinked folder online, unreadable subdirectory named as walked", folders: ["/Users/u/Docs"],
       real: { "/Users/u/Docs": "/Volumes/NAS/Docs" }, doc: "/Volumes/NAS/Docs/sub/a.pdf",
       unreadable: ["/Users/u/Docs/sub"], mtime: "gone", expect: "kept-old" },
-    { name: "under no folder ever listed", folders: ["/d/keep"], doc: "/elsewhere/a.pdf", expect: "kept-old" },
-    { name: "manifest-time folder list unknown", manifestFolders: null, folders: ["/d/keep"], doc: "/d/old/a.pdf",
+    { name: "outside every folder (indexed one by one), file there: indexed directly (covered)",
+      folders: ["/d/keep"], doc: "/elsewhere/a.pdf", expect: "completed" },
+    { name: "outside every folder, file gone, its directory still there (excluded)", folders: ["/d/keep"],
+      doc: "/elsewhere/a.pdf", mtime: "gone", parentMtime: OLD, expect: "completed" },
+    { name: "outside every folder, file and directory gone (volume offline?)", folders: ["/d/keep"],
+      doc: "/Volumes/USB/a.pdf", mtime: "gone", parentMtime: "gone", reason: /outside the registered folders could not be read/,
       expect: "kept-old" },
+    { name: "outside every folder, stat fails", folders: ["/d/keep"], doc: "/elsewhere/a.pdf", mtime: "EIO",
+      expect: "kept-old" },
+    { name: "outside every folder, direct indexing fails (permission denied)", folders: ["/d/keep"],
+      doc: "/elsewhere/a.pdf", direct: [{ retryable: true, failureKind: "io" }], expect: "kept-old" },
+    { name: "manifest-time folder list unknown: the document is outside, indexed directly", manifestFolders: null,
+      folders: ["/d/keep"], doc: "/d/old/a.pdf", expect: "completed" },
     { name: "stat fails with EIO, not in the new index", folders: ["/d"], doc: "/d/a.pdf", mtime: "EIO",
       expect: "kept-old" },
     { name: "file gone under a folder that lists files (excluded)", folders: ["/d"], doc: "/d/a.pdf", mtime: "gone",
@@ -809,10 +850,19 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
       failure: { retryable: false, failureKind: "caption" }, expect: "kept-old" },
     { name: "non-retryable without a failure kind (older worker)", folders: ["/d"], doc: "/d/a.pdf",
       failure: { retryable: false }, expect: "kept-old" },
-    { name: "too large, unchanged", folders: ["/d"], doc: "/d/a.pdf",
-      failure: { retryable: false, failureKind: "too_large" }, expect: "kept-old" },
-    { name: "unparseable and unchanged (excluded)", folders: ["/d"], doc: "/d/a.pdf",
-      failure: { retryable: false, failureKind: "unparseable" }, expect: "completed" },
+    { name: "too large under a lowered size limit, unchanged: named in the status", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false, failureKind: "too_large" },
+      reason: /1 of them are over the current file size limit \(\/d\/a\.pdf\); raise the limit, or remove them/,
+      expect: "kept-old" },
+    { name: "unparseable twice, unchanged (excluded)", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false, failureKind: "unparseable" },
+      direct: [{ retryable: false, failureKind: "unparseable" }], excludedCorrupt: 1, expect: "completed" },
+    { name: "unparseable once, the second parse fails to read (a network drop)", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false, failureKind: "unparseable" },
+      direct: [{ retryable: true, failureKind: "io" }], expect: "kept-old" },
+    { name: "unparseable once, the second parse indexes it (covered, not excluded)", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false, failureKind: "unparseable" }, direct: ["indexed"], excludedCorrupt: 0,
+      expect: "completed" },
     { name: "unparseable but changed since the old index read it", folders: ["/d"], doc: "/d/a.pdf",
       mtime: OLD + 60_000, failure: { retryable: false, failureKind: "unparseable" }, expect: "kept-old" },
     { name: "scan used the fallback folders", folders: ["/d"], doc: "/d/a.pdf",
@@ -822,6 +872,8 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
   it.each(rows)("$name → $expect", async (row) => {
     await withLegacy(async (fx) => {
       const reports: IndexMigrationStatus[] = [];
+      const direct = [...(row.direct ?? [])];
+      const indexedDirectly: string[] = [];
       const deps: IndexMigrationDeps = {
         location: { indexRoot: join(fx.root, "state", "index"), documentCount: 0, inStateDirectory: true, legacyIndexDir: fx.legacy },
         workspace: join(fx.pluginDataDir, ".local-indexer-workspace"),
@@ -841,10 +893,13 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
           folders: row.folders,
         }),
         coverage: {
-          listNewDocuments: async () => (row.held ? [{ path: row.held.path, status: "indexed", contentState: row.held.contentState }] : []),
+          listNewDocuments: async () => [
+            ...(row.held ? [{ path: row.held.path, status: "indexed", contentState: row.held.contentState }] : []),
+            ...indexedDirectly.map((path) => ({ path, status: "indexed", contentState: "ok" })),
+          ],
           embeddingState: async () => row.embedding ?? "on",
-          fileMtime: async () => {
-            const mtime = row.mtime ?? OLD;
+          fileMtime: async (path) => {
+            const mtime = path === row.doc ? row.mtime ?? OLD : row.parentMtime ?? OLD;
             if (mtime === "EIO") throw Object.assign(new Error("EIO"), { code: "EIO" });
             return mtime;
           },
@@ -855,7 +910,16 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
             if (real === "fails") throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
             return real ?? path;
           },
-          caseInsensitive: row.caseInsensitive ?? false,
+          caseInsensitive: async () => row.caseInsensitive ?? false,
+          indexDirect: async (paths) =>
+            paths.map((path) => {
+              const answer = direct.shift() ?? "indexed";
+              if (answer === "indexed") {
+                indexedDirectly.push(path);
+                return { path, indexed: true };
+              }
+              return { path, indexed: false, ...answer };
+            }),
         },
         documentCount: async () => (row.held ? 1 : 0),
         removeDirectory: (path) => rm(path, { recursive: true, force: true }),
@@ -866,6 +930,8 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
       expect(result?.phase, JSON.stringify(result?.coverage)).toBe(row.expect);
       expect(existsSync(join(fx.legacy, "fts5.sqlite"))).toBe(row.expect === "kept-old");
       if (row.expect === "kept-old") expect(result?.reason).toBeTruthy();
+      if (row.reason) expect(result?.reason).toMatch(row.reason);
+      if (row.excludedCorrupt !== undefined) expect(result?.coverage?.excludedCorrupt).toHaveLength(row.excludedCorrupt);
     });
   });
 });

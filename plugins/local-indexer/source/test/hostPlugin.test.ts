@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import type { EgressChannel } from "../src/egressBroker.js";
 
@@ -103,6 +103,7 @@ const pickFoldersMock = vi.fn(async () => ({ canceled: false, folders: [] as str
 // Hooks into the copy of a pre-0.8.0 index (torn copies, a full disk).
 let copyFileHook: ((src: string, dst: string) => void | Promise<void>) | null = null;
 let statfsOverride: ((path: string) => { bavail: number; bsize: number }) | null = null;
+let lstatHook: ((path: string, real: any) => any) | null = null;
 vi.mock("node:fs/promises", async (importOriginal) => {
   const real = await importOriginal<typeof import("node:fs/promises")>();
   return {
@@ -112,6 +113,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       return real.copyFile(src, dst, mode);
     },
     statfs: async (path: string, opts?: any) => (statfsOverride ? statfsOverride(path) : real.statfs(path, opts)),
+    lstat: async (path: string, opts?: any) => {
+      const st = await real.lstat(path, opts);
+      return lstatHook ? lstatHook(path, st) : st;
+    },
   };
 });
 
@@ -276,6 +281,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
         runtimeInfo: async () => ({ index_root: mockIndexLocation?.indexRoot ?? "", document_count: mockDocuments.length }),
         reconcile: reconcileMock,
         reindex: reindexMock,
+        indexDocument: (filePath: string) => indexDocumentMock(filePath),
         legacyIndexManifest: legacyIndexManifestMock,
         captionImage: async () => ({
           filePath: "",
@@ -422,6 +428,7 @@ describe("hostPlugin createPlugin", () => {
     legacyIndexManifestMock.mockClear();
     copyFileHook = null;
     statfsOverride = null;
+    lstatHook = null;
     prePopulateCacheMock.mockClear();
     prePopulateCacheFromStateMock.mockClear();
     reconcileMock.mockClear();
@@ -1203,6 +1210,79 @@ describe("hostPlugin createPlugin", () => {
       expect(await settledMigration(plugin2)).toMatchObject({ phase: "kept-old", coverage: { undecidedVectors: 2 } });
       expect((await stat(join(legacy2, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin2.stop();
+    });
+
+    it("indexes an old document from outside the folders (a dropped file) directly, then completes", async () => {
+      const legacy = await legacyIndexFixture();
+      const docs = await savedFolders();
+      await oldIndexHolds(docs);
+      const dropped = join(hostRoot, "user-home", "Downloads", "dropped.md");
+      await mkdir(dirname(dropped), { recursive: true });
+      await writeFile(dropped, "# dropped");
+      mockLegacyManifest.push({
+        docId: "old-dropped", path: dropped, mtimeMs: Math.floor((await stat(dropped)).mtimeMs),
+        contentState: "ok", contentHash: null, hadVectors: false,
+      });
+      indexDocumentMock.mockImplementationOnce(async (filePath: string) => {
+        mockDocuments.push({
+          id: "dd", doc_id: "dd", doc_name: "dropped.md", doc_type: "md", type: "md",
+          path: filePath, status: "indexed", content_state: "ok",
+        } as (typeof mockDocuments)[number]);
+        return "dd";
+      });
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "completed", coverage: { required: 3, covered: 3, outside: 1 } });
+      expect(indexDocumentMock).toHaveBeenCalledWith(dropped);
+      // Its directory was allowed for that call, as document_index_scan does.
+      expect(setAllowedRootsMock.mock.calls.some(([roots]) => roots.includes(dirname(dropped)))).toBe(true);
+      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      await plugin.stop();
+    });
+
+    it("measures whether a folder folds case instead of assuming the platform default", async () => {
+      await legacyIndexFixture();
+      const docs = await savedFolders();
+      await writeFile(join(docs, "Note.md"), "# note");
+      const probe = await Promise.all([stat(join(docs, "Note.md")), stat(join(docs, "nOTE.MD")).catch(() => null)]);
+      const foldsHere = probe[1] !== null && probe[0].ino === probe[1].ino && probe[0].dev === probe[1].dev;
+      mockLegacyManifest = [{
+        docId: "old-note", path: join(docs, "Note.md"), mtimeMs: Math.floor(probe[0].mtimeMs),
+        contentState: "ok", contentHash: null, hadVectors: false,
+      }];
+      // The new index names it in another case.
+      mockDocuments = [{ id: "n", doc_id: "n", doc_name: "note.md", doc_type: "md", type: "md",
+        path: join(docs, "note.md"), status: "indexed", content_state: "ok" }] as typeof mockDocuments;
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      // Folding filesystem: the same file, covered. Case-sensitive: a
+      // different name, so Note.md is missing and the old index stays.
+      expect((await settledMigration(plugin)).phase).toBe(foldsHere ? "completed" : "kept-old");
+      await plugin.stop();
+    });
+
+    it("a case-swapped name that is a different file means the folder is case-sensitive", async () => {
+      await legacyIndexFixture();
+      const docs = await savedFolders();
+      await writeFile(join(docs, "Note.md"), "# note");
+      const st = await stat(join(docs, "Note.md"));
+      // As on a case-sensitive volume holding both Note.md and nOTE.MD.
+      lstatHook = (path, real) => (path.endsWith("nOTE.MD") ? { ...real, ino: Number(real.ino) + 1 } : real);
+      if ((await stat(join(docs, "nOTE.MD")).catch(() => null)) === null) await writeFile(join(docs, "nOTE.MD"), "# other");
+      mockLegacyManifest = [{
+        docId: "old-note", path: join(docs, "Note.md"), mtimeMs: Math.floor(st.mtimeMs),
+        contentState: "ok", contentHash: null, hadVectors: false,
+      }];
+      mockDocuments = [{ id: "n", doc_id: "n", doc_name: "note.md", doc_type: "md", type: "md",
+        path: join(docs, "note.md"), status: "indexed", content_state: "ok" }] as typeof mockDocuments;
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).phase).toBe("kept-old");
+      await plugin.stop();
     });
 
     it("keeps the old index when the old index cannot be read", async () => {

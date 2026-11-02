@@ -51,16 +51,26 @@ rebuilds the index once (see below).
     start without using up an attempt, with its own status. The plugin keeps
     the manifest in `index-migration-manifest.json` beside the old directory
     until it is gone.
-  - Paths are compared in every form a folder takes (as registered, its real
-    path, NFC), case-folded on macOS and Windows, so a symlinked folder, a
-    mapped drive and its UNC path, or a case-only rename names the same
-    place.
+  - A document's identity is its exact path first. Paths are compared in
+    every form a folder takes (as registered, its real path, NFC), so a
+    symlinked folder or a mapped drive and its UNC path names the same place.
+    Case is folded only under a folder measured case-insensitive (an entry's
+    case-swapped name is the same file), never by platform default, so on a
+    case-sensitive volume `A.pdf` is not covered by `a.pdf`.
   - An old document is excluded when its file is gone (under a folder that
     lists and still shows files); when its folder was in the manifest-time
     list and is no longer registered, and every current folder resolves;
     when the current settings no longer index its type; or when the file is
-    unchanged since the old index read it and the worker judged it
+    unchanged since the old index read it and two separate parses judged it
     `unparseable` (the completion message names these).
+  - A document indexed outside the registered folders (a dropped file) stays
+    required: the rebuild indexes it directly, as `document_index_scan`
+    does. It is excluded as gone only when its directory still exists, and
+    kept undecided when the file or directory cannot be read or a current
+    folder does not resolve.
+  - A document the worker refuses as over the file size limit (after the
+    limit was lowered) stays required; the status names how many and the
+    first paths, so the limit can be raised or the files removed.
   - Every other old document must be in the new index. If it had vectors,
     it must have vectors there too, unless the settings turn embedding off
     (plugin-key mode with no key stored, or a custom endpoint the host key
