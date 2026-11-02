@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import io
 import logging
+import os
 import sys
 import threading
 import time
@@ -680,9 +681,125 @@ def test_an_unparseable_file_is_a_failed_result_not_a_fault(tmp_path: Path, monk
         result = _call(handlers, "indexer_reindex", {"file_path": str(path)})
         assert result["status"] == "failed", name
         assert result["retryable"] is False, name
+        assert result["failure_kind"] == "unparseable", name
         assert "Layer A parse failed" in result["errors"][0], name
         row = indexer.get_document(result["doc_id"])
         assert row is not None and row["status"] == "failed"
     assert state.metrics["failed"] == 2
     assert state.metrics["processed"] == 0
     indexer.close()
+
+
+def _plain_indexer(tmp_path: Path) -> LocalIndexer:
+    return LocalIndexer(
+        workspace=str(tmp_path / "ws"),
+        sqlite_path=str(tmp_path / "fts5.sqlite"),
+        lance_path=str(tmp_path / "vectors.lance"),
+        openai_api_key="sk-test",
+        embedding_client=_SwitchableEmbedding(),
+        vector_store=_Vectors(),
+    )
+
+
+@pytest.mark.skipif(sys.platform == "win32" or getattr(os, "getuid", lambda: 1)() == 0, reason="needs POSIX permissions")
+def test_a_file_that_cannot_be_read_now_is_a_read_failure_that_may_pass(tmp_path: Path) -> None:
+    indexer = _plain_indexer(tmp_path)
+    path = tmp_path / "locked.md"
+    path.write_text("# 제목\n본문\n", encoding="utf-8")
+    path.chmod(0)
+    try:
+        result = indexer.reindex(str(path))
+    finally:
+        path.chmod(0o644)
+    assert result.status == "failed"
+    assert result.retryable is True
+    assert result.failure_kind == "io"
+    indexer.close()
+
+
+def test_a_parser_error_caused_by_a_read_failure_is_not_unparseable(tmp_path: Path) -> None:
+    # A Windows sharing violation, EIO on a network volume: parsers raise
+    # their own errors with the OSError as the cause, or the OSError itself.
+    indexer = _plain_indexer(tmp_path)
+    path = tmp_path / "shared.pdf"
+    path.write_bytes(b"%PDF-1.4 fine bytes")
+
+    def sharing_violation(_p: str) -> Any:
+        raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+
+    def wrapped(_p: str) -> Any:
+        try:
+            raise OSError(5, "Input/output error")
+        except OSError as io:
+            raise RuntimeError("pdf parse failed") from io
+
+    for parser in (sharing_violation, wrapped):
+        indexer._parser_overrides["pdf"] = parser
+        result = indexer.reindex(str(path))
+        assert (result.status, result.retryable, result.failure_kind) == ("failed", True, "io"), parser.__name__
+    indexer.close()
+
+
+def test_parse_failure_kind_rereads_the_bytes_before_calling_a_file_unparseable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import builtins
+
+    import local_indexer as li
+
+    path = tmp_path / "flaky.pdf"
+    path.write_bytes(b"%PDF-1.4")
+    assert li.parse_failure_kind(str(path), ValueError("bad xref")) == "unparseable"
+    real_open = builtins.open
+
+    def failing_open(file: Any, *args: Any, **kwargs: Any) -> Any:
+        if str(file) == str(path):
+            raise OSError(5, "Input/output error")
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", failing_open)
+    # A parser error with no OSError attached, on a file that no longer reads.
+    assert li.parse_failure_kind(str(path), ValueError("bad xref")) == "io"
+
+
+def test_a_caption_failure_is_never_unparseable(tmp_path: Path) -> None:
+    from worker.image_captioner import CaptionError
+
+    indexer = _plain_indexer(tmp_path)
+    path = tmp_path / "photo.pdf"
+    path.write_bytes(b"%PDF-1.4")
+
+    def unauthorized(_p: str) -> Any:
+        raise CaptionError("OpenAI Vision 호출 실패: Error code: 401", retryable=False)
+
+    indexer._parser_overrides["pdf"] = unauthorized
+    result = indexer.reindex(str(path))
+    assert (result.status, result.retryable, result.failure_kind) == ("failed", False, "caption")
+    assert w._result_dict(result)["failure_kind"] == "caption"
+    indexer.close()
+
+
+def test_legacy_manifest_refuses_a_copy_that_fails_its_integrity_check(tmp_path: Path) -> None:
+    import sqlite3
+
+    src = tmp_path / "old" / "fts5.sqlite"
+    src.parent.mkdir()
+    conn = sqlite3.connect(src)
+    conn.execute("PRAGMA page_size=4096")
+    conn.execute("CREATE TABLE documents(doc_id TEXT PRIMARY KEY, path TEXT, mtime_ms INT, status TEXT)")
+    conn.executemany("INSERT INTO documents VALUES(?, ?, 1, 'indexed')", [(f"d{i:05d}", f"/p/{i}" * 5) for i in range(3000)])
+    conn.execute("CREATE INDEX idx_path ON documents(path)")
+    conn.commit()
+    root = conn.execute("SELECT rootpage FROM sqlite_master WHERE name = 'idx_path'").fetchone()[0]
+    conn.close()
+    # Damage a page the manifest query never reads: the rows still list, so
+    # only the integrity check can tell the copy is not sound.
+    with open(src, "r+b") as handle:
+        handle.seek((root - 1) * 4096)
+        handle.write(b"\x0d" + b"\xff" * 4095)
+    reader = sqlite3.connect(src)
+    assert len(reader.execute("SELECT doc_id FROM documents WHERE status = 'indexed' ORDER BY doc_id LIMIT 10").fetchall()) == 10
+    reader.close()
+    workspace = tmp_path / "workspace"
+    with pytest.raises(sc.RequestError) as excinfo:
+        _call(_manifest_handlers(workspace), "legacy_index_manifest", {"sqlite_path": str(_copy_index(src, workspace))})
+    assert excinfo.value.code == sc.SERVER_ERROR
+    assert "integrity check" in excinfo.value.message

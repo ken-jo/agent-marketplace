@@ -76,6 +76,36 @@ class Chunk:
     content_ko: str = ""
 
 
+def _caused_by_os_error(exc: BaseException) -> bool:
+    seen = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, OSError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def parse_failure_kind(path: str, exc: BaseException) -> str:
+    """Why parsing ``path`` raised ``exc``: "io" or "unparseable".
+
+    "io" when the error is, or was caused by, an OSError, or when the file's
+    bytes cannot be read in full now: parsers wrap read failures in their own
+    errors, so a parser error alone does not prove the file is corrupt.
+    "unparseable" only when every byte reads and the parser still failed.
+    """
+    if _caused_by_os_error(exc):
+        return "io"
+    try:
+        with open(path, "rb") as handle:
+            while handle.read(1 << 20):
+                pass
+    except OSError:
+        return "io"
+    return "unparseable"
+
+
 @dataclass
 class IndexResult:
     doc_id: str
@@ -91,6 +121,13 @@ class IndexResult:
     # out, or refused egress for a runtime reason). False is the worker's
     # verdict on the file itself: too large, unparseable, missing config.
     retryable: bool = False
+    # For status == "failed": what failed. "unparseable" only when the file's
+    # bytes read in full and the format parser rejected them (a corrupt PDF, a
+    # truncated DOCX): the one failure that says the file itself cannot be
+    # indexed. "io" is a read failure (permissions, a sharing violation, a
+    # network volume), "caption" a caption or provider failure, "too_large"
+    # the size cap. None for an indexed result.
+    failure_kind: Optional[str] = None
     # True 면 vector(임베딩) 까지 성공적으로 생성. False 면 BM25 / chunk 까지는
     # 가능했지만 임베딩이 생략됐다는 뜻 (caption rejected, embedding client
     # unavailable, network 실패 등). 플러그인은 이 값이 False 면 사용자
@@ -337,6 +374,7 @@ class LocalIndexer:
                     chunk_count=0,
                     status="failed",
                     errors=[reason],
+                    failure_kind="too_large",
                 )
 
         _info(log, "indexer.file.start", doc_id=doc_id, path=abs_path, type=doc_type)
@@ -363,14 +401,17 @@ class LocalIndexer:
                 status="failed",
                 errors=[str(exc)],
                 retryable=bool(getattr(exc, "retryable", False)),
+                failure_kind="caption",
             )
         except Exception as exc:
-            # A file the parser cannot read (a corrupt PDF, a truncated DOCX)
-            # fails the same way on every retry: a verdict on the file, not a
-            # worker fault, so it is a failed result and not a raised error
-            # (which the plugin would read as a fault that may pass).
+            # A failed result, not a raised error (which the plugin reads as a
+            # worker fault). Whether it is a verdict on the file depends on
+            # why: a read failure (EACCES, a Windows sharing violation, EIO on
+            # a network volume) may pass, so only a parser rejection of bytes
+            # that read in full is "unparseable".
             self._mark_failed(doc_id, abs_path, doc_name, doc_type, mtime_ms)
-            _info(log, "indexer.file.parse_failed", doc_id=doc_id, path=abs_path, error=str(exc))
+            kind = parse_failure_kind(abs_path, exc)
+            _info(log, "indexer.file.parse_failed", doc_id=doc_id, path=abs_path, kind=kind, error=str(exc))
             return IndexResult(
                 doc_id=doc_id,
                 doc_name=doc_name,
@@ -378,7 +419,8 @@ class LocalIndexer:
                 chunk_count=0,
                 status="failed",
                 errors=[f"Layer A parse failed: {exc}"],
-                retryable=False,
+                retryable=kind == "io",
+                failure_kind=kind,
             )
 
         # 빈 doc 은 에러 아님 — 캡션 모델이 description 못 만들었거나 (정상

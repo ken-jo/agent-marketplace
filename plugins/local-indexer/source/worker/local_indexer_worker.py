@@ -432,6 +432,9 @@ def read_legacy_manifest_page(sqlite_path: str, after: Optional[str], limit: int
     a missing row here would let the plugin delete the old index without
     rebuilding that document. ``query_only`` keeps this reader from writing.
 
+    The first page (no ``after``) runs ``PRAGMA quick_check`` and refuses a
+    copy that fails it.
+
     Columns added by later ALTERs (``content_state``, ``content_hash``) may be
     absent in an old index. ``had_vectors`` is whether any of the document's
     chunks has an ``embeddings_meta`` row; an index without that table falls
@@ -441,6 +444,13 @@ def read_legacy_manifest_page(sqlite_path: str, after: Optional[str], limit: int
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA query_only = ON")
+        if not after:
+            # Once per read: a copy torn or damaged on the way here must not
+            # pass for a smaller index.
+            verdict = conn.execute("PRAGMA quick_check").fetchone()
+            if verdict is None or verdict[0] != "ok":
+                detail = str(verdict[0]).splitlines()[:2] if verdict else ["no answer"]
+                raise ValueError(f"the index copy failed its integrity check: {' '.join(detail)}")
         tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         if "documents" not in tables:
             raise ValueError("not an index: the documents table is missing")
@@ -834,6 +844,8 @@ def _result_dict(result: Any) -> Dict[str, Any]:
         "errors": result.errors,
         # For a failed result: whether the same file may index on a later try.
         "retryable": bool(getattr(result, "retryable", False)),
+        # For a failed result: what failed ("unparseable", "io", "caption", "too_large").
+        "failure_kind": getattr(result, "failure_kind", None),
         # 임베딩 성공 여부 — 플러그인은 embedded=false 면 (status="indexed"
         # 이더라도) 사용자 입장에선 실패로 본다. None 은 옛 워커 호환용
         # (필드 미존재) 으로만 발생.

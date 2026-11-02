@@ -65,11 +65,14 @@ export class WorkerCallError extends Error {
 export class WorkerIndexFailure extends Error {
   readonly filePath: string;
   readonly retryable: boolean;
-  constructor(message: string, filePath: string, retryable = false) {
+  /** The worker's `failure_kind`: "unparseable", "io", "caption", "too_large". */
+  readonly failureKind?: string;
+  constructor(message: string, filePath: string, retryable = false, failureKind?: string) {
     super(message);
     this.name = "WorkerIndexFailure";
     this.filePath = filePath;
     this.retryable = retryable;
+    if (failureKind !== undefined) this.failureKind = failureKind;
   }
 }
 
@@ -226,6 +229,7 @@ export interface IndexResultDict {
   errors?: string[] | null;
   /** For a failed result: the same file may index on a later try. */
   retryable?: boolean;
+  failure_kind?: string | null;
   /**
    * 임베딩 (벡터) 까지 성공적으로 생성됐는지. `true` 는 검색 인덱스에
    * 사용 가능한 doc, `false` 는 BM25/청크는 만들어졌지만 벡터가 없는
@@ -422,6 +426,7 @@ export class WorkerClient implements WorkerSearchClient, KnowledgeWorkerClient {
         `indexDocument: 인덱싱 실패 (${filePath})${detail}`,
         filePath,
         result.retryable === true,
+        typeof result.failure_kind === "string" ? result.failure_kind : undefined,
       );
     }
     if (!result?.doc_id) {

@@ -20,7 +20,7 @@ import {
   TEMP_FILE_PREFIXES,
 } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
-import { isTransientIndexFailure } from "./workerClient.js";
+import { isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
 
 /** Simple ReDoS heuristic: detect nested quantifiers like (...+)+ or (...*)*. */
 const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*]/;
@@ -301,7 +301,7 @@ export class FolderAutoIndexer {
       let indexed = 0;
       let failed = 0;
       let failedTransient = 0;
-      const failures: Array<{ path: string; retryable: boolean }> = [];
+      const failures: Array<{ path: string; retryable: boolean; failureKind?: string }> = [];
       let walked = 0;
       let walkedByFolder: Record<string, number> = {};
       let unreadableFolders: string[] = [];
@@ -420,7 +420,8 @@ export class FolderAutoIndexer {
             failed += 1;
             const retryable = isTransientIndexFailure(err);
             if (retryable) failedTransient += 1;
-            failures.push({ path: filePath, retryable });
+            const failureKind = err instanceof WorkerIndexFailure ? err.failureKind : undefined;
+            failures.push(failureKind === undefined ? { path: filePath, retryable } : { path: filePath, retryable, failureKind });
             if (counters) counters.failed += 1;
             lastError = (err as Error).message;
             // Capture docId before clearing maps so the callback can remove the DB record too.
