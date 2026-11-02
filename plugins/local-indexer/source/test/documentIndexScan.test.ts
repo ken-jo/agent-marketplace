@@ -71,7 +71,7 @@ vi.mock("../src/folderIndexer.js", () => {
 
 // ─── LocalIndexerPlugin mock: indexDocument counts calls ───────────────────
 const indexDocumentMock = vi.fn(async (_fp: string, _mode: string) => "doc-id-1");
-const setAllowedRootsMock = vi.fn(async (roots: string[], _token: string) => ({ roots, count: roots.length }));
+const setAllowedRootsMock = vi.fn(async (roots: string[]) => ({ roots, count: roots.length }));
 
 vi.mock("../src/localIndexerPlugin.js", () => {
   class LocalIndexerPlugin {
@@ -83,9 +83,11 @@ vi.mock("../src/localIndexerPlugin.js", () => {
         setAllowedRoots: setAllowedRootsMock,
       };
     }
-    async start() {}
-    async stop() {}
-    getShutdownToken() { return "test-shutdown-token"; }
+    running = false;
+    get isRunning() { return this.running; }
+    async start() { this.running = true; }
+    async stop() { this.running = false; }
+    getIndexLocation() { return null; }
     async listDocuments() { return []; }
   }
   return { LocalIndexerPlugin };

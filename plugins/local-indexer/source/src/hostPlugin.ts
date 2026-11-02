@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep as pathSep } from "node:path";
@@ -70,6 +70,7 @@ import {
   RESCAN_LEDGER_FILENAME,
 } from "./rescanSuggestion.js";
 import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
+import { migrateLegacyIndex, type IndexMigrationStatus } from "./indexMigration.js";
 import { LruCache } from "./lruCache.js";
 import { getIndexModeForPath, isImageFilePath, isIndexableFilePath } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
@@ -1052,7 +1053,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   };
 
   // A returned lease is a presence marker for existing worker configuration
-  // checks. The worker receives the broker token; only the broker uses the
+  // checks. The worker receives no credential; only the broker uses the
   // lease with hostFetch. A denied host lease never switches to plugin key.
   const resolveEmbeddingKeyForEndpoint = async (
     endpoint: unknown,
@@ -1337,7 +1338,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     hostApi.logEvent("warn", `local_indexer.worker.${w.kind}`, w);
     emitIndexWarning(w);
   };
-  const handleWorkerStdoutLine = (line: string): void => {
+  const handleWorkerLogLine = (line: string): void => {
     // Fast path: only inspect lines that mention one of our known events.
     if (
       !line.includes("caption.rejected_path")
@@ -1423,25 +1424,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     typeof _maxChunksPerDocRaw === "number" && Number.isFinite(_maxChunksPerDocRaw) && _maxChunksPerDocRaw >= 1
       ? Math.floor(_maxChunksPerDocRaw)
       : undefined;
-  // The worker's TCP port. Left unset this falls through to localIndexerPlugin's
-  // 43129, which is fine for one instance and fatal for a second: the port is
-  // what the worker binds, so a second Ave on the same machine could not start
-  // local-indexer at all, and there was no way to say otherwise. Out-of-range
-  // values fall through to undefined rather than being clamped — a nonsensical
-  // port is a configuration mistake worth leaving at the default, not worth
-  // silently rewriting into a different port than the user asked for.
-  const _workerPortRaw = getConfig("workerPort") ?? config.workerPort;
-  const workerPort =
-    typeof _workerPortRaw === "number" &&
-    Number.isFinite(_workerPortRaw) &&
-    _workerPortRaw >= 1024 &&
-    _workerPortRaw <= 65535
-      ? Math.floor(_workerPortRaw)
-      : undefined;
-
-  // 호스트-중재 워커 spawn capability. 주입되면 워커는 host가 ASRT-confined로
-  // 띄운다. socketPath가 있으면 UDS control, null이면 TCP control(gate-off
-  // plain spawn 또는 Windows ASRT-wrapped)이다.
+  // 호스트-중재 워커 spawn capability. 워커는 host가 (gate ON 이면 confined 로)
+  // 띄우고, plugin 과는 worker stdio control v1 으로만 대화한다.
   const spawnWorker =
     typeof hostApi.spawnWorker === "function"
       ? hostApi.spawnWorker.bind(hostApi)
@@ -1484,8 +1468,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   //     resource root), resolved host-side from config;
   //   - host mode resolves a new lease and lets hostFetch attach its key;
   //     plugin mode reads only the plugin-owned key slot;
-  //   - authScheme selects the plugin-owned key header. The worker carries
-  //     only the x-ave-egress-token and cannot name the upstream authority.
+  //   - authScheme selects the plugin-owned key header. The worker sends only
+  //     a path and a body over its control channel and cannot name the
+  //     upstream authority.
   const OPENAI_DEFAULT_BASE = "https://api.openai.com/v1";
   const safeOrigin = (value: unknown): string => {
     if (typeof value !== "string" || value.length === 0) return "";
@@ -1556,25 +1541,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     }
     return false;
   };
-  // Corp-CA trust moves to the broker's upstream client (it terminates provider
-  // TLS now). Mirror the worker's optional-corp-CA presence check.
-  // ONE resolution, ONE existence check, for BOTH consumers: the broker's
-  // upstream TLS and the worker's `SSL_CERT_FILE`. It used to be computed
-  // twice — here and again in `localIndexerPlugin` — and two copies of a path
-  // is how the broker and the worker come to disagree about whether corporate
-  // TLS is being intercepted.
+  // The corporate CA, resolved and existence-checked once here: the worker gets
+  // it as `SSL_CERT_FILE` for the model downloads it still makes directly.
+  // Provider egress goes through hostFetch, which owns its own TLS trust.
   const corpCaPemPath = resolve(aveHome, "certs", "corp-ca.pem");
   const corpCaPath = existsSync(corpCaPemPath) ? corpCaPemPath : null;
 
   const plugin = new LocalIndexerPlugin({
     workspace,
     pluginDataDir: context.pluginDataDir,
-    // Where the egress broker binds its Unix socket. The host creates this
-    // directory and registers it with the sandbox before the child starts; a
-    // socket anywhere else — this plugin's own writable `data` dir included —
-    // is refused. Passed on every platform; the broker reads it only on the
-    // ones that bind a Unix socket.
-    pluginSocketDir: context.pluginSocketDir,
     indexStorageRoot: typeof config.indexStorageRoot === "string" ? config.indexStorageRoot : process.env.LOCAL_INDEXER_ROOT,
     apiKey: embeddingApiKey,
     pythonExecutable,
@@ -1586,9 +1561,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     embeddingApiVersion,
     maxFileSize,
     maxChunksPerDoc,
-    port: workerPort,
-    // P3 ⑬: host-mediated egress broker. With this wired the worker never
-    // receives the provider key — only a per-session broker token.
+    // Plugin-mediated egress: the worker relays each provider request to this
+    // plugin and never receives the provider key or any token.
     egressChannels: { embedding: embeddingChannel, caption: captionChannel },
     isUpstreamAllowed: isEgressUpstreamAllowed,
     corpCaPath,
@@ -1599,8 +1573,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     // level explicit overrides (embeddingProvider / embeddingModel prefix)
     // still take precedence inside resolveEmbeddingProvider.
     hostVendor: readActiveVendor(),
-    onWorkerStdout: (line) => {
-      context.log(line);
+    onWorkerStderr: (line) => {
+      // stdout carries control frames only, so every worker log line — the
+      // JSON events included — arrives on stderr.
+      context.log(`[worker] ${line}`);
       // Surface critical worker events as UI-visible warnings. The worker
       // logs path-confinement failures (`caption.rejected_path`) and other
       // soft errors at INFO level only, which means a misconfigured allowed-
@@ -1608,9 +1584,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // results and the user has no idea why indexing keeps failing.
       // We parse only the known event types and forward them as a single
       // `index.warning` host event so the UI can render an actionable banner.
-      handleWorkerStdoutLine(line);
+      handleWorkerLogLine(line);
     },
-    onWorkerStderr: (line) => context.log(`[stderr] ${line}`),
     // #955 round-2 architect Minor: forward azure-inherit config warnings
     // as a host event so the UI can render an actionable banner. Stderr
     // remains the log archival path.
@@ -1640,19 +1615,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // workerClient — WorkerClient 인스턴스
   const workerClient = plugin.getWorkerClient();
 
-  // ── Egress credential push (P3 ⑬) ──────────────────────────────────────
-  // What the host pushes to the worker over the control channel:
-  // Always the per-session BROKER TOKEN, never the provider key. The worker
-  // presents it as `x-ave-egress-token`; the broker injects the real provider
-  // auth host-side through hostApi.hostFetch. The token is always present, so
-  // query-time vector search and key rotation work through the broker without a
-  // worker restart (the broker resolves the real key fresh per request).
-  const embeddingCredentialFor = (
-    _handle: ApiKeyLease | null,
-  ): string => plugin.getEgressToken() ?? "";
-  const captionCredentialFor = (
-    _handle: ApiKeyLease | null,
-  ): string => plugin.getEgressToken() ?? "";
+  // ── Egress availability push ───────────────────────────────────────────
+  // No credential ever crosses to the worker: it relays each provider request
+  // to this plugin, and the broker resolves the real key fresh per request
+  // through hostApi.hostFetch. What the host pushes is only whether a key
+  // exists (`setEmbeddingEgress(true)`), so a keyless install stays BM25-only
+  // instead of sending a refused request per chunk.
 
   // §4.4 LRU Query Cache — 반복 쿼리 최적화
   const structureCache = new LruCache<unknown>({ maxSize: 32, ttlMs: 5 * 60_000 });
@@ -2314,15 +2282,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
    * ensureStarted에서 호출하여, 런타임에 새 폴더를 추가했을 때 worker가 해당
    * 폴더 내 파일을 422로 거부하지 않도록 한다.
    *
-   * 실패는 non-fatal: 로그만 남기고 후속 동작을 막지 않는다 (예: 토큰 미보유).
+   * 실패는 non-fatal: 로그만 남기고 후속 동작을 막지 않는다 (예: 워커 미실행).
    */
   async function syncAllowedRootsToWorker(
     folders: string[],
     extraRoots: string[] = [],
   ): Promise<void> {
-    const token = plugin.getShutdownToken();
-    if (!token) {
-      context.log("syncAllowedRootsToWorker: shutdown token missing, skipping");
+    if (!plugin.isRunning) {
+      context.log("syncAllowedRootsToWorker: worker not running, skipping");
       return;
     }
     // Why: Windows mapped network drives (e.g. `D:\업무\…` 가 `\\server\share\…`
@@ -2362,7 +2329,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       ]),
     );
     try {
-      await workerClient.setAllowedRoots(roots, token);
+      await workerClient.setAllowedRoots(roots);
       hostApi.logEvent("info", "local_indexer.allowed_roots.synced", { count: roots.length });
     } catch (err) {
       hostApi.logEvent("warn", "local_indexer.allowed_roots.sync_failed", {
@@ -2548,6 +2515,97 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   let startingPromise: Promise<void> | null = null;
   let teardownPromise: Promise<void> | null = null;
 
+  // ── Index location upgrade (0.8.0) ─────────────────────────────────────
+  // The index moved from `<pluginDataDir>/index` to the worker's host-made
+  // state directory, which this plugin cannot write. It is rebuilt there by a
+  // full scan the user can see (index.scan.progress + the warning banner +
+  // index_scan_status.indexMigration), and the old directory is removed only
+  // after a clean, verified rebuild (src/indexMigration.ts).
+  let indexMigrationStatus: IndexMigrationStatus | null = null;
+  let indexMigrationPromise: Promise<void> | null = null;
+
+  const indexMigrationNotice = (status: IndexMigrationStatus): IndexWarningPayload | null => {
+    switch (status.phase) {
+      case "rebuilding":
+        return {
+          kind: "index-migration",
+          path: status.legacyIndexDir,
+          message:
+            "인덱스 저장 위치가 바뀌어 전체 재인덱싱을 진행합니다. " +
+            "재인덱싱이 끝나고 확인되면 이전 인덱스(" + status.legacyIndexDir + ")를 삭제합니다.",
+        };
+      case "kept-old":
+        return {
+          kind: "index-migration",
+          path: status.legacyIndexDir,
+          reason: status.reason,
+          message:
+            "인덱스 재구축이 완료되지 않아 이전 인덱스를 보존합니다 (" + (status.reason ?? "원인 불명") + "). " +
+            "다음 시작 때 다시 시도합니다.",
+        };
+      case "completed":
+        return {
+          kind: "index-migration",
+          path: status.legacyIndexDir,
+          message:
+            "인덱스 재구축 완료 (" + String(status.documentsAfter ?? 0) + "개 문서). " +
+            "이전 인덱스(" + status.legacyIndexDir + ")를 삭제했습니다.",
+        };
+      default:
+        return null;
+    }
+  };
+
+  function reportIndexMigration(status: IndexMigrationStatus): void {
+    indexMigrationStatus = status;
+    hostApi.logEvent(
+      status.phase === "kept-old" ? "warn" : "info",
+      `local_indexer.index_migration.${status.phase}`,
+      {
+        legacyIndexDir: status.legacyIndexDir,
+        indexRoot: status.indexRoot,
+        documentsBefore: status.documentsBefore,
+        documentsAfter: status.documentsAfter,
+        scan: status.scan,
+        reason: status.reason,
+      },
+    );
+    // The rebuilding notice is raised by index_scan itself, after it clears
+    // the previous scan's warnings; the outcome is raised here.
+    if (status.phase !== "rebuilding") {
+      const notice = indexMigrationNotice(status);
+      if (notice) emitIndexWarning(notice);
+    }
+  }
+
+  function startIndexMigration(): void {
+    const location = plugin.getIndexLocation();
+    if (!location?.legacyIndexDir || indexMigrationPromise) return;
+    context.log(
+      `index location changed: rebuilding ${location.indexRoot} from the registered folders; ` +
+        `${location.legacyIndexDir} is removed once the rebuild is verified`,
+    );
+    const warmup = startupWarmupPromise;
+    indexMigrationPromise = (async () => {
+      // The warmup syncs the worker's allowed roots; the scan needs them.
+      if (warmup) await warmup;
+      await migrateLegacyIndex({
+        location,
+        workspace,
+        runFullScan: (status) => handlerImpls.index_scan({ migration: status }),
+        countDocuments: async () => (await plugin.listDocuments()).length,
+        removeDirectory: (path) => rm(path, { recursive: true }),
+        report: reportIndexMigration,
+      });
+    })()
+      .catch((err) => {
+        hostApi.logEvent("warn", "local_indexer.index_migration.failed", { error: (err as Error).message });
+      })
+      .finally(() => {
+        indexMigrationPromise = null;
+      });
+  }
+
   async function ensureStarted(): Promise<void> {
     if (teardownPromise) {
       throw new Error("Local Indexer runtime is stopping or stopped");
@@ -2607,7 +2665,6 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           captionProvider,
           captionModel,
           captionEndpoint,
-          captionCredentialFor(captionHandle),
           captionApiVersion,
         );
         if (captionHandle) {
@@ -2618,26 +2675,22 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           error: (err as Error).message,
         });
       }
-      // Push the embedding key to the freshly-started worker so query-time
-      // vector search has a credential immediately. The env key channel was
-      // removed (no *_INDEXER_API_KEY in the worker process), so without
-      // this warmup push the SearchService would boot with an empty key and
-      // silently degrade to BM25-only for any query that runs outside an
-      // index_scan window. The bearer is supplied as a thunk and flows through
-      // the same trust chokepoint as the per-scan push, so an untrusted custom
-      // embeddingEndpoint still withholds the host key. The per-scan re-push
-      // (below, at index_scan entry) and rotation re-pushes still apply.
+      // Tell the freshly-started worker that embedding may go through, so
+      // query-time vector search works immediately. Without this warmup push
+      // the SearchService stays BM25-only for any query that runs outside an
+      // index_scan window. The per-scan re-push (below, at index_scan entry)
+      // still applies.
       try {
         const warmupEmbeddingHandle = await resolveHostKeyHandle("embedding");
         try {
-          // Push the session token (always present); the provider key stays
-          // host-side in the broker/hostFetch path.
+          // No credential crosses; the provider key stays host-side in the
+          // broker/hostFetch path.
           //
           // Gated on the trust chokepoint, which this push previously claimed
           // to honour and did not: it read the handle directly, so a user in
           // `apiKeySource: "plugin"` mode with no key of their own — or one
           // pointing embeddings at an untrusted custom endpoint — still had a
-          // credential pushed to the worker at boot, and the worker then
+          // go-ahead pushed to the worker at boot, and the worker then
           // embedded through the broker on the host key. The per-scan push
           // below already asks this question; asking it here too is what makes
           // "no host key" mean no host key.
@@ -2645,13 +2698,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             getConfig("embeddingEndpoint"),
             warmupEmbeddingHandle,
           )).length > 0;
-          const warmupCredential = warmupHasKey
-            ? embeddingCredentialFor(warmupEmbeddingHandle)
-            : "";
-          if (warmupCredential) {
-            await workerClient.setEgressToken(() =>
-              embeddingCredentialFor(warmupEmbeddingHandle),
-            );
+          if (warmupHasKey) {
+            await workerClient.setEmbeddingEgress(true);
           }
         } finally {
           if (warmupEmbeddingHandle) {
@@ -2677,6 +2725,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             startupWarmupPromise = null;
           });
       }
+      startIndexMigration();
     })();
     try {
       await startingPromise;
@@ -2706,6 +2755,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // ensureWatching() could recreate a watcher after teardown returned.
       const warmup = startupWarmupPromise;
       if (warmup) await warmup;
+      // A rebuild still running is cancelled; its old index stays in place.
+      const migration = indexMigrationPromise;
+      if (migration) {
+        autoIndexer.cancelScan();
+        await migration;
+      }
       const results = await Promise.allSettled([autoIndexer.stop(), plugin.stop()]);
       started = false;
       const failures = results
@@ -2744,9 +2799,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // index_add_folder, index_add_folders, index_remove_folder) hard-fail —
   // no alias handlers (owner decision A).
   const handlerImpls = {
-      index_scan: async () => {
+      index_scan: async (opts: { migration?: IndexMigrationStatus } = {}) => {
         clearRecentIndexWarnings();
         _surfacedWarningKeys.clear();
+        if (opts.migration) {
+          // The index-location rebuild: say why this scan is running and what
+          // happens to the old index, in the banner the scan's own warnings use.
+          const notice = indexMigrationNotice(opts.migration);
+          if (notice) emitIndexWarning(notice);
+        }
 
         // 워커가 silent "embedding client unavailable" 로 끝나기 전에
         // 명백한 misconfig 는 user-visible 에러로 즉시 throw 한다.
@@ -3021,14 +3082,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
         try {
         // Capture provider metadata and key-source mode for this scan. The
-        // worker receives only its broker token; the broker resolves each
-        // upstream lease afresh after this configuration snapshot.
+        // worker receives no credential; the broker resolves each upstream
+        // lease afresh after this configuration snapshot.
         const capturedVendor = embeddingHandle?.vendor ?? readActiveVendor();
         const capturedKeySource = readApiKeySource();
         // Use the trust chokepoint so the "has key" flag describes provider
-        // credential availability, not broker-token availability. The worker is
-        // still pushed only the broker session token below; the real provider
-        // key stays host-side in the egress channel resolver.
+        // credential availability. The worker is pushed only the go-ahead flag
+        // below; the real provider key stays host-side in the egress channel
+        // resolver.
         const hasEmbeddingKey =
           (await resolveEmbeddingKeyForEndpoint(getConfig("embeddingEndpoint"), embeddingHandle)).length > 0;
         const hasCaptionKey =
@@ -3043,14 +3104,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           via: embeddingHandle ? "lease-metadata" : "plugin-key",
         });
 
-        // Push the embedding key to the worker so the running scan uses a
-        // consistent credential regardless of mid-flight toggle changes.
-        // The bearer is supplied as a thunk so workerClient never holds it
-        // as a long-lived field (#893 Stage 3).
+        // Tell the worker embedding may go through for this scan. No key
+        // crosses: the broker resolves the credential per request.
         if (hasEmbeddingKey) {
-          const getEmbeddingCredential = (): string => embeddingCredentialFor(embeddingHandle);
           try {
-            await workerClient.setEgressToken(getEmbeddingCredential);
+            await workerClient.setEmbeddingEgress(true);
           } catch (err) {
             hostApi.logEvent("warn", "index_scan.embedding_key_sync_failed", {
               error: (err as Error).message,
@@ -3058,7 +3116,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
         }
 
-        // Push the caption key to the worker. Same thunk pattern.
+        // Push the caption settings to the worker (no credential).
         const currentSettingsForCapture = await loadImageSettings();
         if (currentSettingsForCapture.imageEmbeddingEnabled) {
           const captionHostBaseUrl = captionHandle?.baseUrl ?? embeddingHandle?.baseUrl;
@@ -3081,14 +3139,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           const captionApiVersion = scanCaptionConfig
             ? scanCaptionConfig.apiVersion
             : readCaptionApiVersion({ provider: captionProvider, hostBaseUrl: captionHostBaseUrl });
-          const getCaptionCredential = (): string => captionCredentialFor(captionHandle);
           try {
             await workerClient.setImageCaptioning(
               scanImageEmbeddingEnabled,
               captionProvider,
               captionModel,
               captionEndpoint,
-              scanImageEmbeddingEnabled ? getCaptionCredential : "",
               captionApiVersion,
             );
           } catch (err) {
@@ -3226,6 +3282,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         return {
           ...autoIndexer.getScanProgress(),
           warnings: recentIndexWarnings.map((warning) => ({ ...warning })),
+          indexMigration: indexMigrationStatus ? { ...indexMigrationStatus } : null,
         };
       },
 
@@ -3238,7 +3295,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       /**
        * D7 — On-demand indexing triggered by drag & drop.
        * Enqueues the given absolute paths into the existing indexing queue.
-       * Each path is indexed via the Python worker HTTP API.
+       * Each path is indexed through the Python worker (indexer_reindex).
        * Returns { indexed, failed, jobId } for caller feedback.
        */
       document_index_scan: async (payload?: unknown) => {
@@ -3653,7 +3710,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           invalidateFolderSummaryCache();
           if (started) {
             // Worker 허용 루트를 먼저 갱신해야 rebuild 직후의 scanOnce()가
-            // 새 폴더의 파일을 /indexer/reindex에 넣을 때 422로 거부되지 않음.
+            // 새 폴더의 파일을 indexer_reindex에 넣을 때 거부되지 않음.
             await syncAllowedRootsToWorker(folders);
             // IndexState 먼저 → DB로 보충 (이미 인덱싱된 파일 재스캔 방지).
             const addFolderState = await loadMergedIndexState().catch(() => new Map());
@@ -3730,7 +3787,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             invalidateFolderSummaryCache();
             if (started) {
               // Worker 허용 루트를 먼저 갱신해야 rebuild 직후의 scanOnce()가
-              // 새 폴더 파일을 /indexer/reindex에 넣을 때 422로 거부되지 않음.
+              // 새 폴더 파일을 indexer_reindex에 넣을 때 거부되지 않음.
               await syncAllowedRootsToWorker(folders);
               const addState = await loadMergedIndexState().catch(() => new Map());
               let existingDocs: LocalIndexerDocumentMeta[] = [];
@@ -4019,13 +4076,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         const provider = readCaptionProvider({ hostBaseUrl, hostVendor });
         const endpoint = readCaptionEndpoint({ provider, hostBaseUrl, hostVendor });
         const model = readCaptionModel({ provider, hostBaseUrl });
-        // Push the session token; the caption provider key stays host-side in
-        // the broker/hostFetch path.
-        const apiKey = captionCredentialFor(captionHandle);
+        // No credential is pushed; the caption provider key stays host-side in
+        // the broker/hostFetch path. Whether one exists is reported to the UI.
+        const hasCaptionKey =
+          (await resolveCaptionKeyForEndpoint(getConfig("imageCaptionEndpoint"), captionHandle)).length > 0;
         const apiVersion = readCaptionApiVersion({ provider, hostBaseUrl });
 
         // Sidecar 는 이미 위에서 영속화됨. worker push 는 best-effort —
-        // 워커가 죽어있거나 (port 충돌, 좀비 등) 시작 실패해도 토글 자체는
+        // 워커가 죽어있거나 시작 실패해도 토글 자체는
         // 성공으로 처리해야 다른 UI 동작이 줄줄이 차단되지 않는다. 다음
         // worker boot 의 startup-sync 가 디스크에서 다시 읽어 반영.
         let workerSynced = false;
@@ -4037,7 +4095,6 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             provider,
             model,
             endpoint,
-            apiKey,
             apiVersion,
           );
           workerSynced = true;
@@ -4082,7 +4139,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // returned to the UI (caller-controlled) below.
           endpointHost: endpoint === null ? null : endpointHostForLog(endpoint),
           apiVersion,
-          hasApiKey: apiKey.length > 0,
+          hasApiKey: hasCaptionKey,
           workerSynced,
           invalidatedImageEntries,
         });
@@ -4096,7 +4153,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           imageCaptionModel: model,
           imageCaptionEndpoint: endpoint,
           imageCaptionApiVersion: apiVersion,
-          hasApiKey: apiKey.length > 0,
+          hasApiKey: hasCaptionKey,
           workerSynced,
           message: workerSynced
             ? baseMessage

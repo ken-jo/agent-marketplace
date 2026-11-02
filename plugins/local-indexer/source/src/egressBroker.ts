@@ -1,64 +1,73 @@
 /**
- * EgressBroker — host-mediated reverse proxy for the Python worker's provider
- * egress (embeddings + image captioning).
+ * EgressBroker — the plugin-side answer to the worker's provider egress
+ * (embeddings + image captioning).
  *
  * Threat model
  * ------------
  * The Python worker is UNTRUSTED for credentials. It parses attacker-controlled
  * documents (PDF/PPTX/images) and runs a large transitive dependency tree
- * (openai + httpx + …) in-process. A worker holding the real provider key plus
- * free outbound network can (a) exfiltrate the host's shared chat key and
- * (b) call any endpoint. The broker removes both capabilities:
+ * (openai + httpx2 + …) in-process. A worker holding the real provider key
+ * plus free outbound network could (a) exfiltrate the host's shared chat key
+ * and (b) call any endpoint. The broker removes both capabilities:
  *
- *   - the worker holds only a per-session BROKER TOKEN, never the provider key;
- *   - the worker cannot NAME an upstream host — the broker resolves the upstream
- *     host-side, per logical channel (embedding/caption), from the host's own
- *     trusted defaults / SSRF-validated custom endpoint. A worker-supplied (or
- *     fully compromised) request can only carry `{ path-remainder, body }`.
+ *   - the worker holds no credential and no token at all;
+ *   - the worker cannot NAME an upstream host — the broker resolves the
+ *     upstream itself, per logical channel (embedding/caption), from the
+ *     host's trusted defaults / SSRF-validated custom endpoint. A worker
+ *     request (or a fully compromised one) can only carry
+ *     `{ method, path-remainder, allow-listed headers, body }`.
  *
- * The broker terminates worker→broker as plain loopback HTTP. For a host key,
- * hostFetch attaches the lease credential inside the host; for a plugin-owned
- * key, the broker supplies the provider header. Neither key reaches the worker.
+ * Transport: worker stdio control v1. The worker sends one request per
+ * provider HTTP call — `egress_embedding` or `egress_caption` — and this
+ * broker answers it from `handle.onRequest`. There is no listener, port,
+ * socket or token: only this plugin can answer that channel, because only
+ * the host-owned pipe reaches the worker.
  *
- * Two transports, one policy: a bind-mounted Unix-domain socket where a
- * confined child cannot bind loopback, loopback TCP on an ephemeral port where
- * `listen(path)` is not a Unix socket. `egressBrokerTransportFor` is where that
- * is decided; the token check below is transport-independent, so neither
- * address is reachable without it.
+ * Every answer is HTTP-shaped (`{ status, headers, body }`), refusals
+ * included (403 egress-denied, 413, 429 with Retry-After), so the worker's SDK
+ * and its failure classification see exactly what they saw when this was an
+ * HTTP proxy. Only a malformed request is a JSON-RPC error.
  *
- * This module is intentionally a clean, self-contained interface owned by the
- * plugin adapter so it can later be lifted into Ave as a host capability
- * (and unified with `hostApi.hostFetch`) without a rewrite.
+ * For a host key, hostFetch attaches the lease credential inside the host;
+ * for a plugin-owned key, the broker supplies the provider header. Neither key
+ * reaches the worker.
  */
 
-import { timingSafeEqual } from "node:crypto";
-import { readFileSync, unlinkSync } from "node:fs";
-import { resolve } from "node:path";
-import {
-  createServer,
-  request as httpRequest,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http"; // egress-gate: allow — EgressBroker IS the host-mediated egress chokepoint (the loopback listener that replaces the worker's direct provider egress); this is the legitimate single egress point, the Tier-A analog for the worker process
-import { Agent as HttpsAgent, request as httpsRequest } from "node:https"; // egress-gate: allow — broker upstream client: the one allow-listed provider TLS egress point, replacing per-worker direct egress
 import type { ApiKeyLease } from "@ave/plugin-contract";
 
-/** Per-channel URL prefixes the worker addresses; the broker routes by these. */
-export const EGRESS_EMBEDDING_PATH = "/egress/embedding";
-export const EGRESS_CAPTION_PATH = "/egress/caption";
+/** The worker-to-plugin methods, one per logical egress channel. */
+export const EGRESS_EMBEDDING_METHOD = "egress_embedding";
+export const EGRESS_CAPTION_METHOD = "egress_caption";
 
-/** Dedicated header carrying the per-session broker token (NOT the provider key). */
-export const EGRESS_TOKEN_HEADER = "x-ave-egress-token";
+/** Largest worker control frame (`WORKER_CONTROL_FRAME_BYTES_MAX`), excluding its newline. */
+export const WORKER_FRAME_BYTES_MAX = 16 * 1024 * 1024;
+
+/**
+ * Largest caption image, in raw bytes, the relay carries: its base64 data URL
+ * (4/3 of the raw size, 14.67 MiB at the cap) plus the request around it must
+ * fit one 16 MiB frame. The worker refuses a larger image before sending
+ * (`worker/stdio_egress.py`, same value); this side refuses a caption request
+ * whose body could only hold a larger one.
+ */
+export const CAPTION_IMAGE_BYTES_MAX = 11 * 1024 * 1024;
+
+/** Room in a caption request for everything that is not the image: prompt, JSON, model. */
+export const CAPTION_ENVELOPE_BYTES_MAX = 512 * 1024;
+
+/** Largest caption request body: the cap's base64 length plus the envelope. */
+export const CAPTION_REQUEST_BYTES_MAX = Math.ceil(CAPTION_IMAGE_BYTES_MAX / 3) * 4 + CAPTION_ENVELOPE_BYTES_MAX;
+
+/** Room an answer keeps for its own JSON fields and string escaping inside the frame. */
+const ANSWER_FRAME_HEADROOM_BYTES = 64 * 1024;
 
 /** Provider auth header schemes the broker can inject host-side. */
 export type EgressAuthScheme = "bearer" | "api-key";
 
 /**
  * Host-side resolution for one logical channel, recomputed fresh per request
- * via the channel thunk — never stored on the broker. `upstreamBaseUrl` and
- * `apiKey` is present only in plugin-key mode. A host-key request carries a
- * lease instead. The worker has no input into either credential choice.
+ * via the channel thunk — never stored on the broker. `apiKey` is present only
+ * in plugin-key mode. A host-key request carries a lease instead. The worker
+ * has no input into either credential choice.
  */
 export interface EgressChannelResolution {
   /** Host-resolved upstream base (trusted default or SSRF-validated custom). */
@@ -90,56 +99,31 @@ export interface EgressUpstreamResponse {
   body: Buffer;
 }
 
-/** Pluggable upstream transport (injectable for tests). */
+/** The host-owned upstream transport (hostFetch in production, injectable for tests). */
 export type EgressUpstreamFetch = (
   url: string,
   init: { method: string; headers: Record<string, string>; body?: Buffer; lease?: ApiKeyLease; signal?: AbortSignal },
 ) => Promise<EgressUpstreamResponse>;
 
-export type EgressTransport =
-  | { kind: "tcp"; host?: string; port?: number }
-  | { kind: "uds"; socketPath: string };
+/** What the worker sends: one provider HTTP request, minus its authority and auth. */
+export interface EgressRelayRequest {
+  method: string;
+  /** Path and query below the channel, as the SDK built it (`/embeddings`, `/openai/deployments/…?api-version=…`). */
+  path: string;
+  headers?: Record<string, string>;
+  body?: string;
+  bodyEncoding?: "base64";
+}
 
-/** File name of the Unix socket, inside the directory the host registered. */
-const UDS_FILE_NAME = "egress.sock";
-
-/**
- * How the broker binds, decided once, from the platform.
- *
- * On darwin and linux: a Unix-domain socket in `socketDir`, the one directory
- * the host registers with the sandbox for this purpose (a socket in the
- * plugin's writable data dir is refused — creating a SOCKET is a separate,
- * directory-scoped allow). Loopback TCP is not available to a confined plugin
- * child there: macOS refuses the bind outright, and Linux binds it into a
- * network namespace the worker is not in, which is worse because the failure
- * then surfaces at the worker's first request rather than at the bind.
- *
- * On win32: loopback TCP on an ephemeral port. `server.listen({ path })` there
- * is not AF_UNIX at all — libuv creates a NAMED PIPE, whose address has to live
- * under `\\.\pipe\`, so a filesystem path is refused by `CreateNamedPipeW` and
- * arrives as EACCES with no socket file left behind. A pipe is not usable as
- * the address either way: the worker reaches the broker through httpx, which
- * can pin its transport to a Unix socket but not to a Windows pipe. Loopback is
- * bindable there because the Windows confinement is a filesystem one and puts
- * the child in no network namespace, and the per-session token — checked on
- * every request in `handle()` before any routing — is what keeps the port from
- * being an opening for other local processes.
- *
- * Returns null when the platform binds a Unix socket and no directory to bind
- * it in was supplied; the caller decides what a missing directory means.
- */
-export function egressBrokerTransportFor(
-  platform: NodeJS.Platform,
-  socketDir: string | undefined,
-): EgressTransport | null {
-  if (platform === "win32") return { kind: "tcp", host: "127.0.0.1", port: 0 };
-  if (!socketDir) return null;
-  return { kind: "uds", socketPath: resolve(socketDir, UDS_FILE_NAME) };
+/** What the worker gets back: the upstream's (or the broker's own) HTTP answer. */
+export interface EgressRelayAnswer {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+  bodyEncoding?: "base64";
 }
 
 export interface EgressBrokerOptions {
-  /** Per-session token the worker must present (constant-time compared). */
-  token: string;
   /** Channel resolvers — host-side, fresh per request. */
   channels: { embedding: EgressChannel; caption: EgressChannel };
   /**
@@ -148,12 +132,8 @@ export interface EgressBrokerOptions {
    * it exists so a future channel-resolver bug cannot silently exfiltrate.
    */
   isUpstreamAllowed: (url: string) => boolean;
-  /** Transport binding. Default: loopback TCP ephemeral (127.0.0.1:0). */
-  transport?: EgressTransport;
-  /** Upstream transport override (tests). Default: the Node https/http client. */
-  upstreamFetch?: EgressUpstreamFetch;
-  /** Corporate CA PEM path for provider TLS (the broker terminates it now). */
-  upstreamCaPath?: string | null;
+  /** Upstream transport: the plugin's hostFetch adapter. */
+  upstreamFetch: EgressUpstreamFetch;
   /** Host-only audit sink (never secret material). */
   logEvent?: (
     level: "info" | "warn" | "error",
@@ -162,36 +142,11 @@ export interface EgressBrokerOptions {
   ) => void;
   /** Upstream request timeout (ms). Default 60s (covers slow vision calls). */
   requestTimeoutMs?: number;
-  /** Max relayed body size (request and response). Default 25 MiB. */
-  maxBodyBytes?: number;
-}
-
-export interface EgressBrokerInfo {
-  /** Loopback base URL the worker addresses (TCP). For UDS, the dummy authority. */
-  baseUrl: string;
-  transport: EgressTransport;
-  /** Resolved socket path when transport is UDS, else null. */
-  socketPath: string | null;
-}
-
-/**
- * The worker's boot arguments naming how to reach the broker, derived from what
- * the broker actually bound so the two can never disagree.
- *
- * Over a Unix socket the URL is only the authority the provider SDKs insist on
- * parsing (`http://localhost`, which nothing dials) and the socket path is what
- * decides where the bytes go. Over loopback TCP the URL is the real bound
- * address and there is no socket to name.
- */
-export function egressBrokerWorkerArgs(info: EgressBrokerInfo): string[] {
-  const args = ["--egress-broker-url", info.baseUrl];
-  if (info.socketPath !== null) args.push("--egress-broker-uds", info.socketPath);
-  return args;
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000;
-const DEFAULT_MAX_BODY = 25 * 1024 * 1024;
-const UDS_DUMMY_AUTHORITY = "http://localhost";
+const ALLOWED_METHODS = new Set(["GET", "POST"]);
+const PATH_MAX = 8192;
 
 /**
  * Allow-list of request headers the broker forwards to the upstream.
@@ -215,23 +170,10 @@ const STRIPPED_RESPONSE_HEADERS = new Set([
   "content-length",
 ]);
 
-/** Constant-time token comparison that tolerates length mismatch safely. */
-function tokensMatch(expected: string, received: string): boolean {
-  const a = Buffer.from(expected, "utf8");
-  const b = Buffer.from(received, "utf8");
-  if (a.length !== b.length) {
-    // Still run a compare against a same-length buffer to avoid leaking the
-    // length distinction via early return timing.
-    timingSafeEqual(a, Buffer.alloc(a.length));
-    return false;
-  }
-  return timingSafeEqual(a, b);
-}
-
 function joinUpstream(baseUrl: string, remainder: string): string {
   const base = baseUrl.replace(/\/+$/, "");
-  if (!remainder) return base;
-  return `${base}${remainder.startsWith("/") ? "" : "/"}${remainder}`;
+  if (!remainder || remainder === "/") return base;
+  return `${base}${remainder}`;
 }
 
 function originOf(url: string): string {
@@ -252,185 +194,165 @@ function authHeaderFor(scheme: EgressAuthScheme, key: string): [string, string] 
   }
 }
 
+/** A worker path: absolute, below the channel, and unable to change the authority. */
+function isSafeRemainder(path: string): boolean {
+  if (path.length === 0 || path.length > PATH_MAX) return false;
+  if (!path.startsWith("/") || path.startsWith("//")) return false;
+  // No whitespace, control characters, backslashes, authority markers or fragments.
+  return !/[\s\u0000-\u001f\u007f\\#@]/.test(path);
+}
+
+function parseRelayRequest(params: unknown): EgressRelayRequest {
+  if (typeof params !== "object" || params === null || Array.isArray(params)) {
+    throw new Error("egress request params must be an object");
+  }
+  const raw = params as Record<string, unknown>;
+  if (typeof raw.method !== "string" || typeof raw.path !== "string") {
+    throw new Error("egress request needs a method and a path");
+  }
+  if (raw.headers !== undefined && (typeof raw.headers !== "object" || raw.headers === null || Array.isArray(raw.headers))) {
+    throw new Error("egress request headers must be an object");
+  }
+  if (raw.body !== undefined && typeof raw.body !== "string") {
+    throw new Error("egress request body must be a string");
+  }
+  if (raw.bodyEncoding !== undefined && raw.bodyEncoding !== "base64") {
+    throw new Error("egress request bodyEncoding must be \"base64\" when present");
+  }
+  return {
+    method: raw.method,
+    path: raw.path,
+    headers: raw.headers as Record<string, string> | undefined,
+    body: raw.body as string | undefined,
+    bodyEncoding: raw.bodyEncoding as "base64" | undefined,
+  };
+}
+
+/** The upstream body as the worker receives it: text when it is UTF-8, base64 otherwise. */
+function encodeAnswerBody(body: Buffer): { body: string; bodyEncoding?: "base64" } {
+  try {
+    return { body: new TextDecoder("utf-8", { fatal: true }).decode(body) };
+  } catch {
+    return { body: body.toString("base64"), bodyEncoding: "base64" };
+  }
+}
+
 export class EgressBroker {
   private readonly opts: EgressBrokerOptions;
-  private readonly upstreamFetch: EgressUpstreamFetch;
-  private readonly maxBodyBytes: number;
   private readonly timeoutMs: number;
-  private server: Server | null = null;
-  private boundInfo: EgressBrokerInfo | null = null;
 
   constructor(opts: EgressBrokerOptions) {
-    if (!opts.token) {
-      throw new Error("EgressBroker requires a non-empty session token");
+    if (typeof opts.upstreamFetch !== "function") {
+      throw new Error("EgressBroker requires the host-mediated upstreamFetch");
     }
     this.opts = opts;
-    this.maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_MAX_BODY;
     this.timeoutMs = opts.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.upstreamFetch = opts.upstreamFetch ?? this.defaultUpstreamFetch.bind(this);
   }
 
-  get info(): EgressBrokerInfo | null {
-    return this.boundInfo;
+  /** True for the worker requests this broker answers. */
+  static handles(method: string): boolean {
+    return method === EGRESS_EMBEDDING_METHOD || method === EGRESS_CAPTION_METHOD;
   }
 
-  /** Bind the listener. Resolves only once the broker is actually listening. */
-  async start(): Promise<EgressBrokerInfo> {
-    if (this.boundInfo) return this.boundInfo;
-    const transport: EgressTransport = this.opts.transport ?? { kind: "tcp" };
-    const server = createServer((req, res) => {
-      void this.handle(req, res);
-    });
-    this.server = server;
-
-    await new Promise<void>((resolvePromise, rejectPromise) => {
-      const onError = (err: Error) => {
-        server.removeListener("listening", onListening);
-        rejectPromise(err);
-      };
-      const onListening = () => {
-        server.removeListener("error", onError);
-        resolvePromise();
-      };
-      server.once("error", onError);
-      server.once("listening", onListening);
-      if (transport.kind === "uds") {
-        // A socket file outlives the process that bound it, so a run that died
-        // without cleanup leaves one and `listen()` on the same path fails
-        // EADDRINUSE — which reads as "another broker is already running" when
-        // what is actually there is a dead file. Removed immediately before the
-        // bind, because the plugin owns what it creates in this directory.
-        try {
-          unlinkSync(transport.socketPath);
-        } catch {
-          // Nothing there, which is the normal case.
-        }
-        server.listen({ path: transport.socketPath });
-      } else {
-        server.listen({ host: transport.host ?? "127.0.0.1", port: transport.port ?? 0 });
-      }
-    });
-
-    if (transport.kind === "uds") {
-      this.boundInfo = {
-        baseUrl: UDS_DUMMY_AUTHORITY,
-        transport,
-        socketPath: transport.socketPath,
-      };
-    } else {
-      const addr = server.address();
-      if (!addr || typeof addr === "string") {
-        await this.stop();
-        throw new Error("EgressBroker failed to resolve a TCP address");
-      }
-      const host = transport.host ?? "127.0.0.1";
-      this.boundInfo = {
-        baseUrl: `http://${host}:${addr.port}`,
-        transport: { kind: "tcp", host, port: addr.port },
-        socketPath: null,
-      };
+  /**
+   * Answer one worker egress request. Resolves an HTTP-shaped answer for
+   * every policy outcome; throws only for a request that is not one.
+   */
+  async handleWorkerRequest(method: string, params: unknown, signal: AbortSignal): Promise<EgressRelayAnswer> {
+    const channelName = method === EGRESS_EMBEDDING_METHOD
+      ? "embedding"
+      : method === EGRESS_CAPTION_METHOD ? "caption" : null;
+    if (channelName === null) {
+      throw new Error(`unknown worker request: ${method}`);
     }
-    return this.boundInfo;
-  }
-
-  async stop(): Promise<void> {
-    const server = this.server;
-    const socketPath = this.boundInfo?.socketPath ?? null;
-    this.server = null;
-    this.boundInfo = null;
-    if (!server) return;
-    await new Promise<void>((resolvePromise) => {
-      server.close(() => resolvePromise());
-    });
-    // `close()` stops accepting; it does not remove the file. Left behind, it
-    // becomes what the next `start()` has to unlink — so a clean stop removes
-    // it and that unlink stays the CRASH path rather than the normal one.
-    if (socketPath !== null) {
-      try {
-        unlinkSync(socketPath);
-      } catch {
-        // Already gone, which is the outcome this wanted anyway.
-      }
-    }
-  }
-
-  // ── request handling ──────────────────────────────────────────────────
-
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const request = parseRelayRequest(params);
     const startedAt = Date.now();
     const abort = new AbortController();
-    res.once("close", () => abort.abort());
+    const onWorkerAbort = () => abort.abort();
+    if (signal.aborted) abort.abort();
+    else signal.addEventListener("abort", onWorkerAbort, { once: true });
+    const timer = setTimeout(() => abort.abort(), this.timeoutMs);
     let lease: ApiKeyLease | undefined;
     try {
-      // 1. Authenticate the worker (constant-time). Blocks any other local
-      //    process that happens to find the loopback port.
-      const presented = headerValue(req.headers[EGRESS_TOKEN_HEADER]);
-      if (!presented || !tokensMatch(this.opts.token, presented)) {
-        return this.deny(res, 403, "missing or invalid egress token");
+      const httpMethod = request.method.toUpperCase();
+      if (!ALLOWED_METHODS.has(httpMethod)) {
+        return this.deny(405, "egress method not allowed");
+      }
+      if (!isSafeRemainder(request.path)) {
+        this.opts.logEvent?.("warn", "local_indexer.egress_refused", { channel: channelName, reason: "invalid path" });
+        return this.deny(400, "invalid egress path");
       }
 
-      // 2. Identify the channel from the path prefix; the worker supplies only
-      //    the remainder + body — never the upstream host.
-      const rawUrl = req.url ?? "/";
-      const channelMatch = this.matchChannel(rawUrl);
-      if (!channelMatch) {
-        return this.deny(res, 404, "unknown egress channel");
+      const body = request.body === undefined
+        ? Buffer.alloc(0)
+        : request.bodyEncoding === "base64"
+          ? Buffer.from(request.body, "base64")
+          : Buffer.from(request.body, "utf8");
+      if (channelName === "caption" && body.length > CAPTION_REQUEST_BYTES_MAX) {
+        // The worker refuses an image over the cap before sending; a body this
+        // large means one got through, so say which limit it broke.
+        this.opts.logEvent?.("warn", "local_indexer.egress_refused", {
+          channel: channelName,
+          reason: "caption image over the relay cap",
+          bytes: body.length,
+        });
+        return this.deny(
+          413,
+          `caption image exceeds the ${CAPTION_IMAGE_BYTES_MAX / (1024 * 1024)} MiB relay cap`,
+        );
       }
-      const { channelName, channel, remainder } = channelMatch;
 
-      // 3. Resolve upstream + key + scheme HOST-SIDE for that channel.
-      const resolution = await channel(abort.signal);
+      // Resolve upstream + key + scheme HOST-SIDE for that channel.
+      const resolution = await this.opts.channels[channelName](abort.signal);
       lease = resolution.lease;
       if (lease && resolution.apiKey) throw new EgressLeaseDenied("credential-conflict");
       const upstreamBase = resolution.upstreamBaseUrl;
       if (!upstreamBase) {
-        return this.deny(res, 502, "channel upstream not configured");
+        return this.deny(502, "channel upstream not configured");
       }
 
-      // 4. Allow-list gate (defence-in-depth) on the host-resolved base.
+      // Allow-list gate (defence-in-depth) on the host-resolved base.
       if (!this.opts.isUpstreamAllowed(upstreamBase)) {
         this.opts.logEvent?.("warn", "local_indexer.egress_refused", {
           channel: channelName,
           upstreamHost: originOf(upstreamBase),
           reason: "upstream not allow-listed",
         });
-        return this.deny(res, 403, "upstream not allow-listed");
+        return this.deny(403, "upstream not allow-listed");
       }
 
-      const body = await this.readBody(req);
-      if (body === null) {
-        return this.deny(res, 413, "request body too large");
+      const upstreamUrl = joinUpstream(upstreamBase, request.path);
+      if (originOf(upstreamUrl) !== originOf(upstreamBase)) {
+        this.opts.logEvent?.("warn", "local_indexer.egress_refused", { channel: channelName, reason: "path changes the authority" });
+        return this.deny(400, "invalid egress path");
       }
 
-      // 5. Rewrite headers: drop worker auth + token, inject the real provider
-      //    auth for this channel's scheme.
-      const upstreamUrl = joinUpstream(upstreamBase, remainder);
-      const headers = this.rewriteRequestHeaders(req.headers);
+      // Rewrite headers: keep the allow-list, inject the real provider auth.
+      const headers = this.rewriteRequestHeaders(request.headers ?? {});
       if (resolution.apiKey && !lease) {
         const [name, value] = authHeaderFor(resolution.authScheme, resolution.apiKey);
         headers[name] = value;
       }
 
-      // 6. Relay (buffered, non-streaming). All worker egress is single POSTs.
-      let upstream: EgressUpstreamResponse;
-      try {
-        upstream = await this.upstreamFetch(upstreamUrl, {
-          method: (req.method ?? "GET").toUpperCase(),
-          headers,
-          body: body.length > 0 ? body : undefined,
-          lease,
-          signal: abort.signal,
-        });
-      } catch (err) {
-        throw err;
+      const upstream = await this.opts.upstreamFetch(upstreamUrl, {
+        method: httpMethod,
+        headers,
+        body: body.length > 0 ? body : undefined,
+        lease,
+        signal: abort.signal,
+      });
+
+      const answer: EgressRelayAnswer = {
+        status: upstream.status,
+        headers: this.rewriteResponseHeaders(upstream.headers),
+        ...encodeAnswerBody(upstream.body),
+      };
+      if (Buffer.byteLength(JSON.stringify(answer), "utf8") > WORKER_FRAME_BYTES_MAX - ANSWER_FRAME_HEADROOM_BYTES) {
+        this.opts.logEvent?.("warn", "local_indexer.egress_upstream_error", { code: "response-too-large" });
+        return this.deny(502, "upstream response too large for the worker channel");
       }
 
-      // 7. Return upstream status + body verbatim.
-      const respHeaders = this.rewriteResponseHeaders(upstream.headers);
-      res.writeHead(upstream.status, respHeaders);
-      res.end(upstream.body);
-
-      // 8. Audit (host-only, no secret material).
+      // Audit (host-only, no secret material).
       this.opts.logEvent?.("info", "local_indexer.egress_brokered", {
         channel: channelName,
         upstreamHost: originOf(upstreamBase),
@@ -439,6 +361,7 @@ export class EgressBroker {
         bytesOut: upstream.body.length,
         latencyMs: Date.now() - startedAt,
       });
+      return answer;
     } catch (err) {
       const code = err instanceof EgressLeaseDenied ? err.reason
         : typeof err === "object" && err !== null && "code" in err && typeof err.code === "string"
@@ -447,20 +370,23 @@ export class EgressBroker {
         "lease-unavailable", "lease-audience-denied", "credential-conflict", "effect-boundary-denied",
       ].includes(code)) {
         this.opts.logEvent?.("warn", "indexer.egress.denied", { reason: code });
-        return this.denyStructured(res, 403, code);
+        return this.denyStructured(403, code);
       }
       if (code === "rate-limited") {
         const retryAfterMs = typeof err === "object" && err !== null && "retryAfterMs" in err
           && typeof err.retryAfterMs === "number" ? err.retryAfterMs : 1000;
-        res.setHeader("Retry-After", String(Math.max(1, Math.ceil(Math.min(5000, retryAfterMs) / 1000))));
-        return this.denyStructured(res, 429, code);
+        return this.denyStructured(429, code, {
+          "retry-after": String(Math.max(1, Math.ceil(Math.min(5000, retryAfterMs) / 1000))),
+        });
       }
       if (abort.signal.aborted || code === "aborted" || (err instanceof Error && err.name === "AbortError")) {
-        return this.denyStructured(res, 499, "cancelled");
+        return this.denyStructured(499, signal.aborted ? "cancelled" : "timeout");
       }
       this.opts.logEvent?.("warn", "local_indexer.egress_upstream_error", { code: "transport-failure" });
-      return this.deny(res, 502, "upstream request failed");
+      return this.deny(502, "upstream request failed");
     } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onWorkerAbort);
       if (lease) {
         try {
           await lease.release();
@@ -473,42 +399,34 @@ export class EgressBroker {
     }
   }
 
-  private denyStructured(res: ServerResponse, status: number, reason: string): void {
-    res.writeHead(status, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "egress-denied", reason, terminal: status === 403 || status === 499 }));
+  private denyStructured(status: number, reason: string, extra: Record<string, string> = {}): EgressRelayAnswer {
+    return {
+      status,
+      headers: { "content-type": "application/json", ...extra },
+      body: JSON.stringify({ error: "egress-denied", reason, terminal: status === 403 || status === 499 }),
+    };
   }
 
-  private matchChannel(
-    rawUrl: string,
-  ): { channelName: "embedding" | "caption"; channel: EgressChannel; remainder: string } | null {
-    for (const [name, prefix, channel] of [
-      ["embedding", EGRESS_EMBEDDING_PATH, this.opts.channels.embedding],
-      ["caption", EGRESS_CAPTION_PATH, this.opts.channels.caption],
-    ] as const) {
-      if (rawUrl === prefix || rawUrl.startsWith(`${prefix}/`) || rawUrl.startsWith(`${prefix}?`)) {
-        const remainder = rawUrl.slice(prefix.length) || "/";
-        return { channelName: name, channel, remainder };
-      }
-    }
-    return null;
+  private deny(status: number, message: string): EgressRelayAnswer {
+    return {
+      status,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ error: message }),
+    };
   }
 
-  private rewriteRequestHeaders(
-    incoming: IncomingMessage["headers"],
-  ): Record<string, string> {
+  private rewriteRequestHeaders(incoming: Record<string, unknown>): Record<string, string> {
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(incoming)) {
-      if (value === undefined) continue;
+      if (typeof value !== "string") continue;
       if (FORWARDED_REQUEST_HEADERS.has(key.toLowerCase())) {
-        out[key] = Array.isArray(value) ? value.join(", ") : String(value);
+        out[key.toLowerCase()] = value;
       }
     }
     return out;
   }
 
-  private rewriteResponseHeaders(
-    incoming: Record<string, string>,
-  ): Record<string, string> {
+  private rewriteResponseHeaders(incoming: Record<string, string>): Record<string, string> {
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(incoming)) {
       if (STRIPPED_RESPONSE_HEADERS.has(key.toLowerCase())) continue;
@@ -516,118 +434,4 @@ export class EgressBroker {
     }
     return out;
   }
-
-  private readBody(req: IncomingMessage): Promise<Buffer | null> {
-    return new Promise<Buffer | null>((resolvePromise, rejectPromise) => {
-      const chunks: Buffer[] = [];
-      let total = 0;
-      let aborted = false;
-      req.on("data", (chunk: Buffer) => {
-        if (aborted) return;
-        total += chunk.length;
-        if (total > this.maxBodyBytes) {
-          aborted = true;
-          resolvePromise(null);
-          req.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      });
-      req.on("end", () => {
-        if (!aborted) resolvePromise(Buffer.concat(chunks));
-      });
-      req.on("error", (err) => {
-        if (!aborted) rejectPromise(err);
-      });
-    });
-  }
-
-  private deny(res: ServerResponse, status: number, message: string): void {
-    const body = JSON.stringify({ error: message });
-    res.writeHead(status, { "content-type": "application/json" });
-    res.end(body);
-  }
-
-  // ── default upstream transport (Node https/http client) ────────────────
-
-  private defaultUpstreamFetch(
-    url: string,
-    init: { method: string; headers: Record<string, string>; body?: Buffer; lease?: ApiKeyLease },
-  ): Promise<EgressUpstreamResponse> {
-    if (init.lease) throw new Error("host lease requires mediated upstream fetch");
-    const parsed = new URL(url);
-    const isHttps = parsed.protocol === "https:";
-    const requestFn = isHttps ? httpsRequest : httpRequest;
-
-    // Corporate-CA trust lives on the BROKER's upstream client now (the broker
-    // terminates provider TLS). This mirrors the established optional-corp-CA
-    // behaviour the worker had (`localIndexerPlugin.ts`: SSL_CERT_FILE is set
-    // only when `~/.ave/certs/corp-ca.pem` exists). The plugin passes
-    // `upstreamCaPath` only when that PEM exists, so a present-but-unreadable
-    // file is a genuine fault and is allowed to surface (the request 502s)
-    // rather than being silently downgraded to a different trust store.
-    let agent: HttpsAgent | undefined;
-    if (isHttps && this.opts.upstreamCaPath) {
-      agent = new HttpsAgent({ ca: readFileSync(this.opts.upstreamCaPath) });
-    }
-
-    // The Node https/http client does NOT auto-follow 3xx redirects. A Location
-    // response from the upstream never causes the broker to re-issue the
-    // authenticated request, so a rogue upstream cannot steal the injected
-    // provider key by redirecting to an attacker-controlled host.
-    return new Promise<EgressUpstreamResponse>((resolvePromise, rejectPromise) => {
-      const upstreamReq = requestFn(
-        {
-          protocol: parsed.protocol,
-          hostname: parsed.hostname,
-          port: parsed.port || (isHttps ? 443 : 80),
-          path: `${parsed.pathname}${parsed.search}`,
-          method: init.method,
-          headers: init.headers,
-          agent,
-          timeout: this.timeoutMs,
-        },
-        (upstreamRes) => {
-          const chunks: Buffer[] = [];
-          let total = 0;
-          let overflowed = false;
-          upstreamRes.on("data", (chunk: Buffer) => {
-            if (overflowed) return;
-            total += chunk.length;
-            if (total > this.maxBodyBytes) {
-              overflowed = true;
-              upstreamRes.destroy();
-              rejectPromise(new Error("upstream response too large"));
-              return;
-            }
-            chunks.push(chunk);
-          });
-          upstreamRes.on("end", () => {
-            if (overflowed) return;
-            const headers: Record<string, string> = {};
-            for (const [key, value] of Object.entries(upstreamRes.headers)) {
-              if (value === undefined) continue;
-              headers[key] = Array.isArray(value) ? value.join(", ") : String(value);
-            }
-            resolvePromise({
-              status: upstreamRes.statusCode ?? 502,
-              headers,
-              body: Buffer.concat(chunks),
-            });
-          });
-        },
-      );
-      upstreamReq.on("error", rejectPromise);
-      upstreamReq.on("timeout", () => {
-        upstreamReq.destroy(new Error("upstream request timeout"));
-      });
-      if (init.body) upstreamReq.write(init.body);
-      upstreamReq.end();
-    });
-  }
-}
-
-function headerValue(value: string | string[] | undefined): string {
-  if (value === undefined) return "";
-  return Array.isArray(value) ? (value[0] ?? "") : value;
 }

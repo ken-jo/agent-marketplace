@@ -18,7 +18,17 @@ const setImageCaptioningMock = vi.fn(async (_enabled, _provider, _model) => ({
   provider: "openai",
   model: "",
 }));
-const setEgressTokenMock = vi.fn(async (_apiKey: string) => ({ hasEmbeddingKey: true }));
+const setEmbeddingEgressMock = vi.fn(async (enabled: boolean) => ({ embeddingEgress: enabled }));
+const setAllowedRootsMock = vi.fn(async (roots: string[]) => ({ roots, count: roots.length }));
+// Where the mocked worker says its index lives. Tests of the 0.8.0 index
+// rebuild set a legacy directory here.
+let mockScanTotalIndexed = 5;
+let mockIndexLocation: {
+  indexRoot: string;
+  documentCount: number;
+  inStateDirectory: boolean;
+  legacyIndexDir: string | null;
+} | null = null;
 // Boot reconcile pass mocks. Default: no drift (a clean warmup no-op so every
 // existing test's background warmup completes without error). Tests that
 // exercise the heal path override reconcileMock per-case.
@@ -193,7 +203,8 @@ vi.mock("../src/folderIndexer.js", () => {
       return {
         scanned: 2,
         indexed: 2,
-        totalIndexed: 5,
+        failed: 0,
+        totalIndexed: mockScanTotalIndexed,
         folders: this.folders,
       };
     }
@@ -220,7 +231,8 @@ vi.mock("../src/localIndexerPlugin.js", () => {
         getPageContent: getPageContentMock,
         getStructure: getStructureMock,
         setImageCaptioning: setImageCaptioningMock,
-        setEgressToken: setEgressTokenMock,
+        setEmbeddingEgress: setEmbeddingEgressMock,
+        setAllowedRoots: setAllowedRootsMock,
         reconcile: reconcileMock,
         reindex: reindexMock,
         captionImage: async () => ({
@@ -248,8 +260,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
       await localIndexerStopMock();
       this.started = false;
     }
-    getEgressToken() { return "test-broker-token"; }
-    getShutdownToken() { return null; }
+    getIndexLocation() { return this.started ? mockIndexLocation : null; }
     async listDocuments() {
       return mockDocuments;
     }
@@ -359,7 +370,10 @@ describe("hostPlugin createPlugin", () => {
     folderAutoIndexerStopMock.mockClear();
     localIndexerPluginInstances.length = 0;
     setImageCaptioningMock.mockClear();
-    setEgressTokenMock.mockClear();
+    setEmbeddingEgressMock.mockClear();
+    setAllowedRootsMock.mockClear();
+    mockIndexLocation = null;
+    mockScanTotalIndexed = 5;
     reconcileMock.mockClear();
     reconcileMock.mockResolvedValue({
       checked: true,
@@ -706,7 +720,8 @@ describe("hostPlugin createPlugin", () => {
     expect(res.body).toEqual(Buffer.from('{"ok":true}'));
   });
 
-  it("passes a configured workerPort through to the worker plugin", async () => {
+  it("hands the worker plugin no port, socket or token: the worker talks over stdio control", async () => {
+    // A leftover `workerPort` from a pre-0.8.0 config is ignored.
     const { ctx } = makeContext(hostRoot, {}, {
       pluginDataDir: hostRoot,
       configValues: { workerPort: 43229 },
@@ -714,24 +729,12 @@ describe("hostPlugin createPlugin", () => {
 
     await createPlugin(ctx);
 
-    expect(localIndexerPluginInstances.at(-1)?.opts?.port).toBe(43229);
-  });
-
-  it("leaves workerPort unset when it is out of range, so the default port stands", async () => {
-    // Deliberately not clamped: a port outside the usable range is a
-    // configuration mistake, and quietly binding a different port than the one
-    // asked for is worse than falling back to the documented default.
-    for (const workerPort of [80, 70000, Number.NaN]) {
-      localIndexerPluginInstances.length = 0;
-      const { ctx } = makeContext(hostRoot, {}, {
-        pluginDataDir: hostRoot,
-        configValues: { workerPort },
-      });
-
-      await createPlugin(ctx);
-
-      expect(localIndexerPluginInstances.at(-1)?.opts?.port).toBeUndefined();
+    const opts = localIndexerPluginInstances.at(-1)?.opts ?? {};
+    for (const key of ["port", "host", "pluginSocketDir", "onWorkerStdout"]) {
+      expect(opts, key).not.toHaveProperty(key);
     }
+    expect(JSON.stringify(Object.keys(opts))).not.toMatch(/token|port|socket/i);
+    expect(typeof opts.onWorkerStderr).toBe("function");
   });
 
   it("fails closed at plugin load when hostApi.hostFetch is absent", async () => {
@@ -769,7 +772,8 @@ describe("hostPlugin createPlugin", () => {
   it("index_scan_status replays buffered warnings and index_clear_warnings resets them", async () => {
     const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
     const plugin = await createPlugin(ctx);
-    localIndexerPluginInstances.at(-1)?.opts.onWorkerStdout?.(
+    // Worker logs arrive on stderr, one JSON line each.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(
       '{"event":"indexer.file.empty","path":"C:/docs/empty.pdf","error":"empty content"}',
     );
 
@@ -784,6 +788,87 @@ describe("hostPlugin createPlugin", () => {
     await plugin.handlers.index_clear_warnings();
     status = await plugin.handlers.index_scan_status();
     expect(status.warnings).toEqual([]);
+  });
+
+  describe("0.8.0 index location rebuild", () => {
+    async function legacyIndexFixture(): Promise<string> {
+      const legacy = join(hostRoot, "index");
+      await mkdir(legacy, { recursive: true });
+      await writeFile(join(legacy, "fts5.sqlite"), "pre-0.8.0 index");
+      mockIndexLocation = {
+        indexRoot: join(hostRoot, "workers", "local-indexer-worker", "index"),
+        documentCount: 0,
+        inStateDirectory: true,
+        legacyIndexDir: legacy,
+      };
+      return legacy;
+    }
+
+    async function settledMigration(plugin: any) {
+      let status: any;
+      await vi.waitFor(async () => {
+        status = (await plugin.handlers.index_scan_status()).indexMigration;
+        expect(status?.phase).toMatch(/^(completed|kept-old)$/);
+      });
+      return status;
+    }
+
+    it("rebuilds visibly and deletes the old index only after the worker count matches", async () => {
+      const legacy = await legacyIndexFixture();
+      mockScanTotalIndexed = mockDocuments.length;
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({
+        phase: "completed",
+        legacyIndexDir: legacy,
+        documentsAfter: mockDocuments.length,
+        scan: { totalIndexed: mockDocuments.length, failed: 0 },
+      });
+      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      const notices = events
+        .filter(([name, payload]: [string, any]) => name === "index.warning" && payload.kind === "index-migration")
+        .map(([, payload]: [string, any]) => payload.message);
+      expect(notices).toHaveLength(2);
+      expect(notices[0]).toMatch(/전체 재인덱싱/);
+      expect(notices[1]).toMatch(/재구축 완료/);
+      const migrationEvents = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls
+        .map(([, event]: [string, string]) => event)
+        .filter((event: string) => event.startsWith("local_indexer.index_migration."));
+      expect(migrationEvents).toEqual([
+        "local_indexer.index_migration.rebuilding",
+        "local_indexer.index_migration.completed",
+      ]);
+      await plugin.stop();
+    });
+
+    it("keeps the old index when the rebuilt count does not match the scan", async () => {
+      const legacy = await legacyIndexFixture();
+      mockScanTotalIndexed = mockDocuments.length + 3;
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/holds 2 document\(s\) but the scan indexed 5/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      expect(events).toContainEqual([
+        "index.warning",
+        expect.objectContaining({ kind: "index-migration", message: expect.stringMatching(/이전 인덱스를 보존/) }),
+      ]);
+      await plugin.stop();
+    });
+
+    it("runs no rebuild when there is no old index", async () => {
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await plugin.handlers.index_scan_status()).indexMigration).toBeNull();
+      await plugin.stop();
+    });
   });
 
   it("post-publish startup does not auto scan when the page opens", async () => {
@@ -1607,7 +1692,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -1635,7 +1719,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -1663,7 +1746,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-responses",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -1699,7 +1781,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       "gpt-5.4-mini",
       "https://sdk-base.openai.azure.com/",
-      expect.anything(),
       "2025-01-01-preview",
     );
   });
@@ -1734,7 +1815,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       null,
       null,
-      expect.anything(),
       null,
     );
   });
@@ -1760,7 +1840,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       "",
       "",
-      expect.anything(),
       "",
     );
   });
@@ -1796,7 +1875,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       "gpt-5.4-mini",
       "https://sdk-base.openai.azure.com/",
-      expect.anything(),
       "2025-01-01-preview",
     );
   });
@@ -1823,7 +1901,6 @@ describe("hostPlugin createPlugin", () => {
       "openai",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -2200,7 +2277,6 @@ describe("hostPlugin createPlugin", () => {
         "",
         "",
         "",
-        "",
       );
       const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
@@ -2263,8 +2339,8 @@ describe("hostPlugin createPlugin", () => {
       expect(keyCaptureLogs[0][2]).toMatchObject({ vendor: "openai", hasEmbeddingKey: true });
     });
 
-    // Broker contract: worker receives only the broker token at scan entry.
-    it("index_scan pushes the broker token to worker via setEgressToken", async () => {
+    // Broker contract: the worker gets a go-ahead flag, never a credential.
+    it("index_scan tells the worker embedding egress may go ahead, with no credential", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: {
@@ -2278,28 +2354,24 @@ describe("hostPlugin createPlugin", () => {
       );
       const plugin = await createPlugin(ctx);
 
-      setEgressTokenMock.mockClear();
+      setEmbeddingEgressMock.mockClear();
       await plugin.handlers.index_scan();
 
-      // First scan also boots the worker, so the token is pushed once at
-      // warmup and once at scan entry. Both calls supply a thunk; the worker
-      // never receives the provider key.
-      expect(setEgressTokenMock).toHaveBeenCalledTimes(2);
-      for (const [getBearer] of setEgressTokenMock.mock.calls) {
-        expect(typeof getBearer).toBe("function");
-        expect((getBearer as () => string)()).toBe("test-broker-token");
-      }
+      // First scan also boots the worker, so the go-ahead is pushed once at
+      // warmup and once at scan entry. It carries a flag only: the worker
+      // never receives the provider key or any other credential.
+      expect(setEmbeddingEgressMock).toHaveBeenCalledTimes(2);
+      expect(setEmbeddingEgressMock.mock.calls).toEqual([[true], [true]]);
       const channel = await latestEgressChannels().embedding();
       expect(channel.apiKey).toBeUndefined();
       expect(channel.lease?.exposure).toBe("lease");
       await channel.lease?.release();
     });
 
-    it("index_scan pushes no egress token at all when no embedding key is available", async () => {
-      // The scan-entry push has always been gated on a provider key existing;
-      // the warmup push was not, so this case used to hand the worker a broker
-      // session token on behalf of a user who had supplied no key. Both are
-      // gated now: no key means no credential of any kind reaches the worker.
+    it("index_scan gives no embedding go-ahead when no embedding key is available", async () => {
+      // Both the warmup and the scan-entry push are gated on a provider key
+      // existing: with none, the worker stays BM25-only instead of relaying a
+      // request per chunk that the broker would refuse.
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: {
@@ -2311,10 +2383,10 @@ describe("hostPlugin createPlugin", () => {
       ctx.hostApi.getSecret = vi.fn(() => null);
       const plugin = await createPlugin(ctx);
 
-      setEgressTokenMock.mockClear();
+      setEmbeddingEgressMock.mockClear();
       try { await plugin.handlers.index_scan(); } catch { /* expected */ }
 
-      expect(setEgressTokenMock).not.toHaveBeenCalled();
+      expect(setEmbeddingEgressMock).not.toHaveBeenCalled();
       expect((await latestEgressChannels().embedding()).apiKey).toBe("");
     });
 
@@ -2370,7 +2442,6 @@ describe("hostPlugin createPlugin", () => {
         "openai",
         expect.any(String),
         expect.any(String),
-        "",
         expect.any(String),
       );
       expect(events).toContainEqual([
@@ -2381,7 +2452,7 @@ describe("hostPlugin createPlugin", () => {
   });
 
   describe("lease-backed egress channels", () => {
-    it("hydrates the host embedding presence and broker token before a scan", async () => {
+    it("hydrates the host embedding presence and the embedding go-ahead before a scan", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: { apiKeySource: "host", embeddingProvider: "openai" },
@@ -2396,11 +2467,10 @@ describe("hostPlugin createPlugin", () => {
 
       expect(localIndexerPluginInstances.at(-1)?.opts?.apiKey).toBe("host-lease-present");
       expect(release).toHaveBeenCalled();
-      expect(setEgressTokenMock).toHaveBeenCalledWith(expect.any(Function));
-      expect(setEgressTokenMock.mock.lastCall?.[0]()).toBe("test-broker-token");
+      expect(setEmbeddingEgressMock).toHaveBeenCalledWith(true);
     });
 
-    it("does not warm a broker token or read a plugin key after a host lease denial", async () => {
+    it("gives no embedding go-ahead and reads no plugin key after a host lease denial", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: { apiKeySource: "host", embeddingProvider: "openai" },
@@ -2410,7 +2480,7 @@ describe("hostPlugin createPlugin", () => {
       await plugin.onPublished?.();
 
       expect(localIndexerPluginInstances.at(-1)?.opts?.apiKey).toBe("");
-      expect(setEgressTokenMock).not.toHaveBeenCalled();
+      expect(setEmbeddingEgressMock).not.toHaveBeenCalled();
       expect(ctx.hostApi.getSecret).not.toHaveBeenCalled();
     });
 

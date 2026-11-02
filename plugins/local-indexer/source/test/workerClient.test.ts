@@ -1,474 +1,249 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+/**
+ * WorkerClient over worker stdio control v1: every call is one
+ * `handle.request(method, params)` on the attached incarnation.
+ */
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { WorkerClient, parseWorkerResponse } from "../src/workerClient";
+import { WorkerControlError } from "@ave/plugin-contract";
+import { WORKER_METHODS, WorkerCallError, WorkerClient } from "../src/workerClient";
+import { FakeStdioWorker, workerRefusal } from "./support/fakeStdioWorker";
 
-function mockFetch(body: unknown, ok = true, status = 200) {
-  return vi.fn().mockResolvedValue({
-    ok,
-    status,
-    statusText: ok ? "OK" : "Internal Server Error",
-    headers: { get: () => null },
-    text: async () => JSON.stringify(body),
-  });
+function attached(responders: Record<string, (params: unknown) => unknown> = {}): {
+  client: WorkerClient;
+  worker: FakeStdioWorker;
+} {
+  const worker = new FakeStdioWorker(responders);
+  const client = new WorkerClient();
+  client.attach(worker);
+  return { client, worker };
 }
 
-describe("WorkerClient", () => {
-  let client: WorkerClient;
-
-  beforeEach(() => {
-    client = new WorkerClient({ baseUrl: "http://127.0.0.1:43129" });
+describe("WorkerClient request mapping", () => {
+  it("names every worker method by the control channel's rule, with no dots or slashes", () => {
+    for (const method of Object.values(WORKER_METHODS)) {
+      expect(method).toMatch(/^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/);
+    }
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it("names exactly the methods the Python worker registers", () => {
+    const source = readFileSync(join(__dirname, "..", "worker", "local_indexer_worker.py"), "utf-8");
+    const table = /^METHOD_NAMES = \(([\s\S]*?)^\)/m.exec(source);
+    expect(table, "METHOD_NAMES tuple in local_indexer_worker.py").not.toBeNull();
+    const pythonMethods = [...table![1]!.matchAll(/"([a-zA-Z_][a-zA-Z0-9_]*)"/g)].map((m) => m[1]);
+    expect(pythonMethods.length).toBeGreaterThan(0);
+    expect([...Object.values(WORKER_METHODS)].sort()).toEqual([...pythonMethods].sort());
+  });
+
+  it("maps each client call to its worker method and params", async () => {
+    const answers: Record<string, unknown> = {
+      search_bm25: [],
+      search_vector: [],
+      search_hybrid: [],
+      documents_list: [],
+      document_structure: { nodes: [] },
+      page_content: [],
+      document_get: { doc_id: "d 1" },
+      documents_delete: { removed: true, doc_id: "d 1" },
+      indexer_reindex: { doc_id: "d", doc_name: "a.md", doc_type: "md", chunk_count: 1, status: "indexed" },
+      indexer_reconcile: { checked: true, drifted_docs: [], drifted_doc_count: 0, orphan_vectors_deleted: 0 },
+      indexer_set_embedding_egress: { embeddingEgress: true },
+      indexer_caption_image: { file_path: "/i.png", caption: "c", provider: "openai", model: "m", input_tokens: 1, output_tokens: 2 },
+      metrics: { processed: 1 },
+      runtime_info: { index_root: "/r", document_count: 0 },
+      runtime_allowed_roots: { roots: ["/a"], count: 1 },
+      worker_shutdown: { bye: true },
+      worker_health: { status: "ok" },
+    };
+    const { client, worker } = attached(
+      Object.fromEntries(Object.entries(answers).map(([method, answer]) => [method, () => answer])),
+    );
+
+    await client.searchBm25("q", 3);
+    await client.searchVector("q", 4);
+    await client.searchHybrid("q", 5);
+    await client.listDocuments();
+    await client.getStructure("d 1");
+    await client.getPageContent("d 1", "1-3");
+    await client.getDocument("d 1");
+    await client.removeDocument("d 1");
+    await client.reindex("/docs/a.md", "md");
+    await client.reconcile();
+    await client.setEmbeddingEgress(true);
+    await client.captionImage("/i.png", "azure-openai-chat", "vision");
+    await client.getMetrics();
+    await client.runtimeInfo();
+    await client.setAllowedRoots(["/a"]);
+    await client.shutdown();
+    await client.health();
+
+    expect(worker.requests.map(({ method, params }) => [method, params])).toEqual([
+      ["search_bm25", { query: "q", topK: 3 }],
+      ["search_vector", { query: "q", topK: 4 }],
+      ["search_hybrid", { query: "q", topK: 5 }],
+      ["documents_list", undefined],
+      ["document_structure", { doc_id: "d 1" }],
+      ["page_content", { doc_id: "d 1", pages: "1-3" }],
+      ["document_get", { doc_id: "d 1" }],
+      ["documents_delete", { doc_id: "d 1" }],
+      ["indexer_reindex", { file_path: "/docs/a.md", mode: "md" }],
+      ["indexer_reconcile", {}],
+      ["indexer_set_embedding_egress", { enabled: true }],
+      ["indexer_caption_image", { file_path: "/i.png", provider: "azure-openai-chat", model: "vision" }],
+      ["metrics", undefined],
+      ["runtime_info", undefined],
+      ["runtime_allowed_roots", { roots: ["/a"] }],
+      ["worker_shutdown", undefined],
+      ["worker_health", undefined],
+    ]);
+    // Nothing that looks like a credential or a token is ever sent.
+    expect(JSON.stringify(worker.requests)).not.toMatch(/token|api_key|apiKey/i);
   });
 
   it("searchBm25 maps snake_case hits to camelCase search results", async () => {
-    vi.stubGlobal("fetch", mockFetch([
-      {
-        chunk_id: "c1",
-        doc_id: "d1",
-        doc_name: "doc-1.pdf",
-        page: 3,
-        raw_text: "body text",
-        score: 0.85,
-      },
-    ]));
-
-    const hits = await client.searchBm25("query", 5);
-
-    expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({
-      source: "bm25",
-      chunkId: "c1",
-      docId: "d1",
-      docName: "doc-1.pdf",
-      page: 3,
-      rawText: "body text",
-      score: 0.85,
-      rank: 0,
+    const { client } = attached({
+      search_bm25: () => [
+        { chunk_id: "c1", doc_id: "d1", doc_name: "doc-1.pdf", page: 3, raw_text: "body text", score: 0.85, path: "/d.pdf" },
+      ],
     });
+    const hits = await client.searchBm25("query", 5);
+    expect(hits).toEqual([
+      {
+        source: "bm25",
+        chunkId: "c1",
+        docId: "d1",
+        docName: "doc-1.pdf",
+        page: 3,
+        rawText: "body text",
+        score: 0.85,
+        rank: 0,
+        path: "/d.pdf",
+      },
+    ]);
   });
 
-  it("searchVector maps snake_case hits to vector search results", async () => {
-    vi.stubGlobal("fetch", mockFetch([
-      { chunk_id: "c2", doc_id: "d2", doc_name: "report.md", raw_text: "vector body", score: 0.72 },
-      { chunk_id: "c3", doc_id: "d2", doc_name: "report.md", raw_text: "second chunk", score: 0.60 },
-    ]));
-
-    const hits = await client.searchVector("report", 10);
-
-    expect(hits).toHaveLength(2);
-    expect(hits[0].source).toBe("vec");
-    expect(hits[0].chunkId).toBe("c2");
-    expect(hits[0].rank).toBe(0);
-    expect(hits[1].rank).toBe(1);
+  it("labels vector hits 'vec' and every fused hit 'hybrid', ranked by position", async () => {
+    const hit = (id: string) => ({ chunk_id: id, doc_id: "d", doc_name: "r.md", raw_text: "t", score: 0.5 });
+    const { client } = attached({
+      search_vector: () => [hit("a"), hit("b")],
+      search_hybrid: () => [hit("c"), hit("d")],
+    });
+    const vec = await client.searchVector("q", 2);
+    expect(vec.map((h) => [h.source, h.chunkId, h.rank])).toEqual([["vec", "a", 0], ["vec", "b", 1]]);
+    const hybrid = await client.searchHybrid("q", 2);
+    expect(hybrid.map((h) => h.source)).toEqual(["hybrid", "hybrid"]);
   });
 
   it("listDocuments preserves DB-backed metadata and compatibility aliases", async () => {
-    vi.stubGlobal("fetch", mockFetch([
-      {
-        doc_id: "d1",
-        path: "/docs/a.md",
-        doc_name: "a.md",
-        doc_type: "md",
-        line_count: 12,
-        indexed_at: "2026-04-01T00:00:00Z",
-        status: "ready",
-      },
-      {
-        doc_id: "d2",
-        path: "/docs/b.pdf",
-        doc_name: "b.pdf",
-        doc_type: "pdf",
-        page_count: 10,
-        indexed_at: "2026-04-02T00:00:00Z",
-      },
-    ]));
-
+    const { client } = attached({
+      documents_list: () => [
+        { doc_id: "d1", path: "/docs/a.md", doc_name: "a.md", doc_type: "md", line_count: 12, indexed_at: "2026-04-01T00:00:00Z", status: "ready" },
+        { doc_id: "d2", path: "/docs/b.pdf", doc_name: "b.pdf", doc_type: "pdf", page_count: 10, indexed_at: "2026-04-02T00:00:00Z" },
+      ],
+    });
     const docs = await client.listDocuments();
-
-    expect(docs).toHaveLength(2);
     expect(docs[0]).toMatchObject({
-      docId: "d1",
-      docName: "a.md",
-      type: "md",
-      path: "/docs/a.md",
-      lineCount: 12,
-      indexedAt: "2026-04-01T00:00:00Z",
-      updatedAt: "2026-04-01T00:00:00Z",
-      status: "ready",
+      docId: "d1", docName: "a.md", type: "md", path: "/docs/a.md", lineCount: 12,
+      indexedAt: "2026-04-01T00:00:00Z", updatedAt: "2026-04-01T00:00:00Z", status: "ready",
     });
-    expect(docs[1]).toMatchObject({
-      docId: "d2",
-      docName: "b.pdf",
-      type: "pdf",
-      path: "/docs/b.pdf",
-      pageCount: 10,
-      indexedAt: "2026-04-02T00:00:00Z",
-      updatedAt: "2026-04-02T00:00:00Z",
+    expect(docs[1]).toMatchObject({ docId: "d2", pageCount: 10, updatedAt: "2026-04-02T00:00:00Z" });
+  });
+
+  it("indexDocument returns the doc id and throws the worker's errors for a failed file", async () => {
+    const { client, worker } = attached({
+      indexer_reindex: () => ({ doc_id: "d1", doc_name: "a.md", doc_type: "md", chunk_count: 2, status: "indexed" }),
     });
-  });
-
-  it("sends the worker token on read endpoints", async () => {
-    const fetchMock = mockFetch([]);
-    vi.stubGlobal("fetch", fetchMock);
-    client.setWriteToken("read-token");
-
-    await client.listDocuments();
-
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
-      headers: {
-        "x-ave-shutdown-token": "read-token",
-      },
-    });
-  });
-
-  it("getStructure URL-encodes the doc id", async () => {
-    const tree = { nodes: [{ title: "Intro", page: 1 }] };
-    const fetchMock = mockFetch(tree);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await client.getStructure("doc/123");
-
-    expect(result).toEqual(tree);
-    const calledUrl = fetchMock.mock.calls[0][0] as string;
-    expect(calledUrl).toContain(encodeURIComponent("doc/123"));
-  });
-
-  it("getPageContent includes the encoded pages parameter", async () => {
-    const pages = [{ page: 1, content: "first page" }];
-    const fetchMock = mockFetch(pages);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await client.getPageContent("d1", "1-3");
-
-    expect(result).toEqual(pages);
-    const calledUrl = fetchMock.mock.calls[0][0] as string;
-    expect(calledUrl).toContain("pages=1-3");
-  });
-
-
-  it("getMetrics returns the worker counters", async () => {
-    const metrics = { indexed: 100, queued: 5, failed: 2 };
-    vi.stubGlobal("fetch", mockFetch(metrics));
-
-    const result = await client.getMetrics();
-
-    expect(result).toEqual(metrics);
-  });
-
-  it("shutdown posts to /shutdown", async () => {
-    vi.stubGlobal("fetch", mockFetch({ bye: true }));
-
-    const result = await client.shutdown();
-
-    expect(result).toMatchObject({ bye: true });
-  });
-
-  it("removeDocument posts to /documents/delete", async () => {
-    const fetchMock = mockFetch({ ok: true, data: { removed: true, doc_id: "d1" } });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(client.removeDocument("d1")).resolves.toBeUndefined();
-    expect(fetchMock.mock.calls[0]?.[0]).toContain("/documents/delete");
-  });
-
-  it("throws when the worker returns ok:false", async () => {
-    vi.stubGlobal("fetch", mockFetch({ ok: false, error: "file not found" }));
-
-    await expect(client.searchBm25("query", 5)).rejects.toThrow("file not found");
-  });
-
-  it("throws the HTTP error payload for non-2xx responses", async () => {
-    vi.stubGlobal("fetch", mockFetch({ error: "invalid query" }, false, 400));
-
-    await expect(client.searchBm25("", 5)).rejects.toThrow("invalid query");
-  });
-
-  it("throws on invalid JSON", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      text: async () => "not json {{",
+    await expect(client.indexDocument("/a.md")).resolves.toBe("d1");
+    worker.respond("indexer_reindex", () => ({
+      doc_id: "d2", doc_name: "b.pdf", doc_type: "pdf", chunk_count: 0, status: "failed", errors: ["empty content"],
     }));
-
-    await expect(client.searchBm25("query", 5)).rejects.toThrow("Invalid JSON");
+    await expect(client.indexDocument("/b.pdf")).rejects.toThrow("indexDocument: 인덱싱 실패 (/b.pdf): empty content");
   });
 
-  it("throws when the streamed response body exceeds the byte limit", async () => {
-    const bigChunk = new Uint8Array(10 * 1024 * 1024 + 1);
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(bigChunk);
-        controller.close();
-      },
-    });
-
-    const res = new Response(stream, {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
-
-    await expect(parseWorkerResponse(res)).rejects.toThrow("Worker response too large");
+  it("passes an abort signal through to the request", async () => {
+    const { client, worker } = attached({ runtime_info: () => ({ index_root: "/r", document_count: 0 }) });
+    const signal = AbortSignal.timeout(1000);
+    await client.runtimeInfo({ signal });
+    expect(worker.requests[0]?.options?.signal).toBe(signal);
   });
-
-  it("throws when content-length already exceeds the byte limit", async () => {
-    const res = new Response("{}", {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "content-length": String(10 * 1024 * 1024 + 1),
-      },
-    });
-
-    await expect(parseWorkerResponse(res)).rejects.toThrow("Worker response too large");
-  });
-
-  it("health returns true on a healthy worker", async () => {
-    vi.stubGlobal("fetch", mockFetch({ status: "ok" }));
-
-    const result = await client.health();
-
-    expect(result).toBe(true);
-  });
-
-  it("health returns false when fetch fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connection refused")));
-
-    const result = await client.health();
-
-    expect(result).toBe(false);
-  });
-
-  it("searchHybrid labels every fused hit 'hybrid'", async () => {
-    vi.stubGlobal("fetch", mockFetch([
-      { chunk_id: "c1", doc_id: "d1", doc_name: "doc.pdf", raw_text: "text", score: 0.9, source: "bm25" },
-      { chunk_id: "c2", doc_id: "d1", doc_name: "doc.pdf", raw_text: "text", score: 0.8, source: "vec" },
-    ]));
-
-    const hits = await client.searchHybrid("query", 10);
-
-    // /search/hybrid returns the fused RRF output; the client labels every hit
-    // "hybrid" regardless of the per-hit source the worker echoes.
-    expect(hits[0].source).toBe("hybrid");
-    expect(hits[1].source).toBe("hybrid");
-  });
-
-  it("reindex posts to /indexer/reindex", async () => {
-    const indexResult = { doc_id: "d1", status: "ok", chunks: 5 };
-    vi.stubGlobal("fetch", mockFetch(indexResult));
-
-    const result = await client.reindex("/path/to/doc.pdf");
-
-    expect(result).toEqual(indexResult);
-  });
-
-  it("getDocument fetches /document?doc_id=...", async () => {
-    const doc = { doc_id: "d1", path: "/docs/a.pdf", doc_name: "a.pdf", doc_type: "pdf" };
-    vi.stubGlobal("fetch", mockFetch(doc));
-
-    const result = await client.getDocument("d1");
-
-    expect(result).toEqual(doc);
-  });
-});
-
-// ─── UDS transport (real node:http server on a Unix socket) ──────────
-//
-// configureTransport(socketPath, …) 로 UDS 모드를 켜면 모든 HTTP 가 Node
-// http.request({ socketPath }) 위로 흐른다. 여기서는 실제 node:http 서버를
-// tmpdir 하위 Unix 소켓에 띄워 round-trip / 헤더 전달 / 에러 envelope / M2
-// 타임아웃을 결정론적으로 검증한다.
-describe("WorkerClient UDS transport", () => {
-  interface RecordedRequest {
-    method: string;
-    url: string;
-    headers: IncomingMessage["headers"];
-    body: string;
-  }
-
-  let server: Server;
-  let socketPath: string;
-  let socketDir: string;
-  let recorded: RecordedRequest[];
-  // 핸들러가 null 이면 서버는 응답하지 않고 매달린다 (M2 타임아웃 검증용).
-  let handler:
-    | ((req: RecordedRequest, res: ServerResponse) => void)
-    | null;
-
-  beforeEach(async () => {
-    socketDir = await mkdtemp(join(tmpdir(), "ave-wc-uds-"));
-    socketPath = join(socketDir, "worker.sock");
-    recorded = [];
-    handler = (_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, data: { status: "ok" } }));
-    };
-
-    server = createServer((req: IncomingMessage, res: ServerResponse) => {
-      const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      req.on("end", () => {
-        const record: RecordedRequest = {
-          method: req.method ?? "",
-          url: req.url ?? "",
-          headers: req.headers,
-          body: Buffer.concat(chunks).toString("utf8"),
-        };
-        recorded.push(record);
-        if (handler) {
-          handler(record, res);
-        }
-        // handler === null → 의도적으로 응답하지 않음 (wedged worker 모사).
-      });
-    });
-
-    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
-  });
-
-  afterEach(async () => {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await rm(socketDir, { recursive: true, force: true });
-  });
-
-  function makeUdsClient(): WorkerClient {
-    const client = new WorkerClient({ baseUrl: "http://127.0.0.1:43129" });
-    // tcpBaseUrl 인자는 UDS 모드에서는 무시되지만 production 호출부와 동일하게 전달한다.
-    client.configureTransport(socketPath, "http://127.0.0.1:43129");
-    return client;
-  }
-
-  // Unix-domain-socket — N/A on Windows (pre-existing platform limitation, unrelated to #885)
-  it.skipIf(process.platform === "win32")("(a) GET /health round-trips over the Unix socket", async () => {
-    handler = (_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
-    };
-    const client = makeUdsClient();
-
-    await expect(client.health()).resolves.toBe(true);
-    expect(recorded).toHaveLength(1);
-    expect(recorded[0].method).toBe("GET");
-    expect(recorded[0].url).toBe("/health");
-  });
-
-  // Unix-domain-socket — N/A on Windows (pre-existing platform limitation, unrelated to #885)
-  it.skipIf(process.platform === "win32")("(b) POST /shutdown delivers the x-ave-shutdown-token header + JSON body over the socket", async () => {
-    handler = (_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ bye: true }));
-    };
-    const client = makeUdsClient();
-
-    await expect(client.shutdown("tok-123")).resolves.toEqual({ bye: true });
-    expect(recorded).toHaveLength(1);
-    expect(recorded[0].method).toBe("POST");
-    expect(recorded[0].url).toBe("/shutdown");
-    expect(recorded[0].headers["x-ave-shutdown-token"]).toBe("tok-123");
-    expect(JSON.parse(recorded[0].body)).toEqual({});
-  });
-
-  // Unix-domain-socket — N/A on Windows (pre-existing platform limitation, unrelated to #885)
-  it.skipIf(process.platform === "win32")("(b) POST /runtime/allowed_roots delivers the token header + roots body over the socket", async () => {
-    handler = (_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ roots: ["/a", "/b"], count: 2 }));
-    };
-    const client = makeUdsClient();
-
-    await expect(client.setAllowedRoots(["/a", "/b"], "tok-xyz")).resolves.toEqual({
-      roots: ["/a", "/b"],
-      count: 2,
-    });
-    expect(recorded).toHaveLength(1);
-    expect(recorded[0].method).toBe("POST");
-    expect(recorded[0].url).toBe("/runtime/allowed_roots");
-    expect(recorded[0].headers["x-ave-shutdown-token"]).toBe("tok-xyz");
-    expect(JSON.parse(recorded[0].body)).toEqual({ roots: ["/a", "/b"] });
-  });
-
-  // Unix-domain-socket — N/A on Windows (pre-existing platform limitation, unrelated to #885)
-  it.skipIf(process.platform === "win32")("(c) a non-200 response → parseWorkerResponse throws the worker error message", async () => {
-    handler = (_req, res) => {
-      res.writeHead(500, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "worker exploded" }));
-    };
-    const client = makeUdsClient();
-
-    await expect(client.searchBm25("query", 5)).rejects.toThrow("worker exploded");
-  });
-
-  // Unix-domain-socket — N/A on Windows (pre-existing platform limitation, unrelated to #885)
-  it.skipIf(process.platform === "win32")("(d) the M2 request timeout rejects when the server never responds", async () => {
-    // handler=null → 서버가 본문을 받고도 절대 응답하지 않는다 (connected-but-wedged).
-    // fetchOverSocket 의 req.setTimeout(5000) 가 소켓을 destroy → reject.
-    handler = null;
-    const client = makeUdsClient();
-
-    await expect(client.shutdown("tok")).rejects.toThrow(/timeout/);
-  }, 10_000);
-
-  // Unix-domain-socket — N/A on Windows (pre-existing platform limitation, unrelated to #885)
-  it.skipIf(process.platform === "win32")("(d) health() resolves false (not hang) when the server never responds", async () => {
-    // health() 는 AbortSignal.timeout(3_000) 으로 상한이 있어 wedged 서버에서도
-    // 매달리지 않고 false 로 떨어진다.
-    handler = null;
-    const client = makeUdsClient();
-
-    await expect(client.health()).resolves.toBe(false);
-  }, 10_000);
 });
 
 describe("WorkerClient.setImageCaptioning wire contract", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  function lastBody(fetchMock: ReturnType<typeof mockFetch>): Record<string, unknown> {
-    const [, init] = fetchMock.mock.calls[0] as [string, { body: string }];
-    return JSON.parse(init.body) as Record<string, unknown>;
-  }
-
-  it("sends \"\" verbatim so the worker resets model/endpoint/apiVersion to the provider default", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      data: { enabled: true, provider: "openai", model: "", endpoint: "", apiVersion: "" },
+  it("sends \"\" verbatim so the worker resets model/endpoint/apiVersion, and no credential", async () => {
+    const { client, worker } = attached({
+      indexer_set_image_captioning: () => ({ enabled: true, provider: "openai", model: "" }),
     });
-    vi.stubGlobal("fetch", fetchMock);
-    const client = new WorkerClient({ baseUrl: "http://127.0.0.1:43129" });
-
-    await client.setImageCaptioning(true, "openai", "", "", "", "");
-
-    expect(lastBody(fetchMock)).toMatchObject({
+    await client.setImageCaptioning(true, "openai", "", "", "");
+    expect(worker.requests[0]?.params).toEqual({
       enabled: true,
       provider: "openai",
       model: "",
       endpoint: "",
-      api_key: "",
       api_version: "",
     });
   });
 
   it("sends null verbatim so the worker keeps its current model/endpoint/apiVersion", async () => {
-    const fetchMock = mockFetch({
-      ok: true,
-      data: { enabled: false, provider: "azure-openai-chat", model: "vision-deploy" },
+    const { client, worker } = attached({
+      indexer_set_image_captioning: () => ({ enabled: false, provider: "azure-openai-chat", model: "vision-deploy" }),
     });
-    vi.stubGlobal("fetch", fetchMock);
-    const client = new WorkerClient({ baseUrl: "http://127.0.0.1:43129" });
+    await client.setImageCaptioning(false, "azure-openai-chat", null, null, null);
+    const params = worker.requests[0]?.params as Record<string, unknown>;
+    expect(params.model).toBeNull();
+    expect(params.endpoint).toBeNull();
+    expect(params.api_version).toBeNull();
+    expect("model" in params && "endpoint" in params && "api_version" in params).toBe(true);
+  });
+});
 
-    await client.setImageCaptioning(false, "azure-openai-chat", null, null, "", null);
+describe("WorkerClient errors", () => {
+  it("throws the worker's own message for a refusal, with its JSON-RPC code", async () => {
+    const { client } = attached({
+      document_get: () => {
+        throw workerRefusal("Document nope not found", -32004);
+      },
+    });
+    const err = await client.getDocument("nope").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WorkerCallError);
+    expect((err as WorkerCallError).message).toBe("Document nope not found");
+    expect((err as WorkerCallError).code).toBe("worker-request-failed");
+    expect((err as WorkerCallError).workerCode).toBe(-32004);
+  });
 
-    const body = lastBody(fetchMock);
-    expect(body.model).toBeNull();
-    expect(body.endpoint).toBeNull();
-    expect(body.api_version).toBeNull();
-    expect("model" in body && "endpoint" in body && "api_version" in body).toBe(true);
+  it("names the control error when the incarnation ended mid-call", async () => {
+    const { client, worker } = attached({ indexer_reindex: () => new Promise(() => {}) });
+    const pending = client.reindex("/a.md");
+    await Promise.resolve();
+    worker.end("exited", 1);
+    const err = await pending.catch((e: unknown) => e);
+    expect((err as WorkerCallError).code).toBe("worker-incarnation-ended");
+    expect((err as WorkerCallError).message).toMatch(/^indexer_reindex: worker-incarnation-ended/);
+  });
+
+  it("fails at once, without hanging, when no worker is attached", async () => {
+    const client = new WorkerClient();
+    const err = await client.listDocuments().catch((e: unknown) => e);
+    expect((err as WorkerCallError).code).toBe("worker-not-running");
+    expect(client.attached).toBe(false);
+  });
+
+  it("stops calling a detached incarnation", async () => {
+    const { client, worker } = attached({ metrics: () => ({}) });
+    client.attach(null);
+    await expect(client.getMetrics()).rejects.toThrow(/not running/);
+    expect(worker.requests).toEqual([]);
+  });
+
+  it("health is false, never a throw, when the worker refuses or is gone", async () => {
+    const { client, worker } = attached({
+      worker_health: () => {
+        throw new WorkerControlError("worker-backpressure", "full");
+      },
+    });
+    await expect(client.health()).resolves.toBe(false);
+    worker.respond("worker_health", () => ({ status: "ok" }));
+    await expect(client.health()).resolves.toBe(true);
+    client.attach(null);
+    await expect(client.health()).resolves.toBe(false);
   });
 });
