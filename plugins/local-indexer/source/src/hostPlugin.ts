@@ -2429,15 +2429,19 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         .filter((doc) => doc.path && doc.status === "indexed" && doc.content_state === "embed_failed")
         .map((doc) => resolve(doc.path));
 
-      if (existingDocs.length > 0) {
+      // Only indexed rows may make a scan skip a file. The worker keeps a
+      // failed row (with the file's mtime) for each failed attempt; seeding
+      // from it would mean a failure that may pass is never retried.
+      const indexedDocs = existingDocs.filter((doc) => doc.status === undefined || doc.status === "indexed");
+      if (indexedDocs.length > 0) {
         // DB에 실제로 있는 파일만 스캔 skip 대상으로. DB가 비어있으면
         // IndexState가 stale일 수 있으므로 pre-population 건너뜀 → 전체 재스캔.
-        const dbPaths = new Set(existingDocs.map((d) => d.path ? resolve(d.path) : "").filter(Boolean));
+        const dbPaths = new Set(indexedDocs.map((d) => d.path ? resolve(d.path) : "").filter(Boolean));
         const state = await loadMergedIndexState().catch(() => new Map<string, { docId: string; mtimeMs: number; indexedAt: string }>());
         const validState = new Map([...state].filter(([p]) => dbPaths.has(p)));
         autoIndexer.prePopulateCacheFromState(validState);
         hostApi.logEvent("info", "local_indexer.cache_from_state", { total: state.size, valid: validState.size });
-        autoIndexer.prePopulateCache(existingDocs);
+        autoIndexer.prePopulateCache(indexedDocs);
       } else {
         hostApi.logEvent("warn", "local_indexer.cache_skipped_db_empty", {});
       }
@@ -2446,7 +2450,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // 폴더 remove로 IndexState가 비워진 뒤 앱 재시작 시에도 정확한 상태를 표시하도록.
       // Math.floor 정렬을 위해 DB의 truncated int mtime을 그대로 저장.
       const currentState = await loadMergedIndexState().catch(() => new Map<string, unknown>());
-      const syncDocs = existingDocs.filter(
+      const syncDocs = indexedDocs.filter(
         (doc) => doc.path && doc.doc_id && doc.mtime_ms != null && doc.mtime_ms > 0 && !currentState.has(resolve(doc.path)),
       );
       if (syncDocs.length > 0) {

@@ -30,6 +30,8 @@ let mockWalkedByFolder: Record<string, number> | null = null;
 let mockLegacyManifest: Array<{
   docId: string; path: string; mtimeMs: number; contentState: string | null; contentHash: string | null; hadVectors: boolean;
 }> = [];
+const prePopulateCacheMock = vi.fn((_docs: unknown[]) => {});
+const prePopulateCacheFromStateMock = vi.fn((_state: Map<string, unknown>) => {});
 const legacyIndexManifestMock = vi.fn(async (_sqlitePath: string) => mockLegacyManifest);
 let mockIndexLocation: {
   indexRoot: string;
@@ -170,9 +172,13 @@ vi.mock("../src/folderIndexer.js", () => {
       return invalidateImageEntriesMock();
     }
 
-    prePopulateCacheFromState(_state) {}
+    prePopulateCacheFromState(state) {
+      prePopulateCacheFromStateMock(state);
+    }
 
-    prePopulateCache(_docs) {}
+    prePopulateCache(docs) {
+      prePopulateCacheMock(docs);
+    }
 
     wouldIndex(_path, _folder) {
       return true;
@@ -398,6 +404,8 @@ describe("hostPlugin createPlugin", () => {
     mockWalkedByFolder = null;
     mockLegacyManifest = [];
     legacyIndexManifestMock.mockClear();
+    prePopulateCacheMock.mockClear();
+    prePopulateCacheFromStateMock.mockClear();
     reconcileMock.mockClear();
     reconcileMock.mockResolvedValue({
       checked: true,
@@ -2977,6 +2985,30 @@ describe("hostPlugin createPlugin", () => {
         expect(deferred?.[2]).toMatchObject({ drifted: 0, embedFailed: 1 });
       });
       expect(reindexMock).not.toHaveBeenCalled();
+    });
+
+    it("seeds the scan cache only from indexed rows, so a failed file is retried after a restart", async () => {
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      mockDocuments = [
+        { id: "a", doc_id: "a", doc_name: "a.md", doc_type: "md", type: "md", path: "/tmp/a.md",
+          status: "indexed", mtime_ms: 1_700_000_000_000 },
+        { id: "f", doc_id: "f", doc_name: "f.md", doc_type: "md", type: "md", path: "/tmp/failed.md",
+          status: "failed", mtime_ms: 1_700_000_000_000 },
+        { id: "p", doc_id: "p", doc_name: "p.md", doc_type: "md", type: "md", path: "/tmp/pending.md",
+          status: "pending", mtime_ms: 1_700_000_000_000 },
+      ] as typeof mockDocuments;
+      const plugin = await createPlugin(ctx);
+      await plugin.handlers.index_scan();
+      await vi.waitFor(() => expect(prePopulateCacheMock).toHaveBeenCalled(), { timeout: 3000 });
+      const seeded = (prePopulateCacheMock.mock.calls.at(-1)![0] as Array<{ path: string }>).map((d) => d.path);
+      expect(seeded).toEqual(["/tmp/a.md"]);
+      // Nor does the DB-to-state sync record the failed rows as indexed.
+      await vi.waitFor(async () => {
+        const state = JSON.parse(await readFile(join(hostRoot, "index-state.json"), "utf-8"));
+        expect(Object.keys(state.entries)).toEqual(["/tmp/a.md"]);
+      });
+      const fromState = [...(prePopulateCacheFromStateMock.mock.calls.at(-1)![0] as Map<string, unknown>).keys()];
+      expect(fromState.every((p) => p === "/tmp/a.md")).toBe(true);
     });
 
     it("heal deferred when no embedding key — detect runs key-free, no reindex", async () => {

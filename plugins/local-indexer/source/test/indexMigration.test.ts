@@ -11,7 +11,7 @@
  * vector all show up on disk.
  */
 import { describe, expect, it, vi } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -37,6 +37,7 @@ interface Row {
   doc_type: string;
   status: string;
   content_state: string;
+  mtime_ms: number;
 }
 
 /**
@@ -83,8 +84,20 @@ class FakeWorker {
   private reindex(filePath: string): unknown {
     const key = resolve(filePath);
     const script = this.scripted.get(key);
-    if (script) return script();
     const existing = this.rows.get(key);
+    const mtime_ms = Math.floor(statSync(key).mtimeMs);
+    if (script) {
+      const out = script() as { status?: string } | undefined;
+      // The worker keeps a failed row, with the file's mtime, for each failed attempt.
+      if (out?.status === "failed") {
+        this.rows.set(key, {
+          doc_id: existing?.doc_id ?? `doc-${String(++this.next).padStart(4, "0")}`,
+          path: key, doc_name: key.split(/[\\/]/).pop()!, doc_type: "md",
+          status: "failed", content_state: "ok", mtime_ms,
+        });
+      }
+      return out;
+    }
     const doc_id = existing?.doc_id ?? `doc-${String(++this.next).padStart(4, "0")}`;
     const embedded = this.embedding === "up";
     this.rows.set(key, {
@@ -94,6 +107,7 @@ class FakeWorker {
       doc_type: "md",
       status: "indexed",
       content_state: embedded ? "ok" : "embed_failed",
+      mtime_ms,
     });
     return { doc_id, doc_name: "x", doc_type: "md", chunk_count: 1, status: "indexed", embedded };
   }
@@ -207,6 +221,19 @@ function scanDeps(
     report: (s) => reports.push(structuredClone(s)),
   };
   return { deps, reports, removeDirectory, indexer, attempts, discardManifest };
+}
+
+/**
+ * A new process: a fresh FolderAutoIndexer whose scan cache is seeded from
+ * what the worker holds, the way the start-up warmup seeds it.
+ */
+function restart(deps: IndexMigrationDeps, worker: FakeWorker, folders: string[]): void {
+  const indexer = new FolderAutoIndexer({ client: worker.indexerClient, folders, extensions: [".md"] });
+  indexer.prePopulateCache(
+    [...worker.rows.values()].map((row) => ({ path: row.path, doc_id: row.doc_id, mtime_ms: row.mtime_ms, status: row.status })),
+  );
+  deps.runFullScan = async () => ({ result: await indexer.scanOnce(), folderSource: "saved", folders });
+  deps.coverage.wouldIndex = (path, folder) => indexer.wouldIndex(path, folder);
 }
 
 async function writeDocs(dir: string, names: string[]): Promise<string[]> {
@@ -364,6 +391,29 @@ describe("migrateLegacyIndex — completes when the new index covers the old one
     });
   });
 
+  it("an unchanged unreadable file is still excluded on a retry after a restart", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const [good, bad, chart] = await writeDocs(docs, ["a.md", "bad.md", "chart.md"]);
+      const worker = new FakeWorker();
+      worker.scripted.set(bad!, () => corrupt);
+      // A caption rate limit keeps the old index on the first attempt.
+      worker.scripted.set(chart!, () => ({ ...corrupt, errors: ["429"], retryable: true }));
+      const attempts = memoryAttempts();
+      const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf([good!, bad!, chart!]), { attempts });
+      expectKept(await migrateLegacyIndex(deps), fx, /lacks 1 document\(s\) \(1 failed for a reason that may pass\)/);
+
+      // Next start: the worker holds failed rows for both. They must be
+      // retried, not skipped: the rate limit has passed, the corrupt file is
+      // still corrupt.
+      worker.scripted.delete(chart!);
+      restart(deps, worker, [docs]);
+      const second = await migrateLegacyIndex(deps);
+      expect(second).toMatchObject({ phase: "completed", attempt: 2, coverage: { required: 2, excludedCorrupt: [bad] } });
+      expect(worker.reindexCalls().filter((p) => p === bad || p === chart)).toEqual([bad, chart, bad, chart]);
+    });
+  });
+
   it("two registered paths to the same files (a symlinked folder) still cover", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
@@ -394,9 +444,10 @@ describe("migrateLegacyIndex — keeps the old index", () => {
       expect(first?.coverage?.backfill).toEqual({ attempted: BACKFILL_STOP_AFTER, embedded: 0 });
       expect(attempts.state).toMatchObject({ attempts: 1 });
 
-      // The provider is back. The scan skips every file (same mtime, already
-      // held), so only the re-embed pass can give them vectors.
+      // The provider is back, after a restart. The scan skips every file
+      // (same mtime, already held), so only the re-embed pass can give them vectors.
       worker.embedding = "up";
+      restart(deps, worker, [docs]);
       const before = worker.reindexCalls().length;
       const second = await migrateLegacyIndex(deps);
       expect(second).toMatchObject({

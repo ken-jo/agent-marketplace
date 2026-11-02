@@ -170,9 +170,13 @@ export class FolderAutoIndexer {
    * DB docs로 캐시를 보충한다 (IndexState에 없는 경로만).
    * DB mtime 단위(초 vs ms)가 불확실하므로 IndexState가 있는 경로는 건드리지 않는다.
    */
-  prePopulateCache(docs: Array<{ path?: string | null; mtime_ms?: number; doc_id?: string }>): void {
+  prePopulateCache(docs: Array<{ path?: string | null; mtime_ms?: number; doc_id?: string; status?: string }>): void {
     for (const doc of docs) {
       if (!doc.path) continue;
+      // A failed (or still pending) row records the attempt, not a result:
+      // seeding its mtime would make every later scan skip the file, so a
+      // failure that may pass would never be retried.
+      if (doc.status !== undefined && doc.status !== "indexed") continue;
       const absPath = resolve(doc.path);
       // IndexState가 이미 채운 경로는 건드리지 않음
       if (!this.mtimeByPath.has(absPath)) {
