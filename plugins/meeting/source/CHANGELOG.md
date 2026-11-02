@@ -1,5 +1,20 @@
 # Changelog  
 
+## [0.11.0] - Unreleased
+
+Requires Ave 0.14.2 and host protocol 5. Ave 0.14.2 serves protocol 5 only
+and refuses a protocol-3 extension before activation.
+
+### Changed
+
+- Every host-mediated command (ffprobe, the ffmpeg segmenter and the
+  installer's archive and install-name tools) declares
+  `control: "output-only-v1"`. These commands only report raw
+  stdout/stderr and their exit code, which is what that mode carries, and
+  protocol 5 refuses a worker spec that declares no control mode.
+- A handle that is not output-only is stopped and reported as an error,
+  never read as one.
+
 ## [0.10.2] - Unreleased
 
 Removes the retired product name from the plugin. Requires Ave 0.14.0 and

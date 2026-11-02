@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import type { PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
+import type { OutputOnlyPluginWorker, PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
 
 export const FFMPEG_VENDOR_PLATFORM = `${process.platform}-${process.arch}`;
 
@@ -111,16 +111,23 @@ export async function runMediatedCommand(
   const label = run.label ?? run.command;
   if (run.signal?.aborted) throw new Error(`${label} aborted`);
 
-  let handle: SpawnedPluginWorker;
+  let handle: OutputOnlyPluginWorker;
   try {
-    handle = await run.spawnWorker({
+    // Every meeting command is output-only: raw stdout/stderr, stdin left for liveness, no control channel.
+    const spawned = await run.spawnWorker({
       workerId: run.workerId,
+      control: "output-only-v1",
       command: run.command,
       args: [...run.args],
       env: run.env as Record<string, string | undefined> | undefined,
       allowReadPaths: [...(run.readPaths ?? [])],
       allowWritePaths: [...(run.writePaths ?? [])],
     });
+    if (spawned.control !== "output-only-v1") {
+      try { spawned.stop(); } catch { /* already gone */ }
+      throw new Error(`${label}: the host returned a '${String((spawned as { control: unknown }).control)}' worker for an output-only spec`);
+    }
+    handle = spawned;
   } catch (err) {
     throw new MediatedSpawnStartError(label, err);
   }

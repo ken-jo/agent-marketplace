@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import createPlugin from "../src/hostPlugin.js";
-import type { HostFetchInit, PluginHostApi, PluginWorkerSpec, ResolveApiKeyResult, SpawnedPluginWorker } from "@ave/plugin-contract";
+import type { HostFetchInit, PluginHostApi, PluginWorkerExitInfo, PluginWorkerSpec, ResolveApiKeyResult, SpawnedPluginWorker } from "@ave/plugin-contract";
 
 type HostApi = {
   emitEvent: (type: string, data?: unknown) => void;
@@ -162,9 +162,9 @@ describe("STT key resolution — resolveApiKey contract", () => {
       });
       const spawnWorker = vi.fn(async (spec: PluginWorkerSpec): Promise<SpawnedPluginWorker> => {
         const stdout: Array<(chunk: string) => void> = [];
-        const exit: Array<(info: { code: number | null; signal: NodeJS.Signals | null }) => void> = [];
+        const exit: Array<(info: PluginWorkerExitInfo) => void> = [];
         const worker: SpawnedPluginWorker = {
-          socketPath: null, pid: 12345,
+          control: "output-only-v1", pid: 12345,
           stop: async () => {},
           onStdout: (listener) => { stdout.push(listener); },
           onStderr: () => {},
@@ -190,7 +190,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
             wav.writeUInt32LE(2, 40);
             writeFileSync(segment, wav);
           }
-          for (const listener of exit) listener({ code: 0, signal: null });
+          for (const listener of exit) listener({ code: 0, signal: null, reason: "exited" });
         }, 0);
         return worker;
       });

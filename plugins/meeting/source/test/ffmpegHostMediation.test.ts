@@ -29,7 +29,7 @@ import {
   type MediatedFetch,
   type MediatedSpawn,
 } from "../src/ffmpegRuntime.js";
-import type { PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
+import type { OutputOnlyPluginWorker, PluginWorkerExitInfo, PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
 import createPlugin, {
   STAGED_UPLOAD_MAX_ACTIVE,
   ffmpegWorkerId,
@@ -38,7 +38,7 @@ import createPlugin, {
   takeFfmpegWorkerSlot,
 } from "../src/hostPlugin.js";
 
-type Handle = SpawnedPluginWorker & {
+type Handle = OutputOnlyPluginWorker & {
   emitStdout(chunk: string): void;
   emitExit(code: number | null): void;
 };
@@ -46,17 +46,17 @@ type Handle = SpawnedPluginWorker & {
 /** A worker handle whose exit the test decides. */
 function makeHandle(): Handle {
   const stdout: Array<(chunk: string) => void> = [];
-  const exit: Array<(info: { code: number | null; signal: NodeJS.Signals | null }) => void> = [];
+  const exit: Array<(info: PluginWorkerExitInfo) => void> = [];
   return {
-    socketPath: null,
+    control: "output-only-v1",
     pid: 4242,
     stop: vi.fn(),
     onStdout: (listener) => { stdout.push(listener); },
     onStderr: () => {},
     onExit: (listener) => { exit.push(listener); },
     emitStdout: (chunk) => { for (const listener of stdout) listener(chunk); },
-    emitExit: (code) => { for (const listener of exit) listener({ code, signal: null }); },
-  } as Handle;
+    emitExit: (code) => { for (const listener of exit) listener({ code, signal: null, reason: "exited" }); },
+  };
 }
 
 function stubSpawn(drive: (handle: Handle) => void) {
@@ -111,6 +111,28 @@ describe("worker slots", () => {
   });
 });
 
+describe("an output-only spec", () => {
+  it("stops and refuses a handle that is not output-only instead of reading it", async () => {
+    process.env.AVE_MEETING_FFPROBE_PATH = new URL(import.meta.url).pathname;
+    const stop = vi.fn();
+    const spawnWorker = vi.fn(async (): Promise<SpawnedPluginWorker> => ({
+      control: "stdio-control-v1",
+      pid: 4343,
+      stop,
+      onStderr: () => {},
+      onExit: () => {},
+      request: async () => null,
+      notify: async () => {},
+      onRequest: () => {},
+      onNotification: () => {},
+    }));
+    await expect(
+      runFfprobeDurationSec("/tmp/audio.m4a", { workerId: "meeting-ffprobe-0", spawnWorker }),
+    ).rejects.toThrow(/output-only/u);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("runFfprobeDurationSec", () => {
   it("asks the host to spawn it, and reads the duration off stdout", async () => {
     process.env.AVE_MEETING_FFPROBE_PATH = new URL(import.meta.url).pathname;
@@ -126,6 +148,8 @@ describe("runFfprobeDurationSec", () => {
     expect(specs).toHaveLength(1);
     const spec = specs[0]!;
     expect(spec.workerId).toBe("meeting-ffprobe-0");
+    // Protocol 5 refuses a spec with no control mode; ffprobe only reports stdout and its exit code.
+    expect(spec.control).toBe("output-only-v1");
     expect(spec.args).toContain("/tmp/audio.m4a");
     // Declared, not inferred: the host does not read argv to decide filesystem
     // grants, so an input the plugin did not name is an input the tool cannot
