@@ -42,7 +42,7 @@ import { fileURLToPath } from "node:url";
 import { checkRepository, releasedManifestsNeeded } from "./check.mjs";
 import { checkVendored, isCommitPin, isReleaseTag } from "./vendor.mjs";
 import { runPluginChecks, verifiedRuntime } from "./verified-import.mjs";
-import { AVE_EXTENSION, DESCRIPTOR, INDEX_PATH, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson } from "./repo.mjs";
+import { AVE_EXTENSION, DESCRIPTOR, HOST_PROTOCOL_FLOORS, INDEX_PATH, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson, requiredHostProtocol } from "./repo.mjs";
 
 const TRUSTED_RUNTIME = await verifiedRuntime();
 
@@ -60,11 +60,14 @@ const SENSITIVE = [
 ];
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
-/** The host protocol the vendored contract must describe; the release tag itself is `ref` in sources.json. */
-const HOST_PROTOCOL = 3;
-const PROTOCOL_SCHEMA_SOURCE = `schemas/plugin-host-protocol/${HOST_PROTOCOL}/protocol.schema.json`;
-const protocolSchemaId = (tag) => `https://ave.agent-connector.ai/schemas/plugin-host-protocol/${HOST_PROTOCOL}/${tag}/protocol.schema.json`;
-const PROTOCOL_SCHEMA_TITLE = `Ave plugin host protocol ${HOST_PROTOCOL}`;
+/**
+ * The host protocol the vendored contract must describe: the one the release tag (`ref` in sources.json) serves, by
+ * the same floors a plugin's minAppVersion uses. A development pin is held to the newest protocol.
+ */
+const hostProtocolOf = (tag) => (isReleaseTag(tag) ? requiredHostProtocol(tag.slice(1)) : undefined) ?? HOST_PROTOCOL_FLOORS[0][1];
+const protocolSchemaSource = (protocol) => `schemas/plugin-host-protocol/${protocol}/protocol.schema.json`;
+const protocolSchemaId = (protocol, tag) => `https://ave.agent-connector.ai/schemas/plugin-host-protocol/${protocol}/${tag}/protocol.schema.json`;
+const protocolSchemaTitle = (protocol) => `Ave plugin host protocol ${protocol}`;
 
 /**
  * Publication metadata prerequisites. The runtime loader also holds every
@@ -84,6 +87,7 @@ export function publicationProblems() {
     }
   }
   const tag = contract.ref;
+  const protocol = hostProtocolOf(tag);
   const source = contract.files?.["protocol.schema.json"];
   const manifestSchema = readJson("contract/plugin-manifest.schema.json");
   const extension = manifestSchema.properties?.extensions?.properties?.[AVE_EXTENSION];
@@ -93,8 +97,8 @@ export function publicationProblems() {
   if (!Object.hasOwn(extension?.properties ?? {}, "sandbox")) {
     problems.push("contract/plugin-manifest.schema.json: publication requires sandbox in the vendored manifest schema");
   }
-  if (source?.from !== PROTOCOL_SCHEMA_SOURCE || typeof source.sha256 !== "string") {
-    problems.push(`contract/sources.json: publication requires ${PROTOCOL_SCHEMA_SOURCE} with its sha256`);
+  if (source?.from !== protocolSchemaSource(protocol) || typeof source.sha256 !== "string") {
+    problems.push(`contract/sources.json: publication requires ${protocolSchemaSource(protocol)} with its sha256`);
   } else {
     const path = join(ROOT, "contract", "protocol.schema.json");
     if (!existsSync(path)) problems.push("contract/protocol.schema.json: missing");
@@ -103,8 +107,8 @@ export function publicationProblems() {
       if (sha256(bytes) !== source.sha256) problems.push("contract/protocol.schema.json: bytes differ from sources.json");
       try {
         const schema = JSON.parse(bytes.toString("utf8"));
-        if (schema.$id !== protocolSchemaId(tag) || schema.title !== PROTOCOL_SCHEMA_TITLE) {
-          problems.push(`contract/protocol.schema.json: expected the protocol ${HOST_PROTOCOL} schema for ${tag} ($id ${protocolSchemaId(tag)}, title "${PROTOCOL_SCHEMA_TITLE}"), not ${JSON.stringify(schema.$id)}`);
+        if (schema.$id !== protocolSchemaId(protocol, tag) || schema.title !== protocolSchemaTitle(protocol)) {
+          problems.push(`contract/protocol.schema.json: expected the protocol ${protocol} schema for ${tag} ($id ${protocolSchemaId(protocol, tag)}, title "${protocolSchemaTitle(protocol)}"), not ${JSON.stringify(schema.$id)}`);
         }
       } catch {
         problems.push("contract/protocol.schema.json: invalid JSON");

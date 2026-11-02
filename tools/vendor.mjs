@@ -484,6 +484,7 @@ function syncFromCheckout(dir, ref, app) {
   const sources = readSources(dir);
   sources.ref = ref;
   sources.bundle = null;
+  sources.comment = `Development pin: Ave commit ${ref}, copied from a checkout. Publication refuses a commit pin; release prep re-syncs from a release tag with \`node tools/vendor.mjs sync --ref <tag>\`. Never edit a copy.`;
   const replacements = new Map();
   for (const [name, entry] of Object.entries(sources.files)) {
     const bytes = entry.build

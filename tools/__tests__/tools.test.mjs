@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { verifiedRuntime } from "../verified-import.mjs";
 import { SIGNER_ISSUER, bundleUrl, cosignArgs, embeddedBuildPaths, signerIdentity } from "../vendor.mjs";
 import { testKeys, testSignature } from "./fake-sigstore.mjs";
-import { workingTree } from "../repo.mjs";
+import { requiredHostProtocol, workingTree } from "../repo.mjs";
 
 const { marketplace: { checkMarketplaceRepository } } = await verifiedRuntime();
 
@@ -487,6 +487,15 @@ describe("repository check", () => {
     manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.14.0", hostProtocol: "3" };
     r.write(manifestPath, manifest);
     assert.doesNotMatch(r.tool("check.mjs").stderr, /hostProtocol/u);
+
+    // Ave 0.14.2 serves protocol 5 only; the unreleased protocol 4 is never required.
+    manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.14.2", hostProtocol: "3" };
+    r.write(manifestPath, manifest);
+    assert.match(r.tool("check.mjs").stderr, /requires\.hostProtocol must be 5 for minAppVersion 0\.14\.2/u);
+
+    manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.14.2", hostProtocol: "5" };
+    r.write(manifestPath, manifest);
+    assert.doesNotMatch(r.tool("check.mjs").stderr, /hostProtocol/u);
   });
 
   it("fails when the base commit is not in the clone instead of skipping the comparison", () => {
@@ -920,13 +929,14 @@ describe("contract bundle", () => {
 
 describe("releases", () => {
   const markDevelopmentPin = (r) => pinVendored(r, DEV_PIN);
+  const protocolOf = (tag) => requiredHostProtocol(tag.slice(1));
   const protocolSchema = (tag) => ({
-    $id: `https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/${tag}/protocol.schema.json`,
+    $id: `https://ave.agent-connector.ai/schemas/plugin-host-protocol/${protocolOf(tag)}/${tag}/protocol.schema.json`,
     $schema: "https://json-schema.org/draft/2020-12/schema",
-    title: "Ave plugin host protocol 3",
+    title: `Ave plugin host protocol ${protocolOf(tag)}`,
   });
 
-  /** Pin `tag` and vendor its protocol-3 schema, whatever ref and schema the repository holds. */
+  /** Pin `tag` and vendor the schema of the protocol it serves, whatever ref and schema the repository holds. */
   function markPublicationReady(r, tag = TAG) {
     pinVendored(r, tag);
     const contract = JSON.parse(readFileSync(join(r.root, "contract/sources.json"), "utf8"));
@@ -938,7 +948,7 @@ describe("releases", () => {
     const schema = protocolSchema(tag);
     const bytes = `${JSON.stringify(schema, null, 2)}\n`;
     r.write("contract/protocol.schema.json", bytes);
-    contract.files["protocol.schema.json"] = { from: "schemas/plugin-host-protocol/3/protocol.schema.json", sha256: hash(bytes) };
+    contract.files["protocol.schema.json"] = { from: `schemas/plugin-host-protocol/${protocolOf(tag)}/protocol.schema.json`, sha256: hash(bytes) };
     r.write("contract/sources.json", contract);
     return { contract, schema };
   }
@@ -953,7 +963,7 @@ describe("releases", () => {
   }
   const entries = (zip) => execFileSync("unzip", ["-Z1", zip], { encoding: "utf8" }).split("\n").filter(Boolean).sort();
 
-  it("holds publication until sources.json pins an Ave release tag and its protocol-3 schema is vendored", () => {
+  it("holds publication until sources.json pins an Ave release tag and the schema of the protocol that tag serves", () => {
     const r = repo();
     const publish = () => r.publishTool("release.mjs", "plan", "--publish");
     markDevelopmentPin(r);
@@ -983,8 +993,14 @@ describe("releases", () => {
       r.write("contract/sources.json", contract);
       assert.match(publish().stderr, /expected the protocol 3 schema for v0\.14\.0 \(\$id https:\/\/ave\.agent-connector\.ai\/schemas\/plugin-host-protocol\/3\/v0\.14\.0\/protocol\.schema\.json/u);
     }
-    markPublicationReady(r, "v0.15.0");
+    // From Ave 0.14.2 the tag serves protocol 5, so its protocol-5 schema is the one required.
+    const { contract: next, schema: nextSchema } = markPublicationReady(r, "v0.15.0");
     assert.equal(publish().status, 0, publish().stderr);
+    const stale = `${JSON.stringify({ ...nextSchema, $id: "https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/v0.15.0/protocol.schema.json", title: "Ave plugin host protocol 3" }, null, 2)}\n`;
+    r.write("contract/protocol.schema.json", stale);
+    next.files["protocol.schema.json"] = { from: "schemas/plugin-host-protocol/3/protocol.schema.json", sha256: hash(stale) };
+    r.write("contract/sources.json", next);
+    assert.match(publish().stderr, /publication requires schemas\/plugin-host-protocol\/5\/protocol\.schema\.json with its sha256/u);
   });
 
   it("rejects MARKETPLACE_ROOT on every publication command", () => {

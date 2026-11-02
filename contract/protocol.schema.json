@@ -108,6 +108,8 @@
                 "lease-unavailable",
                 "lease-audience-denied",
                 "credential-conflict",
+                "worker-transport-unsupported",
+                "worker-control-failed",
                 "host-internal"
               ]
             },
@@ -160,6 +162,8 @@
         "lease-unavailable",
         "lease-audience-denied",
         "credential-conflict",
+        "worker-transport-unsupported",
+        "worker-control-failed",
         "host-internal"
       ]
     },
@@ -219,6 +223,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -346,6 +352,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -465,6 +473,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -595,6 +605,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -651,7 +663,7 @@
         }
       },
       "ave/host/authRedirect/open": {
-        "description": "Bind the listener. Rejects when this plugin already has one open.",
+        "description": "Bind the listener and mint state. Rejects when this plugin already has one open.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
           "properties": {
@@ -705,6 +717,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -748,17 +762,21 @@
             },
             "redirectUri": {
               "type": "string"
+            },
+            "state": {
+              "type": "string"
             }
           },
           "required": [
             "handle",
-            "redirectUri"
+            "redirectUri",
+            "state"
           ],
           "type": "object"
         }
       },
       "ave/host/authRedirect/wait": {
-        "description": "Resolve with the redirect's query parameters, or reject on timeout or close. Resolves immediately when the redirect has already arrived.",
+        "description": "Resolve only with an exact-path callback carrying the host-issued state. A provider refusal is returned in `error` / `error_description`; check it before exchanging a code. Invalid state does not consume the waiter. Rejects on timeout or close; caches the first validated callback.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
           "properties": {
@@ -812,6 +830,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -928,6 +948,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1033,6 +1055,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1135,6 +1159,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1223,7 +1249,7 @@
       "ave/host/config/set": {
         "description": "Persist a config key. Triggers a plugin reload so the new value is visible to the plugin on next handler invocation.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
           "properties": {
             "code": {
               "type": "integer"
@@ -1275,6 +1301,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1380,6 +1408,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1483,6 +1513,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1618,6 +1650,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1723,6 +1757,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1825,6 +1861,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1930,6 +1968,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2028,6 +2068,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2140,6 +2182,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2254,6 +2298,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2369,6 +2415,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2476,6 +2524,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2589,6 +2639,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2810,6 +2862,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2912,6 +2966,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3022,6 +3078,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3132,6 +3190,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3377,6 +3437,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3670,6 +3732,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3776,6 +3840,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3882,6 +3948,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3933,9 +4001,9 @@
         }
       },
       "ave/host/spawnWorker": {
-        "description": "Spawn a long-lived plugin worker, host-mediated and (when the OS-tool ASRT sandbox gate is ON) ASRT-wrapped. macOS/Linux workers use a bind-mounted Unix-domain-socket (UDS) control channel; Windows workers keep TCP control but run under srt-win with a worker-lifetime holder PID ACL grant.",
+        "description": "Spawn a plugin worker, host-mediated and (when the OS-tool sandbox gate is ON) confined. The worker talks to the plugin only over its standard streams, as the spec's `control` declares (see {@link PluginWorkerControl}); the host never allocates a socket or a port for it.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, worker-transport-unsupported, worker-control-failed.",
           "properties": {
             "code": {
               "type": "integer"
@@ -3987,6 +4055,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4055,6 +4125,98 @@
             },
             {
               "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "result",
+                  "type": "string"
+                },
+                "result": {}
+              },
+              "required": [
+                "kind",
+                "id",
+                "result"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "error": {
+                  "$ref": "#/$defs/types/WireWorkerError"
+                },
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "error",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "request",
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "params": {}
+              },
+              "required": [
+                "kind",
+                "id",
+                "method"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "notification",
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "params": {}
+              },
+              "required": [
+                "kind",
+                "method"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "cancel",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
                 "code": {
                   "type": [
                     "number",
@@ -4064,6 +4226,9 @@
                 "kind": {
                   "const": "exit",
                   "type": "string"
+                },
+                "reason": {
+                  "$ref": "#/$defs/types/PluginWorkerExitReason"
                 },
                 "signal": {
                   "type": [
@@ -4075,12 +4240,13 @@
               "required": [
                 "kind",
                 "code",
-                "signal"
+                "signal",
+                "reason"
               ],
               "type": "object"
             }
           ],
-          "description": "Output as it is written, then one `exit`."
+          "description": "Output and control traffic as it arrives, then one `exit`."
         },
         "params": {
           "properties": {
@@ -4107,29 +4273,17 @@
                 "command": {
                   "type": "string"
                 },
+                "control": {
+                  "$ref": "#/$defs/types/PluginWorkerControl"
+                },
                 "env": {
                   "additionalProperties": {
                     "type": "string"
                   },
                   "type": "object"
                 },
-                "udsArgName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "properties": {
-                        "env": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "env"
-                      ],
-                      "type": "object"
-                    }
-                  ]
+                "stateDirectory": {
+                  "type": "boolean"
                 },
                 "workerId": {
                   "type": "string"
@@ -4137,7 +4291,8 @@
               },
               "required": [
                 "workerId",
-                "command"
+                "command",
+                "control"
               ],
               "type": "object"
             }
@@ -4206,6 +4361,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4327,7 +4484,7 @@
       "ave/host/storage/exists": {
         "description": "Test whether the path exists.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4379,6 +4536,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4429,7 +4588,7 @@
       "ave/host/storage/list": {
         "description": "List entries in `relPath` (directories included). Empty for missing dir.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4481,6 +4640,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4583,6 +4744,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4633,7 +4796,7 @@
       "ave/host/storage/read": {
         "description": "Read raw bytes; throws ENOENT if the file does not exist.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4685,6 +4848,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4735,7 +4900,7 @@
       "ave/host/storage/readEncrypted": {
         "description": "Read the ciphertext previously written by {@link writeEncrypted} at `relPath` and return the decrypted UTF-8 plaintext. Throws ENOENT if the file does not exist (same contract as {@link readText}); throws {@link PluginStorageEncryptionUnavailableError} if host encryption is unavailable — it never returns raw ciphertext or a plaintext guess.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, plugin-storage-encryption-unavailable.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage, plugin-storage-encryption-unavailable.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4787,6 +4952,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4837,7 +5004,7 @@
       "ave/host/storage/readJson": {
         "description": "Read + parse JSON; returns `null` on missing file, throws on bad JSON.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4889,6 +5056,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4946,7 +5115,7 @@
       "ave/host/storage/readText": {
         "description": "Read text; throws ENOENT if the file does not exist.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4998,6 +5167,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5113,6 +5284,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5223,6 +5396,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5342,6 +5517,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5448,6 +5625,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5557,6 +5736,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5732,6 +5913,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5838,6 +6021,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -6384,6 +6569,24 @@
           },
           "required": [
             "subscriptionId"
+          ],
+          "type": "object"
+        }
+      },
+      "notifications/ave/subscription/send": {
+        "description": "child → host: traffic for a handle that accepts it, today only a `stdio-control-v1` worker (`WireWorkerSend`). Every `request` and `notification` is answered by one `result` or `error` worker event naming its `id`; a `response` or `cancel` is not. A send for a handle that is gone is dropped: its pending calls were already settled by the `exit` event.",
+        "params": {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/types/WireWorkerSend"
+            },
+            "subscriptionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "subscriptionId",
+            "payload"
           ],
           "type": "object"
         }
@@ -7034,7 +7237,7 @@
         "type": "object"
       },
       "HostProtocolVersion": {
-        "const": "3",
+        "const": "5",
         "type": "string"
       },
       "JsonRpcRequestId": {
@@ -7108,6 +7311,20 @@
         "properties": {
           "label": {
             "type": "string"
+          },
+          "locales": {
+            "additionalProperties": {
+              "properties": {
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "type": "object"
+            },
+            "type": "object"
           },
           "loginTool": {
             "type": "string"
@@ -7282,6 +7499,12 @@
             ],
             "type": "object"
           },
+          "locales": {
+            "additionalProperties": {
+              "$ref": "#/$defs/types/PluginConfigSchemaPropertyLocalizedText"
+            },
+            "type": "object"
+          },
           "maxLength": {
             "type": "number"
           },
@@ -7314,6 +7537,17 @@
         "required": [
           "type"
         ],
+        "type": "object"
+      },
+      "PluginConfigSchemaPropertyLocalizedText": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "PluginConstructParams": {
@@ -7851,6 +8085,12 @@
             ],
             "type": "string"
           },
+          "locales": {
+            "additionalProperties": {
+              "$ref": "#/$defs/types/PluginUiExtensionLocalizedText"
+            },
+            "type": "object"
+          },
           "page": {
             "type": "string"
           },
@@ -7871,6 +8111,20 @@
           "kind",
           "title"
         ],
+        "type": "object"
+      },
+      "PluginUiExtensionLocalizedText": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "PluginUiResourceDecl": {
@@ -7935,6 +8189,22 @@
           "uri"
         ],
         "type": "object"
+      },
+      "PluginWorkerControl": {
+        "enum": [
+          "stdio-control-v1",
+          "output-only-v1"
+        ],
+        "type": "string"
+      },
+      "PluginWorkerExitReason": {
+        "enum": [
+          "exited",
+          "stopped",
+          "control-violation",
+          "output-overflow"
+        ],
+        "type": "string"
       },
       "ProcessPluginManifest": {
         "properties": {
@@ -8593,26 +8863,141 @@
         ],
         "type": "object"
       },
+      "WireWorkerError": {
+        "properties": {
+          "code": {
+            "$ref": "#/$defs/types/WorkerControlErrorCode"
+          },
+          "message": {
+            "type": "string"
+          },
+          "remote": {
+            "$ref": "#/$defs/types/WorkerControlRemoteError"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
       "WireWorkerHandle": {
         "properties": {
+          "control": {
+            "$ref": "#/$defs/types/PluginWorkerControl"
+          },
           "handleId": {
             "type": "string"
           },
           "pid": {
             "type": "number"
-          },
-          "socketPath": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         },
         "required": [
           "handleId",
-          "socketPath"
+          "control"
         ],
         "type": "object"
+      },
+      "WireWorkerSend": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "request",
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "params": {}
+            },
+            "required": [
+              "kind",
+              "id",
+              "method"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "notification",
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "params": {}
+            },
+            "required": [
+              "kind",
+              "id",
+              "method"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "response",
+                "type": "string"
+              },
+              "result": {}
+            },
+            "required": [
+              "kind",
+              "id",
+              "result"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/types/WorkerControlRemoteError"
+              },
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "response",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "error"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "cancel",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "WorkProposal": {
         "properties": {
@@ -8744,11 +9129,37 @@
           "label"
         ],
         "type": "object"
+      },
+      "WorkerControlErrorCode": {
+        "enum": [
+          "worker-request-failed",
+          "worker-request-cancelled",
+          "worker-backpressure",
+          "worker-incarnation-ended",
+          "payload-too-large"
+        ],
+        "type": "string"
+      },
+      "WorkerControlRemoteError": {
+        "properties": {
+          "code": {
+            "type": "number"
+          },
+          "data": {},
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
       }
     }
   },
-  "$id": "https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/v0.14.0/protocol.schema.json",
+  "$id": "https://ave.agent-connector.ai/schemas/plugin-host-protocol/5/v0.14.2/protocol.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Generated by scripts/generate-plugin-host-protocol-schema.ts from Ave 0.14.0; do not edit. Each method names its params, its result and the errors it may reply with, and a method whose registration or handle outlives the reply names the payload of every notifications/ave/subscription frame for it under events; each notification names its params. docs/design/plugin-hostapi-protocol.md describes the protocol.",
-  "title": "Ave plugin host protocol 3"
+  "description": "Generated by scripts/generate-plugin-host-protocol-schema.ts from Ave 0.14.2; do not edit. Each method names its params, its result and the errors it may reply with, and a method whose registration or handle outlives the reply names the payload of every notifications/ave/subscription frame for it under events; each notification names its params. docs/design/plugin-hostapi-protocol.md describes the protocol.",
+  "title": "Ave plugin host protocol 5"
 }

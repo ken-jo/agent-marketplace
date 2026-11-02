@@ -151,12 +151,8 @@ test("exempts exact allowlisted paths only, and reports an entry once nothing ne
   }
 });
 
-test("allowlists exactly the three signed vendored contract files", () => {
-  assert.deepEqual(ALLOWLIST, [
-    ["contract/public-contract.ts", "signed vendored bundle until the next ave tag sync"],
-    ["tools/vendor/agent-plugin-components.js", "signed vendored bundle until the next ave tag sync"],
-    ["tools/vendor/marketplace-check.js", "signed vendored bundle until the next ave tag sync"],
-  ]);
+test("allowlists nothing: the vendored contract and checker no longer carry the name", () => {
+  assert.deepEqual(ALLOWLIST, []);
 });
 
 test("the repository passes the gate, with no stale allowlist entry", () => {

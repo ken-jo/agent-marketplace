@@ -23,9 +23,9 @@ This repository starts from a single public import commit. Its initial catalog l
 | `policy/revocations-by-app.json` | Optional. App-version-scoped revocations. |
 | `tools/withdrawn.json` | Optional. Packages taken out of the catalog whole, published versions included, each with its reason. Any other published version that leaves the index fails the checks. |
 | `templates/extension/` | Starting point for a new extension. |
-| `contract/` | The public types, manifest schema, and protocol-3 schema vendored from Ave at the ref in `contract/sources.json`. Development commit pins support review; publication requires an Ave release tag and its signed [contract bundle](#contract-bundle). |
+| `contract/` | The public types, manifest schema, and host-protocol schema vendored from Ave at the ref in `contract/sources.json`. Development commit pins support review; publication requires an Ave release tag and its signed [contract bundle](#contract-bundle). |
 | `tools/vendor/` | The app's repository check and `agent-plugin-components.js` extractor, at the same ref as `contract/`. The checker recipe replaces the host logger with a silent stub so the bundle has no worker transport or checkout paths. |
-| `tools/` | Validator, index generator, release tooling, extension build helper, vendoring, and the retired-name gate (`check-retired-name.mjs`), whose allowlist holds only the signed vendored contract files until the next Ave tag sync. |
+| `tools/` | Validator, index generator, release tooling, extension build helper, vendoring, and the retired-name gate (`check-retired-name.mjs`), whose allowlist is empty. |
 
 ## Publishing
 
@@ -39,12 +39,13 @@ A merge to `main` publishes catalog changes. Marketplace packages are unsigned; 
 
 1. Change `plugins/<name>/source/`. Raise the version in its `plugin.json`
    and `package.json` together.
-   Declare `requires.hostProtocol: "3"` with `minAppVersion` 0.14.0 or later:
-   Ave serves host protocol 3 only and refuses a plugin that requires another.
+   Declare `requires.hostProtocol: "5"` with `minAppVersion` 0.14.2 or later:
+   Ave 0.14.2 serves host protocol 5 only and refuses a plugin that requires
+   another (Ave 0.14.0 serves protocol 3).
 2. After the merge, the release workflow:
    - refuses publication until the contract and checker pin an Ave release
      tag (the `ref` in both `sources.json` files, never a commit), the
-     protocol-3 schema for that tag is vendored, and every vendored byte
+     protocol-5 schema for that tag is vendored, and every vendored byte
      equals the tag's signed contract bundle (see [Contract bundle](#contract-bundle));
    - builds `<name>-<version>.zip` from the merge commit;
    - tags `<name>-v<version>` and uploads the zip to that release;

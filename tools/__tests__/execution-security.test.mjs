@@ -58,12 +58,14 @@ function signedBundle(root) {
   scratch.push(served);
   const keys = testKeys();
   const schema = JSON.parse(readFileSync(join(root, "contract/protocol.schema.json"), "utf8"));
+  // The fixture bundle is a protocol-3 tag; the protocol follows the tag, not the checkout's own pin.
   schema.$id = `https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/${TAG}/protocol.schema.json`;
   schema.title = "Ave plugin host protocol 3";
   write(root, "contract/protocol.schema.json", JSON.stringify(schema));
   for (const path of INVENTORIES) {
     const inventory = JSON.parse(readFileSync(join(root, path), "utf8"));
     inventory.ref = TAG;
+    if (inventory.files["protocol.schema.json"]) inventory.files["protocol.schema.json"].from = "schemas/plugin-host-protocol/3/protocol.schema.json";
     inventory.bundle = BUNDLE;
     for (const [name, entry] of Object.entries(inventory.files)) entry.sha256 = hash(readFileSync(join(root, dirname(path), name)));
     write(root, path, JSON.stringify(inventory));

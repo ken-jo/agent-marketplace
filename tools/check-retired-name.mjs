@@ -38,7 +38,6 @@ export const RETIRED_NAME_PATTERN = new RegExp(
   "u",
 );
 
-const VENDORED = "signed vendored bundle until the next ave tag sync";
 
 /**
  * Where the name may stay: `[path, reason]`, each one exact path. The three
@@ -47,11 +46,8 @@ const VENDORED = "signed vendored bundle until the next ave tag sync";
  * --ref <tag>` from an Ave release without the name clears them, and the stale
  * check then forces their removal here.
  */
-export const ALLOWLIST = Object.freeze([
-  ["contract/public-contract.ts", VENDORED],
-  ["tools/vendor/agent-plugin-components.js", VENDORED],
-  ["tools/vendor/marketplace-check.js", VENDORED],
-]);
+// Empty since the vendored contract and checker were re-synced from an Ave commit that no longer carries the name.
+export const ALLOWLIST = Object.freeze([]);
 
 const BINARY_PROBE_BYTES = 8000;
 
