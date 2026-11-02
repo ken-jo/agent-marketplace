@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.8.0] - Unreleased
+
+Requires Ave 0.14.2 and host protocol 5 (`requires.hostProtocol: "5"`).
+Apps that serve protocol 3 keep 0.7.2. The first start after the upgrade
+rebuilds the index once (see below).
+
+### Changed — worker stdio control (breaking)
+
+- The Python worker talks to the plugin over its own stdin and stdout with
+  worker stdio control v1 (newline-delimited JSON-RPC 2.0). Each former HTTP
+  route is one request, for example `search_hybrid` or `indexer_reindex`.
+  There is no port, socket, `udsArgName`, shutdown token or egress token
+  any more. The worker logs to stderr only, and it exits on stdin EOF or
+  `$/ave/shutdown`.
+- The worker sends its provider calls back to the plugin as
+  `egress_embedding` and `egress_caption` requests. The plugin's broker
+  answers them through `hostFetch`, with the same routing, header allow-list
+  and per-request lease as before. The broker's HTTP listener is gone, and
+  no credential or token reaches the worker: the plugin only tells it
+  whether embedding may go ahead.
+- FastAPI and uvicorn are no longer dependencies. The worker uses a small
+  asyncio dispatcher and runs blocking work in threads.
+- The `workerPort` setting is removed. A saved value is ignored.
+- `npm run clean:port` and `scripts/free-worker-port.mjs` are removed.
+
+### Changed — index location, with a visible rebuild
+
+- The index now lives in the worker's own state directory, which the host
+  creates (`~/.ave/plugins/local-indexer/workers/local-indexer-worker/`).
+  Only the worker can write there. A user-chosen `indexStorageRoot` keeps
+  its location and its write grant.
+- An index left in the extension data directory (`index/`) cannot be copied
+  into the state directory, so the first start rebuilds it with a full scan
+  of the registered folders. The scan shows its progress and an
+  `index-migration` warning, and `index_scan_status` reports
+  `indexMigration`. The old directory is deleted only after a scan that was
+  not cancelled, failed no file, and left the worker holding exactly as many
+  documents as the scan indexed. Otherwise the old directory is kept, and
+  the next start tries again.
+
+### Changed — caption image cap
+
+- An image is captioned only if it is 11 MiB or smaller, so the largest
+  caption request still fits one 16 MiB control frame. The worker refuses a
+  larger file with a visible error, and the broker answers a larger request
+  with 413. This replaces the worker's 20 MB file limit and the broker's
+  25 MiB body limit.
+
 ## [0.7.2] - Unreleased
 
 Removes the retired product name from the plugin. Requires Ave 0.14.0 and

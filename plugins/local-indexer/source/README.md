@@ -91,12 +91,16 @@ Ave Client (Electron/TypeScript)
   └── local-indexer plugin
         ├── hostPlugin.ts        — 통합 도구 dispatch, HostApi/설정/egress 관리
         ├── localIndexerPlugin.ts — Python worker 실행 + lifecycle
-        ├── workerClient.ts      — Python worker 내부 HTTP 클라이언트
+        ├── workerClient.ts      — worker stdio control v1 요청 클라이언트
+        ├── egressBroker.ts      — 워커의 egress_embedding / egress_caption 요청을 hostFetch 로 중계
+        ├── indexMigration.ts    — 0.8.0 인덱스 위치 이동 시 재구축 + 이전 인덱스 정리
         ├── folderIndexer.ts     — chokidar 파일 감시 + eager indexIfChanged
         └── indexState.ts        — index-state.json 추적
 
-Python Worker (FastAPI + uvicorn, 127.0.0.1:43129)
-  ├── local_indexer_worker.py  — FastAPI 진입점 + 라우터
+Python Worker (stdin/stdout 위 worker stdio control v1, 로그는 stderr)
+  ├── local_indexer_worker.py  — 진입점 + 요청 메서드 표 (asyncio, 무거운 작업은 스레드)
+  ├── stdio_control.py     — NDJSON JSON-RPC 2.0 피어 (hello, cancel, shutdown, EOF)
+  ├── stdio_egress.py      — provider SDK 요청을 플러그인 egress 요청으로 넘기는 httpx2 트랜스포트
   ├── local_indexer.py — Layer A(파싱) + Layer B(인덱싱) 파이프라인
   ├── local_indexer_search.py  — BM25 + Vector + RRF(k=60) 검색 엔진
   ├── korean_tokenizer.py  — kiwipiepy 패턴 B
@@ -106,36 +110,65 @@ Python Worker (FastAPI + uvicorn, 127.0.0.1:43129)
   ├── user_dict_loader.py  — 사용자 정의 사전
   └── schema.sql           — SQLite 스키마 (WAL + FTS5)
 
-Storage (pluginDataDir/index/)
+Storage (AVE_WORKER_STATE_DIR/index/, 또는 사용자가 지정한 indexStorageRoot)
   ├── fts5.sqlite          — 한국어 content_ko FTS5
-  ├── vectors.lance/       — lancedb 1536-dim
-  └── index-state.json     — mtime/docId/chunkHash 추적
+  └── vectors.lance/       — lancedb 1536-dim
+
+Workspace (pluginDataDir/.local-indexer-workspace/)
+  ├── folders.json         — 등록 폴더
+  └── index-state.json     — mtime/docId 추적
 ```
 
-> **스토리지 경로**: `pluginDataDir`은 호스트 앱(`PluginRuntimeContext`)이 주입합니다. 익스텐션은 이 값이 없으면 시작을 거부합니다.
+> **스토리지 경로**: 인덱스는 호스트가 워커에게만 만들어 주는 상태 디렉터리
+> (`~/.ave/plugins/local-indexer/workers/local-indexer-worker/`, 워커 환경의
+> `AVE_WORKER_STATE_DIR`)에 있습니다. 플러그인 프로세스는 이 디렉터리에 쓸 수 없습니다.
+> `indexStorageRoot` 를 지정하면 그 경로를 쓰고, 그 경로의 쓰기 권한은 manifest
+> `sandbox.write` 로 유지됩니다. `pluginDataDir` 은 호스트 앱(`PluginRuntimeContext`)이
+> 주입하며, 없으면 익스텐션이 시작을 거부합니다.
+>
+> **0.8.0 업그레이드**: 이전 버전은 인덱스를 `pluginDataDir/index/` 에 두었습니다.
+> 이 인덱스는 상태 디렉터리로 복사할 수 없으므로 첫 시작 때 등록 폴더 전체를
+> 다시 인덱싱합니다. 진행률과 `index-migration` 경고가 표시되고
+> `index_scan_status.indexMigration` 에 상태가 남습니다. 취소되지 않고, 실패한
+> 파일이 없고, 워커의 문서 수가 스캔 결과와 같을 때에만 이전 디렉터리를 지웁니다.
+> 그렇지 않으면 이전 디렉터리를 남기고 다음 시작 때 다시 시도합니다.
 
-## 내부 API (Python Worker HTTP)
+## 내부 API (worker stdio control v1)
 
-이 API는 익스텐션 프로세스와 Python worker 사이의 loopback 통신용 내부 계약입니다.
-Ave에서 사용하는 공개 도구 계약은 위의 **Ave Extension Tools** 표이며, worker HTTP
-엔드포인트를 외부 통합 API로 직접 사용하지 않습니다.
+익스텐션 프로세스와 Python worker 사이의 내부 계약입니다. 워커의 stdout 에는
+줄 단위 JSON-RPC 2.0 프레임만 흐르고(프레임당 최대 16 MiB, 방향별 동시 요청 64개),
+로그는 stderr 로 갑니다. 워커는 호스트의 `$/ave/hello` 에 먼저 답하고,
+`$/ave/cancel` 을 받으면 해당 요청을 -32800 으로 끝내며, stdin EOF 또는
+`$/ave/shutdown` 에 종료합니다. Ave에서 사용하는 공개 도구 계약은 위의
+**Ave Extension Tools** 표이며, 이 메서드들을 외부 통합 API로 쓰지 않습니다.
 
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/health` | 헬스체크 |
-| GET | `/runtime/info` | Python/venv 경로, 라이브러리 버전 |
-| POST | `/indexer/reindex` | 단일 파일 강제 재인덱싱 (단일 ingestion 경로) |
-| POST | `/indexer/reconcile` | SQLite↔LanceDB 벡터 drift 감지+정규화 (키 불필요 detect; drifted doc 반환) |
-| GET | `/documents` | 문서 목록 |
-| GET | `/document` | 단일 문서 메타 |
-| POST | `/documents/delete` | 문서 인덱스 항목 삭제 (익스텐션 내부 사용) |
-| GET | `/structure` | TOC 트리 (agentic 루프) |
-| GET | `/page-content` | 페이지 콘텐츠 (agentic 루프) |
-| POST | `/search/bm25` | `{query, topK}` → kiwi 토큰화 → FTS5 |
-| POST | `/search/vector` | `{query, topK}` → embed → lancedb |
-| POST | `/search/hybrid` | BM25 + Vector RRF(k=60) |
-| GET | `/metrics` | 카운터 |
-| POST | `/shutdown` | graceful — FTS5 checkpoint, lance flush |
+플러그인 → 워커 요청:
+
+| Method | 설명 |
+|--------|------|
+| `worker_health` | 헬스체크 |
+| `runtime_info` | Python 경로, 인덱스 위치(index root, 상태 디렉터리, SQLite/lance 경로, workspace), 설정, 문서 수 |
+| `runtime_allowed_roots` | 인덱싱 허용 루트 갱신 |
+| `indexer_reindex` | 단일 파일 강제 재인덱싱 (단일 ingestion 경로) |
+| `indexer_reconcile` | SQLite↔LanceDB 벡터 drift 감지+정규화 |
+| `documents_list` | 문서 목록 |
+| `document_get` | 단일 문서 메타 |
+| `documents_delete` | 문서 인덱스 항목 삭제 |
+| `document_structure` | TOC 트리 (agentic 루프) |
+| `page_content` | 페이지 콘텐츠 (agentic 루프) |
+| `search_bm25` | `{query, topK}` → kiwi 토큰화 → FTS5 |
+| `search_vector` | `{query, topK}` → embed → lancedb |
+| `search_hybrid` | BM25 + Vector RRF(k=60) |
+| `indexer_set_image_captioning` | 이미지 캡션 설정 (자격 증명 없음) |
+| `indexer_set_embedding_egress` | 임베딩 요청을 보내도 되는지 알림 (자격 증명 없음) |
+| `indexer_caption_image` | 이미지 한 장 캡션 (11 MiB 이하) |
+| `metrics` | 카운터 |
+| `worker_shutdown` | 저장소 정리 — FTS5 checkpoint, lance flush |
+
+워커 → 플러그인 요청: `egress_embedding`, `egress_caption`. 워커는 키도 네트워크도
+갖지 않으며 `{method, path, headers, body}` 만 보냅니다. 플러그인의 egress broker 가
+업스트림과 자격 증명을 호스트 쪽에서 정해 `hostFetch` 로 보내고
+`{status, headers, body}` 로 답합니다.
 
 ## 임베딩 설정
 
@@ -193,12 +226,13 @@ uv venv --python 3.12 .venv                  # Python (pytest) — what CI runs
 uv pip install --python .venv -r python-requirements.lock -r python-test-requirements.txt
 uv run pytest test/
 
-# Python worker 직접 실행 (디버깅)
+# Python worker 직접 실행 (디버깅): stdin 으로 프레임을 보내고 stdout 으로 답을 받는다.
+# 워커는 stdin EOF 에 바로 끝나므로 답을 받을 동안 stdin 을 열어 둔다 (sleep).
 cd worker
-python local_indexer_worker.py \
-  --host 127.0.0.1 --port 43129 \
-  --db /path/to/pluginDataDir/index/fts5.sqlite \
-  --lance /path/to/pluginDataDir/index/vectors.lance
+{ printf '%s\n' \
+    '{"jsonrpc":"2.0","id":0,"method":"$/ave/hello","params":{"protocol":"ave-worker-stdio-control","versions":["1"],"frameBytesMax":16777216}}' \
+    '{"jsonrpc":"2.0","id":1,"method":"runtime_info"}'; sleep 10; } \
+  | AVE_WORKER_STATE_DIR=/tmp/li-state python local_indexer_worker.py --workspace /tmp/li-workspace
 
 # Python 의존성 lock 파일 갱신
 bun run lock:python
