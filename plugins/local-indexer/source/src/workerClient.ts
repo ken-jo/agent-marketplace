@@ -31,6 +31,7 @@ export const WORKER_METHODS = {
   removeDocument: "documents_delete",
   structure: "document_structure",
   pageContent: "page_content",
+  legacyIndexManifest: "legacy_index_manifest",
   searchBm25: "search_bm25",
   searchVector: "search_vector",
   searchHybrid: "search_hybrid",
@@ -159,6 +160,28 @@ interface RawDocumentRow {
 interface DocumentsPage {
   documents: RawDocumentRow[];
   next_after: string | null;
+}
+
+/** One document a pre-0.8.0 index held as indexed (legacy_index_manifest row). */
+export interface LegacyIndexDocument {
+  docId: string;
+  /** The absolute path the old worker stored (os.path.abspath). */
+  path: string;
+  /** int(os.path.getmtime(path) * 1000) when the old index read it. */
+  mtimeMs: number;
+  contentState: string | null;
+  contentHash: string | null;
+  /** Whether any of its chunks had an embeddings_meta row. */
+  hadVectors: boolean;
+}
+
+interface RawLegacyIndexRow {
+  doc_id: string;
+  path: string;
+  mtime_ms: number;
+  content_state: string | null;
+  content_hash: string | null;
+  had_vectors: boolean;
 }
 
 /** Rows per documents_list page; the worker caps it at the same number. */
@@ -315,6 +338,37 @@ export class WorkerClient implements WorkerSearchClient, KnowledgeWorkerClient {
     // The pages come in doc_id order; callers have always seen newest first.
     rows.sort((a, b) => indexedAtKey(b) - indexedAtKey(a));
     return rows.map((row) => this.toDocumentListing(row));
+  }
+
+  /**
+   * The documents a copy of a pre-0.8.0 index held as indexed. `sqlitePath`
+   * must be inside the worker's workspace. Paged like listDocuments.
+   */
+  async legacyIndexManifest(sqlitePath: string): Promise<LegacyIndexDocument[]> {
+    const rows: RawLegacyIndexRow[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const page: { documents: RawLegacyIndexRow[]; next_after: string | null } = await this.call(
+        WORKER_METHODS.legacyIndexManifest,
+        after === null
+          ? { sqlite_path: sqlitePath, limit: DOCUMENTS_PAGE_SIZE }
+          : { sqlite_path: sqlitePath, after, limit: DOCUMENTS_PAGE_SIZE },
+      );
+      rows.push(...page.documents);
+      if (page.next_after === null) break;
+      if (after !== null && page.next_after <= after) {
+        throw new WorkerCallError(`${WORKER_METHODS.legacyIndexManifest}: cursor did not advance`, "worker-contract");
+      }
+      after = page.next_after;
+    }
+    return rows.map((row) => ({
+      docId: row.doc_id,
+      path: row.path,
+      mtimeMs: row.mtime_ms,
+      contentState: row.content_state ?? null,
+      contentHash: row.content_hash ?? null,
+      hadVectors: row.had_vectors === true,
+    }));
   }
 
   async getStructure(docId: string): Promise<unknown> {

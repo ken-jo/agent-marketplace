@@ -18,6 +18,8 @@ Methods the plugin calls
     indexer_caption_image          caption one image
     documents_list / document_get / documents_delete
     document_structure / page_content
+    legacy_index_manifest          read a copy of a pre-0.8.0 index: which
+                                   documents it held, and which had vectors
     search_bm25 / search_vector / search_hybrid
     metrics
     worker_shutdown                drop the egress flag and close the stores
@@ -47,6 +49,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -386,6 +389,96 @@ class DocumentsListRequest(BaseModel):
     limit: int = Field(DOCUMENTS_PAGE_MAX, ge=1, le=DOCUMENTS_PAGE_MAX)
 
 
+class LegacyManifestRequest(BaseModel):
+    sqlite_path: str = Field(..., min_length=1, max_length=4096)
+    after: Optional[str] = Field(None, max_length=512)
+    limit: int = Field(DOCUMENTS_PAGE_MAX, ge=1, le=DOCUMENTS_PAGE_MAX)
+
+
+def _budgeted_page(rows: List[Dict[str, Any]], limit: int, frame_bytes_max: int, key: str) -> Dict[str, Any]:
+    """Cut ``rows`` (one keyset page of at most ``limit``) to the frame budget.
+
+    Returns the rows that fit and the cursor for the next page, or null on
+    the last one.
+    """
+    budget = documents_page_budget(frame_bytes_max)
+    page: List[Dict[str, Any]] = []
+    used = 0
+    for row in rows:
+        size = _row_bytes(row)
+        if page and used + size > budget:
+            break
+        page.append(row)
+        used += size
+    more = len(page) < len(rows) or len(rows) == limit
+    return {"rows": page, "next_after": page[-1][key] if more and page else None}
+
+
+def _is_within(child: str, parent: str) -> bool:
+    child_real = os.path.realpath(child)
+    parent_real = os.path.realpath(parent)
+    try:
+        return os.path.commonpath([child_real, parent_real]) == parent_real
+    except ValueError:
+        return False
+
+
+def read_legacy_manifest_page(sqlite_path: str, after: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    """One page of the documents a pre-0.8.0 index held as indexed.
+
+    ``sqlite_path`` is a copy the plugin made of the old ``fts5.sqlite`` (with
+    its ``-wal``). It is opened read-write so SQLite can replay that WAL: a
+    read-only or immutable open drops rows the WAL has not checkpointed, and
+    a missing row here would let the plugin delete the old index without
+    rebuilding that document. ``query_only`` keeps this reader from writing.
+
+    Columns added by later ALTERs (``content_state``, ``content_hash``) may be
+    absent in an old index. ``had_vectors`` is whether any of the document's
+    chunks has an ``embeddings_meta`` row; an index without that table falls
+    back to ``content_state = 'ok'``.
+    """
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only = ON")
+        tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "documents" not in tables:
+            raise ValueError("not an index: the documents table is missing")
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(documents)")}
+        content_state = "d.content_state" if "content_state" in columns else "NULL"
+        content_hash = "d.content_hash" if "content_hash" in columns else "NULL"
+        if "embeddings_meta" in tables and "chunks" in tables:
+            had_vectors = (
+                "EXISTS (SELECT 1 FROM chunks c JOIN embeddings_meta e ON e.chunk_id = c.chunk_id "
+                "WHERE c.doc_id = d.doc_id)"
+            )
+        elif "content_state" in columns:
+            had_vectors = "(d.content_state = 'ok')"
+        else:
+            had_vectors = "0"
+        rows = conn.execute(
+            f"SELECT d.doc_id AS doc_id, d.path AS path, d.mtime_ms AS mtime_ms, "
+            f"       {content_state} AS content_state, {content_hash} AS content_hash, "
+            f"       {had_vectors} AS had_vectors "
+            f"FROM documents d WHERE d.status = 'indexed' AND d.doc_id > ? "
+            f"ORDER BY d.doc_id LIMIT ?",
+            (after or "", int(limit)),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {
+            "doc_id": row["doc_id"],
+            "path": row["path"],
+            "mtime_ms": row["mtime_ms"],
+            "content_state": row["content_state"],
+            "content_hash": row["content_hash"],
+            "had_vectors": bool(row["had_vectors"]),
+        }
+        for row in rows
+    ]
+
+
 class DocIdRequest(BaseModel):
     doc_id: str = Field(..., min_length=1, max_length=512)
 
@@ -500,6 +593,7 @@ METHOD_NAMES = (
     "documents_delete",
     "document_structure",
     "page_content",
+    "legacy_index_manifest",
     "search_bm25",
     "search_vector",
     "search_hybrid",
@@ -553,7 +647,7 @@ def build_handlers(state: AppState, *, egress_relay: Optional[Any] = None) -> Di
             except Exception:
                 pass
             raise RequestError(SERVER_ERROR, str(exc)) from None
-        state.metrics["processed"] += 1
+        state.metrics["failed" if result.status == "failed" else "processed"] += 1
         return _result_dict(result)
 
     async def indexer_reconcile(_params: Any) -> Dict[str, Any]:
@@ -570,17 +664,24 @@ def build_handlers(state: AppState, *, egress_relay: Optional[Any] = None) -> Di
         req = _validated(DocumentsListRequest, params if params is not None else {})
         _open()
         rows = await _blocking(state.indexer.list_documents_page, req.after, req.limit)
-        budget = documents_page_budget(state.frame_bytes_max())
-        page: List[Dict[str, Any]] = []
-        used = 0
-        for row in rows:
-            size = _row_bytes(row)
-            if page and used + size > budget:
-                break
-            page.append(row)
-            used += size
-        more = len(page) < len(rows) or len(rows) == req.limit
-        return {"documents": page, "next_after": page[-1]["doc_id"] if more and page else None}
+        cut = _budgeted_page(rows, req.limit, state.frame_bytes_max(), "doc_id")
+        return {"documents": cut["rows"], "next_after": cut["next_after"]}
+
+    async def legacy_index_manifest(params: Any) -> Dict[str, Any]:
+        # Read-only over a copy the plugin placed in the workspace; the worker
+        # never reads the old index directory itself. Paged like documents_list.
+        req = _validated(LegacyManifestRequest, params)
+        workspace = str(state.runtime_info.get("workspace") or "")
+        if not workspace or not _is_within(req.sqlite_path, workspace):
+            raise RequestError(INVALID_PARAMS, "sqlite_path must be inside the worker workspace")
+        if not os.path.isfile(req.sqlite_path):
+            raise RequestError(NOT_FOUND, f"no index copy at {req.sqlite_path}")
+        try:
+            rows = await _blocking(read_legacy_manifest_page, req.sqlite_path, req.after, req.limit)
+        except (sqlite3.DatabaseError, ValueError) as exc:
+            raise RequestError(SERVER_ERROR, f"the old index could not be read: {exc}") from None
+        cut = _budgeted_page(rows, req.limit, state.frame_bytes_max(), "doc_id")
+        return {"documents": cut["rows"], "next_after": cut["next_after"]}
 
     async def document_get(params: Any) -> Dict[str, Any]:
         req = _validated(DocIdRequest, params)
@@ -707,6 +808,7 @@ def build_handlers(state: AppState, *, egress_relay: Optional[Any] = None) -> Di
         "documents_delete": documents_delete,
         "document_structure": document_structure,
         "page_content": page_content,
+        "legacy_index_manifest": legacy_index_manifest,
         "search_bm25": _search("bm25", "search_bm25"),
         "search_vector": _search("vector", "search_vector"),
         "search_hybrid": _search("hybrid", "search_hybrid_internal"),

@@ -452,3 +452,237 @@ def test_reindex_answers_carry_the_retryable_flag() -> None:
     assert failed["retryable"] is True
     plain = w._result_dict(IndexResult(doc_id="d", doc_name="a.md", doc_type="md", chunk_count=1, status="indexed"))
     assert plain["retryable"] is False
+
+
+# ── legacy_index_manifest: what a pre-0.8.0 index held ────────────────────
+class _SwitchableEmbedding:
+    """Embeds, or fails the way an unreachable provider does."""
+
+    def __init__(self) -> None:
+        self.dimensions = 8
+        self.down = False
+
+    def embed_corpus(self, chunks: List[str]) -> List[List[float]]:
+        if self.down:
+            raise RuntimeError("embedding endpoint unreachable")
+        return [[0.1] * 8 for _ in chunks]
+
+    def embed_one(self, text: str) -> List[float]:
+        return [0.1] * 8
+
+
+class _Vectors:
+    def upsert(self, rows: Any) -> None:
+        pass
+
+    def delete(self, *_a: Any, **_k: Any) -> None:
+        pass
+
+
+def _manifest_handlers(workspace: Path) -> Dict[str, Any]:
+    state = w.AppState(indexer=FakeIndexer(), search=FakeSearch(), runtime_info={"workspace": str(workspace)})
+    return w.build_handlers(state)
+
+
+def _copy_index(src: Path, workspace: Path) -> Path:
+    """What the plugin does: copy fts5.sqlite and its -wal/-shm into the workspace."""
+    import shutil
+
+    dest_dir = workspace / ".legacy-index-manifest"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for suffix in ("", "-wal", "-shm"):
+        part = Path(f"{src}{suffix}")
+        if part.exists():
+            shutil.copyfile(part, dest_dir / f"fts5.sqlite{suffix}")
+    return dest_dir / "fts5.sqlite"
+
+
+def test_legacy_manifest_reads_an_index_the_indexer_wrote(tmp_path: Path) -> None:
+    fixture = Path(__file__).with_name("indexer.ko.fixture.md")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    for name in ("with-vectors.md", "without-vectors.md"):
+        (docs / name).write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    (docs / "bad.pdf").write_bytes(b"not a pdf")
+    embedding = _SwitchableEmbedding()
+    old = LocalIndexer(
+        workspace=str(tmp_path / "old-ws"),
+        sqlite_path=str(tmp_path / "old" / "fts5.sqlite"),
+        lance_path=str(tmp_path / "old" / "vectors.lance"),
+        openai_api_key="sk-test",
+        embedding_client=embedding,
+        vector_store=_Vectors(),
+    )
+    assert old.reindex(str(docs / "with-vectors.md")).status == "indexed"
+    embedding.down = True
+    assert old.reindex(str(docs / "without-vectors.md")).status == "indexed"
+    assert old.reindex(str(docs / "bad.pdf")).status == "failed"
+    old.close()
+
+    workspace = tmp_path / "workspace"
+    copy = _copy_index(tmp_path / "old" / "fts5.sqlite", workspace)
+    page = _call(_manifest_handlers(workspace), "legacy_index_manifest", {"sqlite_path": str(copy)})
+    rows = {Path(r["path"]).name: r for r in page["documents"]}
+    # Only what the old index held as indexed; a failed file had nothing to lose.
+    assert sorted(rows) == ["with-vectors.md", "without-vectors.md"]
+    assert rows["with-vectors.md"]["had_vectors"] is True
+    assert rows["without-vectors.md"]["had_vectors"] is False
+    assert rows["without-vectors.md"]["content_state"] == "embed_failed"
+    stat_ms = int((docs / "with-vectors.md").stat().st_mtime * 1000)
+    assert rows["with-vectors.md"]["mtime_ms"] == stat_ms
+    assert rows["with-vectors.md"]["path"] == str(docs / "with-vectors.md")
+    assert page["next_after"] is None
+
+
+def test_legacy_manifest_reads_an_old_schema_without_the_later_columns(tmp_path: Path) -> None:
+    import sqlite3
+
+    src = tmp_path / "old" / "fts5.sqlite"
+    src.parent.mkdir()
+    conn = sqlite3.connect(src)
+    conn.executescript(
+        """
+        CREATE TABLE documents (
+          doc_id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, doc_name TEXT NOT NULL,
+          doc_type TEXT NOT NULL, page_count INTEGER, line_count INTEGER,
+          mtime_ms INTEGER NOT NULL, indexed_at INTEGER NOT NULL, status TEXT NOT NULL
+        );
+        INSERT INTO documents VALUES ('d1','/legacy/a.md','a.md','md',1,10,111,222,'indexed');
+        INSERT INTO documents VALUES ('d2','/legacy/b.md','b.md','md',1,10,111,222,'pending');
+        """
+    )
+    conn.commit()
+    conn.close()
+    workspace = tmp_path / "workspace"
+    page = _call(_manifest_handlers(workspace), "legacy_index_manifest", {"sqlite_path": str(_copy_index(src, workspace))})
+    assert page["documents"] == [
+        {"doc_id": "d1", "path": "/legacy/a.md", "mtime_ms": 111, "content_state": None,
+         "content_hash": None, "had_vectors": False},
+    ]
+
+
+def test_legacy_manifest_takes_vectors_from_embeddings_meta_without_content_state(tmp_path: Path) -> None:
+    import sqlite3
+
+    # Before content_state existed, the only record of vectors is embeddings_meta.
+    src = tmp_path / "old" / "fts5.sqlite"
+    src.parent.mkdir()
+    conn = sqlite3.connect(src)
+    conn.executescript(
+        """
+        CREATE TABLE documents (
+          doc_id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, doc_name TEXT NOT NULL,
+          doc_type TEXT NOT NULL, mtime_ms INTEGER NOT NULL, indexed_at INTEGER NOT NULL, status TEXT NOT NULL
+        );
+        CREATE TABLE chunks (chunk_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, raw_text TEXT NOT NULL);
+        CREATE TABLE embeddings_meta (chunk_id TEXT PRIMARY KEY, model TEXT, dimensions INTEGER, embedded_at INTEGER);
+        INSERT INTO documents VALUES ('d1','/legacy/a.md','a.md','md',111,222,'indexed');
+        INSERT INTO documents VALUES ('d2','/legacy/b.md','b.md','md',111,222,'indexed');
+        INSERT INTO chunks VALUES ('c1','d1','x'), ('c2','d2','y');
+        INSERT INTO embeddings_meta VALUES ('c1','m',8,1);
+        """
+    )
+    conn.commit()
+    conn.close()
+    workspace = tmp_path / "workspace"
+    page = _call(_manifest_handlers(workspace), "legacy_index_manifest", {"sqlite_path": str(_copy_index(src, workspace))})
+    assert {r["doc_id"]: r["had_vectors"] for r in page["documents"]} == {"d1": True, "d2": False}
+
+
+def test_legacy_manifest_keeps_rows_the_wal_has_not_checkpointed(tmp_path: Path) -> None:
+    import sqlite3
+
+    src = tmp_path / "old" / "fts5.sqlite"
+    src.parent.mkdir()
+    writer = sqlite3.connect(src)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute("PRAGMA wal_autocheckpoint=0")
+    writer.executescript(
+        "CREATE TABLE documents (doc_id TEXT PRIMARY KEY, path TEXT, mtime_ms INTEGER, status TEXT);"
+    )
+    writer.commit()
+    writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    writer.executemany(
+        "INSERT INTO documents VALUES (?, ?, 1, 'indexed')",
+        [(f"d{i}", f"/docs/{i}.md") for i in range(5)],
+    )
+    writer.commit()
+    try:
+        workspace = tmp_path / "workspace"
+        copy = _copy_index(src, workspace)  # copied while the rows are only in the -wal
+        assert Path(f"{copy}-wal").stat().st_size > 0
+        # Control: an immutable open of the same copy cannot see them.
+        immutable = sqlite3.connect(f"file:{copy}?immutable=1", uri=True)
+        try:
+            assert immutable.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
+        finally:
+            immutable.close()
+        page = _call(_manifest_handlers(workspace), "legacy_index_manifest", {"sqlite_path": str(copy)})
+        assert [r["doc_id"] for r in page["documents"]] == [f"d{i}" for i in range(5)]
+    finally:
+        writer.close()
+
+
+def test_legacy_manifest_pages_and_refuses_paths_outside_the_workspace(tmp_path: Path) -> None:
+    rows = [(f"doc-{i:04d}", f"/docs/{i:04d}.md", f"{i:04d}.md") for i in range(25)]
+    indexer = _bulk_indexer(tmp_path / "old", rows)
+    indexer.close()
+    workspace = tmp_path / "workspace"
+    copy = _copy_index(Path(indexer.sqlite_path), workspace)
+    handlers = _manifest_handlers(workspace)
+    seen: List[str] = []
+    after = None
+    while True:
+        params: Dict[str, Any] = {"sqlite_path": str(copy), "limit": 10}
+        if after is not None:
+            params["after"] = after
+        page = _call(handlers, "legacy_index_manifest", params)
+        seen.extend(r["doc_id"] for r in page["documents"])
+        if page["next_after"] is None:
+            break
+        after = page["next_after"]
+    assert seen == [r[0] for r in rows]
+
+    with pytest.raises(sc.RequestError) as outside:
+        _call(handlers, "legacy_index_manifest", {"sqlite_path": indexer.sqlite_path})
+    assert outside.value.code == sc.INVALID_PARAMS
+    with pytest.raises(sc.RequestError) as escaped:
+        _call(handlers, "legacy_index_manifest", {"sqlite_path": str(workspace / ".." / "old" / "fts5.sqlite")})
+    assert escaped.value.code == sc.INVALID_PARAMS
+    with pytest.raises(sc.RequestError) as missing:
+        _call(handlers, "legacy_index_manifest", {"sqlite_path": str(workspace / "nope.sqlite")})
+    assert missing.value.code == sc.NOT_FOUND
+    (workspace / "garbage.sqlite").write_bytes(b"\x00" * 4096)
+    with pytest.raises(sc.RequestError) as garbage:
+        _call(handlers, "legacy_index_manifest", {"sqlite_path": str(workspace / "garbage.sqlite")})
+    assert garbage.value.code == sc.SERVER_ERROR
+    no_workspace = w.build_handlers(w.AppState(indexer=FakeIndexer(), search=FakeSearch(), runtime_info={}))
+    with pytest.raises(sc.RequestError):
+        _call(no_workspace, "legacy_index_manifest", {"sqlite_path": str(copy)})
+
+
+def test_an_unparseable_file_is_a_failed_result_not_a_fault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(w, "_ALLOWED_ROOTS_RUNTIME", w._ALLOWED_ROOTS_RUNTIME)  # restored after the test
+    indexer = LocalIndexer(
+        workspace=str(tmp_path / "ws"),
+        sqlite_path=str(tmp_path / "fts5.sqlite"),
+        lance_path=str(tmp_path / "vectors.lance"),
+        openai_api_key="sk-test",
+        embedding_client=_SwitchableEmbedding(),
+        vector_store=_Vectors(),
+    )
+    state = w.AppState(indexer=indexer, search=FakeSearch(), runtime_info={})
+    handlers = w.build_handlers(state)
+    _call(handlers, "runtime_allowed_roots", {"roots": [str(tmp_path)]})
+    for name, payload in (("bad.pdf", b"%PDF-1.4 truncated"), ("bad.docx", b"PK\x03\x04 not a zip")):
+        path = tmp_path / name
+        path.write_bytes(payload)
+        result = _call(handlers, "indexer_reindex", {"file_path": str(path)})
+        assert result["status"] == "failed", name
+        assert result["retryable"] is False, name
+        assert "Layer A parse failed" in result["errors"][0], name
+        row = indexer.get_document(result["doc_id"])
+        assert row is not None and row["status"] == "failed"
+    assert state.metrics["failed"] == 2
+    assert state.metrics["processed"] == 0
+    indexer.close()

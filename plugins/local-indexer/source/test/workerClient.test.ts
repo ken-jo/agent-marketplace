@@ -219,6 +219,46 @@ describe("WorkerClient.listDocuments paging", () => {
   });
 });
 
+describe("WorkerClient.legacyIndexManifest", () => {
+  it("pages through the old index's documents and maps them", async () => {
+    const all = Array.from({ length: 2_500 }, (_v, i) => ({
+      doc_id: `old-${String(i).padStart(5, "0")}`,
+      path: `/docs/${i}.md`,
+      mtime_ms: 1_700_000_000_000 + i,
+      content_state: i % 2 === 0 ? "ok" : null,
+      content_hash: null,
+      had_vectors: i % 2 === 0,
+    }));
+    const { client, worker } = attached({
+      legacy_index_manifest: (params) => {
+        const { sqlite_path, after, limit } = params as { sqlite_path: string; after?: string; limit: number };
+        expect(sqlite_path).toBe("/ws/.legacy-index-manifest/fts5.sqlite");
+        const start = after ? all.findIndex((d) => d.doc_id === after) + 1 : 0;
+        const page = all.slice(start, start + limit);
+        return { documents: page, next_after: page.length === limit ? page.at(-1)!.doc_id : null };
+      },
+    });
+    const docs = await client.legacyIndexManifest("/ws/.legacy-index-manifest/fts5.sqlite");
+    expect(docs).toHaveLength(all.length);
+    expect(docs[1]).toEqual({
+      docId: "old-00001", path: "/docs/1.md", mtimeMs: 1_700_000_000_001,
+      contentState: null, contentHash: null, hadVectors: false,
+    });
+    expect(docs.filter((d) => d.hadVectors)).toHaveLength(1_250);
+    expect(worker.callsOf("legacy_index_manifest")).toHaveLength(3);
+  });
+
+  it("fails clearly when the cursor does not advance", async () => {
+    const { client } = attached({
+      legacy_index_manifest: () => ({
+        documents: [{ doc_id: "a", path: "/a", mtime_ms: 1, content_state: null, content_hash: null, had_vectors: false }],
+        next_after: "a",
+      }),
+    });
+    await expect(client.legacyIndexManifest("/ws/x")).rejects.toThrow(/cursor did not advance/);
+  });
+});
+
 describe("isTransientIndexFailure", () => {
   it("separates the worker's verdict on a file from failures that may pass", () => {
     expect(isTransientIndexFailure(new WorkerIndexFailure("failed", "/a"))).toBe(false);

@@ -364,9 +364,22 @@ class LocalIndexer:
                 errors=[str(exc)],
                 retryable=bool(getattr(exc, "retryable", False)),
             )
-        except Exception as exc:  # pragma: no cover - parser runtime error
+        except Exception as exc:
+            # A file the parser cannot read (a corrupt PDF, a truncated DOCX)
+            # fails the same way on every retry: a verdict on the file, not a
+            # worker fault, so it is a failed result and not a raised error
+            # (which the plugin would read as a fault that may pass).
             self._mark_failed(doc_id, abs_path, doc_name, doc_type, mtime_ms)
-            raise RuntimeError(f"Layer A parse failed: {exc}") from exc
+            _info(log, "indexer.file.parse_failed", doc_id=doc_id, path=abs_path, error=str(exc))
+            return IndexResult(
+                doc_id=doc_id,
+                doc_name=doc_name,
+                doc_type=doc_type,
+                chunk_count=0,
+                status="failed",
+                errors=[f"Layer A parse failed: {exc}"],
+                retryable=False,
+            )
 
         # 빈 doc 은 에러 아님 — 캡션 모델이 description 못 만들었거나 (정상
         # 응답으로 빈 문자열), 텍스트 추출 결과가 비었어도 doc 자체는 등록한다.
