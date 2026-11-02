@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0] - Unreleased
+
+Requires Ave 0.14.2 and host protocol 5. Ave 0.14.2 serves protocol 5 only
+and refuses a protocol-3 extension before activation. The `hello_world` tool
+and the panel are unchanged.
+
 ## [0.3.2] - Unreleased
 
 Removes the retired product name from the demo extension. Requires Ave 0.14.0
