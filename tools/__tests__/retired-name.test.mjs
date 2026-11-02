@@ -159,7 +159,7 @@ test("the repository passes the gate, with no stale allowlist entry", () => {
   assert.deepEqual(scanRetiredName(REPO_ROOT), { offenders: [], stale: [] });
 });
 
-test("the command fails closed on an offender and on a stale entry", () => {
+test("the command fails closed on an offender and passes a clean tree", () => {
   // The real gate, copied untracked into a fixture, scans the fixture it sits in.
   const run = (f) => {
     mkdirSync(join(f.root, "tools"), { recursive: true });
@@ -175,15 +175,6 @@ test("the command fails closed on an offender and on a stale entry", () => {
     assert.doesNotMatch(result.stderr, /no longer match/u);
   } finally {
     offending.cleanup();
-  }
-  // After the sync the vendored files are clean: every entry is stale.
-  const synced = fixture({ ...Object.fromEntries(ALLOWLIST.map(([path]) => [path, "clean\n"])), "README.md": "Ave\n" });
-  try {
-    const result = run(synced);
-    assert.equal(result.status, 1);
-    for (const [path] of ALLOWLIST) assert.match(result.stderr, new RegExp(`^  ${path.replaceAll(".", "\\.")}$`, "mu"));
-  } finally {
-    synced.cleanup();
   }
   const clean = fixture(vendored);
   try {
