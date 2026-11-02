@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { existsSync, statSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { WorkerControlError } from "@ave/plugin-contract";
@@ -23,6 +23,7 @@ import {
   migrateLegacyIndex,
   type FolderSource,
   type IndexMigrationDeps,
+  type EmbeddingState,
   type IndexMigrationStatus,
   type LegacyManifestDocument,
   type MigrationAttempts,
@@ -168,6 +169,9 @@ function scanDeps(
     folderSource?: FolderSource;
     attempts?: ReturnType<typeof memoryAttempts>;
     embeddingConfigured?: boolean;
+    embeddingState?: EmbeddingState;
+    /** The folder list saved when the manifest was read; defaults to `folders`. */
+    manifestFolders?: string[] | null;
   } = {},
 ) {
   const reports: IndexMigrationStatus[] = [];
@@ -185,7 +189,10 @@ function scanDeps(
       legacyIndexDir: fx.legacy,
     },
     workspace: join(fx.pluginDataDir, ".local-indexer-workspace"),
-    loadManifest: async () => manifest,
+    loadManifest: async () => ({
+      documents: manifest,
+      folders: opts.manifestFolders === undefined ? folders : opts.manifestFolders,
+    }),
     discardManifest,
     runFullScan: async () => ({
       result: await indexer.scanOnce(),
@@ -199,7 +206,9 @@ function scanDeps(
           status: doc.status,
           contentState: doc.contentState,
         })),
-      embeddingConfigured: async () => opts.embeddingConfigured ?? true,
+      embeddingState: async () => opts.embeddingState ?? (opts.embeddingConfigured === false ? "off" : "on"),
+      realpath: (path) => realpath(path),
+      caseInsensitive: false,
       fileMtime: async (path) => {
         try {
           return (await stat(path)).mtimeMs;
@@ -251,7 +260,7 @@ function expectKept(result: IndexMigrationStatus | null, fx: Fixture, reason: Re
 }
 
 const corrupt = { doc_id: "bad", doc_name: "bad.md", doc_type: "md", chunk_count: 0, status: "failed",
-  errors: ["Layer A parse failed: not a PDF"], retryable: false };
+  errors: ["Layer A parse failed: not a PDF"], retryable: false, failure_kind: "unparseable" };
 
 describe("migrateLegacyIndex — completes when the new index covers the old one", () => {
   it("does nothing when there is no old index", async () => {
@@ -345,7 +354,9 @@ describe("migrateLegacyIndex — completes when the new index covers the old one
       await rm(kept[1]!);
       // old-project is no longer registered; its files still exist.
       const worker = new FakeWorker();
-      const { deps } = scanDeps(fx, worker, [docs], manifest);
+      const { deps } = scanDeps(fx, worker, [docs], manifest, {
+        manifestFolders: [docs, join(fx.root, "old-project")],
+      });
       const result = await migrateLegacyIndex(deps);
       expect(result).toMatchObject({
         phase: "completed",
@@ -358,7 +369,10 @@ describe("migrateLegacyIndex — completes when the new index covers the old one
   it("an explicit empty folder list excludes every old document: the user removed all folders", async () => {
     await withLegacy(async (fx) => {
       const paths = await writeDocs(join(fx.root, "docs"), ["a.md"]);
-      const { deps } = scanDeps(fx, new FakeWorker(), [], await oldIndexOf(paths), { folderSource: "saved" });
+      const { deps } = scanDeps(fx, new FakeWorker(), [], await oldIndexOf(paths), {
+        folderSource: "saved",
+        manifestFolders: [join(fx.root, "docs")],
+      });
       const result = await migrateLegacyIndex(deps);
       expect(result).toMatchObject({ phase: "completed", coverage: { required: 0, excludedRootRemoved: 1 } });
       expect(existsSync(fx.legacy)).toBe(false);
@@ -398,7 +412,7 @@ describe("migrateLegacyIndex — completes when the new index covers the old one
       const worker = new FakeWorker();
       worker.scripted.set(bad!, () => corrupt);
       // A caption rate limit keeps the old index on the first attempt.
-      worker.scripted.set(chart!, () => ({ ...corrupt, errors: ["429"], retryable: true }));
+      worker.scripted.set(chart!, () => ({ ...corrupt, errors: ["429"], retryable: true, failure_kind: "caption" }));
       const attempts = memoryAttempts();
       const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf([good!, bad!, chart!]), { attempts });
       expectKept(await migrateLegacyIndex(deps), fx, /lacks 1 document\(s\) \(1 failed for a reason that may pass\)/);
@@ -480,7 +494,7 @@ describe("migrateLegacyIndex — keeps the old index", () => {
       const docs = join(fx.root, "docs");
       const [chart] = await writeDocs(docs, ["chart.md"]);
       const worker = new FakeWorker();
-      worker.scripted.set(chart!, () => ({ ...corrupt, errors: ["OpenAI Vision 호출 실패: Error code: 429"], retryable: true }));
+      worker.scripted.set(chart!, () => ({ ...corrupt, errors: ["OpenAI Vision 호출 실패: Error code: 429"], retryable: true, failure_kind: "caption" }));
       const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf([chart!]));
       const result = await migrateLegacyIndex(deps);
       expectKept(result, fx, /lacks 1 document\(s\) \(1 failed for a reason that may pass\)/);
@@ -706,6 +720,152 @@ describe("migrateLegacyIndex — bounded retries", () => {
       expectKept(result, fx, /cancelled/);
       expect(attempts.write).not.toHaveBeenCalled();
       expect(attempts.state).toEqual({ attempts: 1 });
+    });
+  });
+});
+
+/**
+ * The fail-closed contract of assessCoverage, one row per probe. Every row
+ * keeps the old index unless it carries positive evidence: a named exclusion
+ * proven, or a document proven covered.
+ */
+describe("migrateLegacyIndex — coverage fails closed", () => {
+  interface Row {
+    name: string;
+    folders: string[];
+    /** Folder list saved when the manifest was read (default: `folders`). */
+    manifestFolders?: string[] | null;
+    doc: string;
+    hadVectors?: boolean;
+    /** realpath per folder: a string, or "fails". Default: identity. */
+    real?: Record<string, string>;
+    caseInsensitive?: boolean;
+    unreadable?: string[];
+    walked?: Record<string, number>;
+    mtime?: number | "gone" | "EIO";
+    held?: { path: string; contentState?: string } | null;
+    failure?: { retryable: boolean; failureKind?: string };
+    embedding?: EmbeddingState;
+    folderSource?: FolderSource;
+    expect: "kept-old" | "completed";
+  }
+  const OLD = 1_700_000_000_000;
+  const nfd = (s: string) => s.normalize("NFD");
+  const rows: Row[] = [
+    { name: "symlinked folder, target volume offline", folders: ["/Users/u/Docs"], real: { "/Users/u/Docs": "fails" },
+      doc: "/Volumes/NAS/Docs/a.pdf", unreadable: ["/Users/u/Docs"], walked: { "/Users/u/Docs": 0 }, mtime: "gone",
+      expect: "kept-old" },
+    { name: "symlinked folder, target an empty mountpoint", folders: ["/Users/u/Docs"],
+      real: { "/Users/u/Docs": "/Volumes/NAS/Docs" }, doc: "/Volumes/NAS/Docs/a.pdf", walked: { "/Users/u/Docs": 0 },
+      mtime: "gone", expect: "kept-old" },
+    { name: "mapped drive registered, UNC path stored, share offline", folders: ["/mnt/z/Docs"],
+      real: { "/mnt/z/Docs": "fails" }, doc: "/net/nas/share/Docs/a.pdf", unreadable: ["/mnt/z/Docs"], mtime: "gone",
+      expect: "kept-old" },
+    { name: "mapped drive registered, UNC path stored, share online (covered)", folders: ["/mnt/z/Docs"],
+      real: { "/mnt/z/Docs": "/net/nas/share/Docs" }, doc: "/net/nas/share/Docs/a.pdf",
+      held: { path: "/mnt/z/Docs/a.pdf", contentState: "ok" }, expect: "completed" },
+    { name: "case variant of the folder, unreadable", folders: ["/Users/u/documents"], caseInsensitive: true,
+      doc: "/Users/u/Documents/a.pdf", unreadable: ["/Users/u/documents"], mtime: "gone", expect: "kept-old" },
+    { name: "case-only rename of the folder, readable (covered)", manifestFolders: ["/Users/u/documents"],
+      folders: ["/Users/u/Documents"], caseInsensitive: true, doc: "/Users/u/documents/a.pdf",
+      held: { path: "/Users/u/Documents/a.pdf", contentState: "ok" }, expect: "completed" },
+    { name: "case-only rename of the folder, document not rebuilt", manifestFolders: ["/Users/u/documents"],
+      folders: ["/Users/u/Documents"], caseInsensitive: true, doc: "/Users/u/documents/a.pdf", expect: "kept-old" },
+    { name: "folder re-registered by its real path, old documents under the symlink spelling",
+      manifestFolders: ["/Users/u/Docs"], real: { "/Users/u/Docs": "/Volumes/NAS/Docs" },
+      folders: ["/Volumes/NAS/Docs"], doc: "/Users/u/Docs/a.pdf", expect: "kept-old" },
+    { name: "NFD folder, NFC path, unreadable", folders: [nfd("/Users/u/문서")], doc: "/Users/u/문서/a.pdf",
+      unreadable: [nfd("/Users/u/문서")], mtime: "gone", expect: "kept-old" },
+    { name: "NFD folder, NFC path, readable (covered)", folders: [nfd("/Users/u/문서")], doc: "/Users/u/문서/a.pdf",
+      held: { path: nfd("/Users/u/문서/a.pdf"), contentState: "ok" }, expect: "completed" },
+    { name: "folder in the manifest-time list and removed since (excluded)", manifestFolders: ["/d/keep", "/d/old"],
+      folders: ["/d/keep"], doc: "/d/old/a.pdf", expect: "completed" },
+    { name: "removed folder, but a current folder does not resolve", manifestFolders: ["/d/keep", "/d/old"],
+      folders: ["/d/keep"], real: { "/d/keep": "fails" }, doc: "/d/old/a.pdf", expect: "kept-old" },
+    { name: "folder does not resolve, document under it as registered", folders: ["/d"], real: { "/d": "fails" },
+      doc: "/d/a.pdf", mtime: "gone", expect: "kept-old" },
+    { name: "symlinked folder online, unreadable subdirectory named as walked", folders: ["/Users/u/Docs"],
+      real: { "/Users/u/Docs": "/Volumes/NAS/Docs" }, doc: "/Volumes/NAS/Docs/sub/a.pdf",
+      unreadable: ["/Users/u/Docs/sub"], mtime: "gone", expect: "kept-old" },
+    { name: "under no folder ever listed", folders: ["/d/keep"], doc: "/elsewhere/a.pdf", expect: "kept-old" },
+    { name: "manifest-time folder list unknown", manifestFolders: null, folders: ["/d/keep"], doc: "/d/old/a.pdf",
+      expect: "kept-old" },
+    { name: "stat fails with EIO, not in the new index", folders: ["/d"], doc: "/d/a.pdf", mtime: "EIO",
+      expect: "kept-old" },
+    { name: "file gone under a folder that lists files (excluded)", folders: ["/d"], doc: "/d/a.pdf", mtime: "gone",
+      expect: "completed" },
+    { name: "embedding state unknown (lease refused), vectors missing", folders: ["/d"], doc: "/d/a.pdf",
+      hadVectors: true, embedding: "unknown", held: { path: "/d/a.pdf", contentState: "embed_failed" },
+      expect: "kept-old" },
+    { name: "embedding off in the settings, vectors missing (waived)", folders: ["/d"], doc: "/d/a.pdf",
+      hadVectors: true, embedding: "off", held: { path: "/d/a.pdf", contentState: "embed_failed" },
+      expect: "completed" },
+    { name: "embedding on, vectors still missing after the re-embed", folders: ["/d"], doc: "/d/a.pdf",
+      hadVectors: true, embedding: "on", held: { path: "/d/a.pdf", contentState: "embed_failed" },
+      expect: "kept-old" },
+    { name: "permission denied (io), unchanged", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: true, failureKind: "io" }, expect: "kept-old" },
+    { name: "non-retryable caption 401, unchanged", folders: ["/d"], doc: "/d/a.png",
+      failure: { retryable: false, failureKind: "caption" }, expect: "kept-old" },
+    { name: "non-retryable without a failure kind (older worker)", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false }, expect: "kept-old" },
+    { name: "too large, unchanged", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false, failureKind: "too_large" }, expect: "kept-old" },
+    { name: "unparseable and unchanged (excluded)", folders: ["/d"], doc: "/d/a.pdf",
+      failure: { retryable: false, failureKind: "unparseable" }, expect: "completed" },
+    { name: "unparseable but changed since the old index read it", folders: ["/d"], doc: "/d/a.pdf",
+      mtime: OLD + 60_000, failure: { retryable: false, failureKind: "unparseable" }, expect: "kept-old" },
+    { name: "scan used the fallback folders", folders: ["/d"], doc: "/d/a.pdf",
+      held: { path: "/d/a.pdf", contentState: "ok" }, folderSource: "fallback", expect: "kept-old" },
+  ];
+
+  it.each(rows)("$name → $expect", async (row) => {
+    await withLegacy(async (fx) => {
+      const reports: IndexMigrationStatus[] = [];
+      const deps: IndexMigrationDeps = {
+        location: { indexRoot: join(fx.root, "state", "index"), documentCount: 0, inStateDirectory: true, legacyIndexDir: fx.legacy },
+        workspace: join(fx.pluginDataDir, ".local-indexer-workspace"),
+        loadManifest: async () => ({
+          documents: [{ path: row.doc, mtimeMs: OLD, hadVectors: row.hadVectors ?? false }],
+          folders: row.manifestFolders === undefined ? row.folders : row.manifestFolders,
+        }),
+        discardManifest: async () => {},
+        runFullScan: async () => ({
+          result: {
+            scanned: 0, indexed: 0, failed: row.failure ? 1 : 0, totalIndexed: 0, walked: 1,
+            walkedByFolder: { ...Object.fromEntries(row.folders.map((f) => [f, 1])), ...(row.walked ?? {}) },
+            unreadableFolders: row.unreadable ?? [],
+            failures: row.failure ? [{ path: row.doc, ...row.failure }] : [],
+          },
+          folderSource: row.folderSource ?? "saved",
+          folders: row.folders,
+        }),
+        coverage: {
+          listNewDocuments: async () => (row.held ? [{ path: row.held.path, status: "indexed", contentState: row.held.contentState }] : []),
+          embeddingState: async () => row.embedding ?? "on",
+          fileMtime: async () => {
+            const mtime = row.mtime ?? OLD;
+            if (mtime === "EIO") throw Object.assign(new Error("EIO"), { code: "EIO" });
+            return mtime;
+          },
+          wouldIndex: () => true,
+          reindex: async () => false,
+          realpath: async (path) => {
+            const real = row.real?.[path];
+            if (real === "fails") throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+            return real ?? path;
+          },
+          caseInsensitive: row.caseInsensitive ?? false,
+        },
+        documentCount: async () => (row.held ? 1 : 0),
+        removeDirectory: (path) => rm(path, { recursive: true, force: true }),
+        attempts: memoryAttempts(),
+        report: (s) => reports.push(structuredClone(s)),
+      };
+      const result = await migrateLegacyIndex(deps);
+      expect(result?.phase, JSON.stringify(result?.coverage)).toBe(row.expect);
+      expect(existsSync(join(fx.legacy, "fts5.sqlite"))).toBe(row.expect === "kept-old");
+      if (row.expect === "kept-old") expect(result?.reason).toBeTruthy();
     });
   });
 });

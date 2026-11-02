@@ -10,29 +10,24 @@
  *
  * Coverage is measured against a manifest of the old index (each document it
  * held as indexed: its path, the mtime it was read at, and whether it had
- * vectors), read once and kept beside the old directory so a retry does not
- * depend on reading it again. Each old document is one of:
- *   - excluded: its file is gone, it is no longer under a registered folder
- *     (the user removed that folder), the current settings no longer index
- *     its type, or it is unchanged since the old index read it and the new
- *     parse rejects it as unreadable (a verdict, not a fault; noted);
- *   - required: everything else. A required document must be in the new
- *     index, and if it had vectors and embedding is configured now, it must
- *     have vectors in the new index too.
- * A document under a folder the scan could not list, or under a folder that
- * held old documents and now lists no files at all (an unmounted volume's
- * empty mountpoint lists cleanly), cannot be judged and keeps the old index.
- * So does a scan that used the built-in fallback folder list.
+ * vectors) and the folder list saved when the manifest was read. Both are kept
+ * beside the old directory so a retry measures against the same list.
+ *
+ * The check fails closed (see `assessCoverage`): an old document leaves the
+ * required set only on positive evidence of a named exclusion, a required
+ * vector is waived only when the settings turn embedding off, and anything
+ * that cannot be decided keeps the old index, with a count in the status.
  *
  * Whether a failure may pass (a lost worker, a provider outage) only shapes
- * the status text; it no longer decides deletion. Anything short of full
- * coverage keeps the old directory, and the next start tries again, up to
- * `maxAttempts` automatic attempts (a cancelled scan does not count). After
- * that the old directory stays and the status says why, so a cause that never
- * clears does not rescan every folder on every start.
+ * the status text. Anything short of full coverage keeps the old directory,
+ * and the next start tries again, up to `maxAttempts` automatic attempts (a
+ * cancelled scan, or a manifest read deferred because the old index changed
+ * under the copy or the disk is full, does not count). After that the old
+ * directory stays and the status says why, so a cause that never clears does
+ * not rescan every folder on every start.
  */
 
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { FolderAutoIndexerResult } from "./types.js";
 import type { IndexLocation } from "./localIndexerPlugin.js";
 
@@ -51,6 +46,14 @@ export const BACKFILL_STOP_AFTER = 3;
 /** Where the scanned folder list came from. */
 export type FolderSource = "saved" | "fallback";
 
+/**
+ * Whether embedding is available now: "on", "off" only when the settings say
+ * so (no plugin key stored, or a custom endpoint the host key is withheld
+ * from), and "unknown" when it could not be determined (a refused or failed
+ * host lease, an unreadable key store).
+ */
+export type EmbeddingState = "on" | "off" | "unknown";
+
 /** One document the old index held as indexed. */
 export interface LegacyManifestDocument {
   /** Absolute path, as the old worker stored it. */
@@ -59,6 +62,31 @@ export interface LegacyManifestDocument {
   mtimeMs: number;
   /** Whether any of its chunks had an embedding. */
   hadVectors: boolean;
+}
+
+/** The old index, as read once before the first rebuild attempt. */
+export interface LegacyManifest {
+  documents: LegacyManifestDocument[];
+  /**
+   * The saved folder list when the manifest was read (the list the old index
+   * was built from), or null when it could not be read. Only a folder in this
+   * list and absent from the current one counts as removed by the user.
+   */
+  folders: string[] | null;
+}
+
+/**
+ * The manifest could not be read for a reason that is not the rebuild's
+ * fault (the old index changed while it was copied, the disk is full). The
+ * attempt is not counted.
+ */
+export class MigrationDeferred extends Error {
+  readonly kind: "index-busy" | "no-space";
+  constructor(kind: "index-busy" | "no-space", message: string) {
+    super(message);
+    this.name = "MigrationDeferred";
+    this.kind = kind;
+  }
 }
 
 /** How the new index covers the old one. */
@@ -71,15 +99,19 @@ export interface IndexCoverage {
   missingDocuments: number;
   /** In the new index, but without the vectors the old one had. */
   missingVectors: number;
+  /** Held, but whether their vectors are required could not be decided. */
+  undecidedVectors: number;
+  /** Old documents no registered folder can be shown to own or to have dropped. */
+  unattributed: number;
   /** Old documents whose files are gone. */
   excludedGone: number;
-  /** Old documents under a folder no longer registered. */
+  /** Old documents under a folder the user removed since the manifest was read. */
   excludedRootRemoved: number;
   /** Old documents whose type the current settings do not index. */
   excludedUnsupported: number;
   /** Old documents, unchanged on disk, that the new parser rejects. */
   excludedCorrupt: string[];
-  /** Registered folders the scan could not list, with old documents under them. */
+  /** Registered folders that could not be listed or resolved, with old documents under them. */
   unavailableFolders: string[];
   /** Registered folders that held old documents and now list no files. */
   vanishedFolders: string[];
@@ -103,6 +135,8 @@ export interface IndexMigrationStatus {
   maxAttempts: number;
   /** True once the attempts are used up: no further automatic rebuild. */
   retriesExhausted?: boolean;
+  /** Set when the attempt waited on something outside the rebuild (not counted). */
+  deferred?: "index-busy" | "no-space";
   /** Set once the scan finished. */
   scan?: {
     scanned: number;
@@ -148,8 +182,8 @@ export interface NewIndexDocument {
 export interface CoverageDeps {
   /** Every document the new index holds. */
   listNewDocuments: () => Promise<NewIndexDocument[]>;
-  /** Whether embedding is configured now (a key or endpoint the scan would use). */
-  embeddingConfigured: () => Promise<boolean>;
+  /** Whether embedding is available now; see EmbeddingState. */
+  embeddingState: () => Promise<EmbeddingState>;
   /**
    * The file's mtime in ms, or "gone" when it no longer exists (ENOENT,
    * ENOTDIR). Any other error throws: the file may still be there.
@@ -159,6 +193,10 @@ export interface CoverageDeps {
   wouldIndex: (path: string, folder: string) => boolean;
   /** Re-index one file, bypassing the scan's mtime skip; true when it now has vectors. */
   reindex: (path: string) => Promise<boolean>;
+  /** The real path of a folder; throws when it cannot be resolved (offline, gone). */
+  realpath: (path: string) => Promise<string>;
+  /** Whether paths compare case-insensitively here (the macOS and Windows defaults). */
+  caseInsensitive: boolean;
 }
 
 export interface IndexMigrationDeps {
@@ -167,9 +205,10 @@ export interface IndexMigrationDeps {
   workspace: string;
   /**
    * The old index's manifest: read from the persisted copy when one exists,
-   * otherwise built from the old index and persisted.
+   * otherwise built from the old index and persisted. Throws
+   * MigrationDeferred when the read should wait for a later start.
    */
-  loadManifest: () => Promise<LegacyManifestDocument[]>;
+  loadManifest: () => Promise<LegacyManifest>;
   /** Drop the persisted manifest once the old index is gone. */
   discardManifest: () => Promise<void>;
   /** Run one full scan of the registered folders (the normal index_scan path). */
@@ -195,18 +234,56 @@ function isInside(child: string, parent: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-/** The registered folder that owns `path`: the deepest one containing it. */
-function owningFolder(path: string, folders: string[]): string | null {
-  let best: string | null = null;
-  for (const folder of folders) {
-    if (isInside(path, folder) && (best === null || resolve(folder).length > resolve(best).length)) best = folder;
-  }
-  return best;
-}
-
 /** Whether two mtimes in ms name the same file version (Python and Node round differently). */
 function sameMtime(currentMs: number, oldMs: number): boolean {
   return Math.abs(Math.floor(currentMs) - Math.floor(oldMs)) <= 1;
+}
+
+/** A path as compared here: absolute, NFC, and case-folded where the filesystem folds case. */
+function pathKey(path: string, caseInsensitive: boolean): string {
+  const key = resolve(path).normalize("NFC");
+  return caseInsensitive ? key.toLowerCase() : key;
+}
+
+/** Whether key `child` is `parent` or under it (both from pathKey). */
+function keyInside(child: string, parent: string): boolean {
+  if (child === parent) return true;
+  const prefix = parent.endsWith(sep) ? parent : parent + sep;
+  return child.startsWith(prefix);
+}
+
+interface Root {
+  folder: string;
+  /** pathKey of the folder as registered, and of its real path when that resolves. */
+  forms: string[];
+  resolved: boolean;
+}
+
+async function rootsOf(folders: string[], deps: CoverageDeps): Promise<Root[]> {
+  const roots: Root[] = [];
+  for (const folder of folders) {
+    const forms = [pathKey(folder, deps.caseInsensitive)];
+    let resolved = true;
+    try {
+      const real = pathKey(await deps.realpath(folder), deps.caseInsensitive);
+      if (!forms.includes(real)) forms.push(real);
+    } catch {
+      resolved = false;
+    }
+    roots.push({ folder, forms, resolved });
+  }
+  return roots;
+}
+
+/** The root owning `key` through the longest matching form, and that form. */
+function owner(key: string, roots: Root[]): { root: Root; form: string } | null {
+  let best: { root: Root; form: string } | null = null;
+  for (const root of roots) {
+    for (const form of root.forms) {
+      if (keyInside(key, form) && (best === null || form.length > best.form.length)) best = { root, form };
+    }
+  }
+  return best;
 }
 
 interface Assessment {
@@ -215,27 +292,60 @@ interface Assessment {
   vectorGaps: string[];
 }
 
-/** Measure how the new index covers the manifest after `scan`. */
+/**
+ * Measure how the new index covers the old one after `scan`.
+ *
+ * Contract: this check fails closed.
+ *   - An old document leaves the required set only on positive evidence of
+ *     one named exclusion: its file is gone (ENOENT/ENOTDIR under a folder
+ *     that lists and still shows files); its folder was in the manifest-time
+ *     folder list and is absent from the current one, and every current
+ *     folder resolved (so no current folder can be the same place under
+ *     another name); the current settings do not index its type; or the
+ *     worker judged the unchanged file unparseable (failureKind
+ *     "unparseable", mtime within 1 ms of the old one).
+ *   - A required vector is waived only when the settings turn embedding off
+ *     (EmbeddingState "off"); "unknown" leaves it undecided.
+ *   - Everything else that cannot be shown covered — a folder that does not
+ *     list or resolve, a folder that lists no files where old documents were,
+ *     a document no folder owns or demonstrably dropped, a stat error, an
+ *     undecided vector — keeps the old index, and is counted.
+ * Paths are compared in every form a folder may take (as registered, its
+ * real path, NFC) and case-folded where the filesystem folds case, since the
+ * old worker stored the path the walk reached and the folder list may name
+ * the same place differently.
+ */
 export async function assessCoverage(
-  manifest: LegacyManifestDocument[],
+  manifest: LegacyManifest,
   scan: MigrationScan,
   deps: CoverageDeps,
 ): Promise<Assessment> {
-  const { result, folders } = scan;
-  const unreadable = result.unreadableFolders ?? [];
-  const lastFailure = new Map<string, boolean>();
-  for (const failure of result.failures ?? []) lastFailure.set(resolve(failure.path), failure.retryable);
+  const { result } = scan;
+  const ci = deps.caseInsensitive;
+  const current = await rootsOf(scan.folders, deps);
+  const allResolved = current.every((root) => root.resolved);
+  const currentKeys = new Set(current.flatMap((root) => root.forms));
+  // A manifest-time folder the user removed: in the old list, and not the same
+  // place as any current folder under any of its forms.
+  const removed = manifest.folders === null
+    ? []
+    : (await rootsOf(manifest.folders, deps)).filter((root) => !root.forms.some((form) => currentKeys.has(form)));
+  const unreadable = (result.unreadableFolders ?? []).map((dir) => pathKey(dir, ci));
+  const lastFailure = new Map<string, { retryable: boolean; failureKind?: string }>();
+  for (const failure of result.failures ?? []) lastFailure.set(pathKey(failure.path, ci), failure);
   const held = new Map<string, NewIndexDocument>();
   for (const doc of await deps.listNewDocuments()) {
-    if (doc.status === undefined || doc.status === "indexed") held.set(resolve(doc.path), doc);
+    if (doc.status === undefined || doc.status === "indexed") held.set(pathKey(doc.path, ci), doc);
   }
-  const embedding = await deps.embeddingConfigured();
+  const embedding = await deps.embeddingState();
 
   const coverage: IndexCoverage = {
     required: 0,
     covered: 0,
     missingDocuments: 0,
     missingVectors: 0,
+    undecidedVectors: 0,
+    unattributed: 0,
     excludedGone: 0,
     excludedRootRemoved: 0,
     excludedUnsupported: 0,
@@ -248,23 +358,31 @@ export async function assessCoverage(
   const unavailable = new Set<string>();
   const oldByFolder = new Map<string, number>();
 
-  for (const doc of manifest) {
-    const path = resolve(doc.path);
-    const folder = owningFolder(path, folders);
-    if (folder === null) {
-      coverage.excludedRootRemoved += 1;
+  for (const doc of manifest.documents) {
+    const key = pathKey(doc.path, ci);
+    const found = owner(key, current);
+    if (found === null) {
+      if (allResolved && owner(key, removed) !== null) {
+        coverage.excludedRootRemoved += 1;
+      } else {
+        coverage.unattributed += 1;
+      }
       continue;
     }
-    oldByFolder.set(folder, (oldByFolder.get(folder) ?? 0) + 1);
-    if (unreadable.some((dir) => isInside(path, dir))) {
-      // The walk could not list a directory on the way to this file: it may
-      // be there, unindexed. Judged on a later attempt.
-      unavailable.add(folder);
+    const { root, form } = found;
+    oldByFolder.set(root.folder, (oldByFolder.get(root.folder) ?? 0) + 1);
+    // The same file as the scan would name it: under the folder as registered.
+    const asWalked = join(resolve(root.folder), relative(form, key));
+    const walkedKey = pathKey(asWalked, ci);
+    if (!root.resolved || unreadable.some((dir) => keyInside(key, dir) || keyInside(walkedKey, dir))) {
+      // The folder, or a directory on the way to this file, could not be
+      // resolved or listed: the file may be there, unindexed.
+      unavailable.add(root.folder);
       continue;
     }
     let mtime: number | "gone" | undefined;
     try {
-      mtime = await deps.fileMtime(path);
+      mtime = await deps.fileMtime(doc.path);
     } catch {
       mtime = undefined; // exists as far as anyone can tell
     }
@@ -272,26 +390,30 @@ export async function assessCoverage(
       coverage.excludedGone += 1;
       continue;
     }
-    if (!deps.wouldIndex(path, folder)) {
+    if (!deps.wouldIndex(asWalked, root.folder)) {
       coverage.excludedUnsupported += 1;
       continue;
     }
-    const now = held.get(path);
+    const now = held.get(key) ?? held.get(walkedKey);
     if (!now) {
-      const retryable = lastFailure.get(path);
-      if (retryable === false && mtime !== undefined && sameMtime(mtime, doc.mtimeMs)) {
-        coverage.excludedCorrupt.push(path);
+      const failure = lastFailure.get(key) ?? lastFailure.get(walkedKey);
+      if (failure?.failureKind === "unparseable" && mtime !== undefined && sameMtime(mtime, doc.mtimeMs)) {
+        coverage.excludedCorrupt.push(doc.path);
         continue;
       }
       coverage.required += 1;
       coverage.missingDocuments += 1;
-      if (retryable === true) coverage.missingRetryable += 1;
+      if (failure?.retryable === true) coverage.missingRetryable += 1;
       continue;
     }
     coverage.required += 1;
-    if (doc.hadVectors && embedding && now.contentState !== "ok") {
-      coverage.missingVectors += 1;
-      vectorGaps.push(path);
+    if (doc.hadVectors && now.contentState !== "ok" && embedding !== "off") {
+      if (embedding === "on") {
+        coverage.missingVectors += 1;
+        vectorGaps.push(doc.path);
+      } else {
+        coverage.undecidedVectors += 1;
+      }
       continue;
     }
     coverage.covered += 1;
@@ -322,6 +444,12 @@ function coverageGapReason(coverage: IndexCoverage): string | null {
         "remove it from the index folders)",
     );
   }
+  if (coverage.unattributed > 0) {
+    parts.push(
+      `${coverage.unattributed} document(s) of the old index are under no registered folder, ` +
+        "and no folder was removed that held them",
+    );
+  }
   if (coverage.missingDocuments > 0 || coverage.missingVectors > 0) {
     const retryable = coverage.missingRetryable > 0
       ? ` (${coverage.missingRetryable} failed for a reason that may pass)`
@@ -329,6 +457,12 @@ function coverageGapReason(coverage: IndexCoverage): string | null {
     parts.push(
       `the new index lacks ${coverage.missingDocuments} document(s)${retryable} and the vectors of ` +
         `${coverage.missingVectors} document(s) that the old index held`,
+    );
+  }
+  if (coverage.undecidedVectors > 0) {
+    parts.push(
+      `whether embedding is available could not be determined, so the vectors of ` +
+        `${coverage.undecidedVectors} document(s) cannot be waived`,
     );
   }
   return parts.length > 0 ? parts.join("; ") : null;
@@ -405,13 +539,17 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
     return keep("the new index or the workspace is inside the old index directory");
   }
 
-  let manifest: LegacyManifestDocument[];
+  let manifest: LegacyManifest;
   try {
     manifest = await deps.loadManifest();
   } catch (err) {
+    if (err instanceof MigrationDeferred) {
+      status.deferred = err.kind;
+      return keep(err.message, false);
+    }
     return keep(`the old index could not be read: ${(err as Error).message}`);
   }
-  status.legacyDocuments = manifest.length;
+  status.legacyDocuments = manifest.documents.length;
 
   deps.report(status);
   let scan: MigrationScan;

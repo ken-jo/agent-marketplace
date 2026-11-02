@@ -1,4 +1,4 @@
-import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep as pathSep } from "node:path";
@@ -71,8 +71,11 @@ import {
 } from "./rescanSuggestion.js";
 import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
 import {
+  MigrationDeferred,
   migrateLegacyIndex,
+  type EmbeddingState,
   type FolderSource,
+  type LegacyManifest,
   type IndexMigrationStatus,
   type LegacyManifestDocument,
   type MigrationAttempts,
@@ -102,6 +105,9 @@ function bufferToArrayBuffer(body: Buffer): ArrayBuffer {
 // docs; the remainder are already marked for re-embed (content_hash NULL +
 // content_state='embed_failed') and heal on the next cycle.
 const RECONCILE_HEAL_CAP = 50;
+// Heal failures in a row after which the provider is taken to be down for
+// this start.
+const HEAL_STOP_AFTER = 3;
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -2406,16 +2412,54 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     });
   }
 
-  /** Whether an embedding credential is available now (the scan's own test). */
-  async function embeddingConfiguredNow(): Promise<boolean> {
-    const handle = await resolveHostKeyHandle("embedding");
-    try {
-      return (await resolveEmbeddingKeyForEndpoint(getConfig("embeddingEndpoint"), handle)).length > 0;
-    } finally {
-      if (handle) {
-        try { await handle.release(); } catch { /* best effort */ }
+  /**
+   * Whether embedding is available now, as the rebuild's coverage check needs
+   * it: "off" only when the settings say so (plugin-key mode with no key
+   * stored, or a custom endpoint the host key is withheld from), "unknown"
+   * when it cannot be determined (the host refused or failed the lease, the
+   * key store threw). resolveHostKeyHandle folds a refusal into null for its
+   * other callers; this asks the host directly so a refusal is not "off".
+   */
+  async function embeddingStateNow(): Promise<EmbeddingState> {
+    if (isUntrustedHostEndpoint(getConfig("embeddingEndpoint"))) return "off";
+    if (readApiKeySource() === "plugin") {
+      let stored: unknown;
+      try {
+        stored = await hostApi.getSecret(`plugin.${context.pluginId}.embeddingApiKey`);
+      } catch {
+        return "unknown";
       }
+      if (typeof stored === "string" && stored.length > 0) return "on";
+      if (process.env.AVE_ALLOW_ENV_API_KEY === "1" && process.env.OPENAI_API_KEY) return "on";
+      return "off";
     }
+    try {
+      const lease = await requestHostLease("embedding");
+      try { await lease.release(); } catch { /* best effort */ }
+      return "on";
+    } catch {
+      return "unknown";
+    }
+  }
+
+  // Per-document heal failures, so documents that fail every time (a provider
+  // that rejects them) go to the back of the queue instead of taking the
+  // whole per-start budget.
+  const healAttemptsPath = join(pluginDataDir, "heal-attempts.json");
+  async function readHealAttempts(): Promise<Record<string, number>> {
+    try {
+      const parsed = JSON.parse(await readFile(healAttemptsPath, "utf-8")) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return Object.fromEntries(
+          Object.entries(parsed as Record<string, unknown>).filter(
+            (entry): entry is [string, number] => typeof entry[1] === "number",
+          ),
+        );
+      }
+    } catch {
+      // No ledger yet, or unreadable: every document starts even.
+    }
+    return {};
   }
 
   async function runStartupWarmup(folders: string[]): Promise<void> {
@@ -2511,7 +2555,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         toHealAll.push(path);
       }
       if (toHealAll.length > 0) {
-        if (!(await embeddingConfiguredNow())) {
+        if ((await embeddingStateNow()) !== "on") {
           // No embedding key yet — re-embed is impossible. The docs are
           // already marked for re-embed, so a later cycle (after a key push)
           // heals them. They remain BM25-only meanwhile (graceful).
@@ -2521,22 +2565,59 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             reason: "no embedding key",
           });
         } else {
-          const toHeal = toHealAll.slice(0, RECONCILE_HEAL_CAP);
+          // Least-failed first (stable), so a document that fails every
+          // time cannot starve the rest; stop after HEAL_STOP_AFTER failures
+          // in a row (the provider is down) and leave the rest for next start.
+          const failures = await readHealAttempts();
+          const ordered = toHealAll
+            .map((path, index) => ({ path, index, failed: failures[resolve(path)] ?? 0 }))
+            .sort((a, b) => a.failed - b.failed || a.index - b.index)
+            .map((entry) => entry.path);
+          const toHeal = ordered.slice(0, RECONCILE_HEAL_CAP);
           let healed = 0;
+          let attempted = 0;
+          let failedInARow = 0;
           for (const path of toHeal) {
+            attempted += 1;
+            let ok = false;
             try {
-              await workerClient.reindex(path);
-              healed += 1;
+              const result = await workerClient.reindex(path);
+              ok = result.status === "indexed" && result.embedded === true;
+              if (!ok) {
+                hostApi.logEvent("warn", "local_indexer.reconcile_heal_failed", {
+                  path,
+                  error: result.errors?.join(", ") || "indexed without vectors",
+                });
+              }
             } catch (err) {
               hostApi.logEvent("warn", "local_indexer.reconcile_heal_failed", {
                 path,
                 error: (err as Error).message,
               });
             }
+            const key = resolve(path);
+            if (ok) {
+              healed += 1;
+              failedInARow = 0;
+              delete failures[key];
+            } else {
+              failures[key] = (failures[key] ?? 0) + 1;
+              if (++failedInARow >= HEAL_STOP_AFTER) break;
+            }
+          }
+          // Keep entries only for documents still waiting to heal.
+          const waiting = new Set(toHealAll.map((path) => resolve(path)));
+          const kept = Object.fromEntries(Object.entries(failures).filter(([path]) => waiting.has(path)));
+          try {
+            await writeFile(healAttemptsPath, JSON.stringify(kept), "utf-8");
+          } catch {
+            // The ledger only orders the queue; losing it costs fairness, not data.
           }
           hostApi.logEvent("info", "local_indexer.reconcile_healed", {
             healed,
-            remaining: Math.max(0, toHealAll.length - toHeal.length),
+            attempted,
+            stoppedEarly: failedInARow >= HEAL_STOP_AFTER,
+            remaining: Math.max(0, toHealAll.length - healed),
           });
         }
       }
@@ -2592,16 +2673,21 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // start after the user moved files, measures against the same list.
   const indexMigrationManifestPath = join(pluginDataDir, "index-migration-manifest.json");
 
-  async function loadLegacyManifest(legacyIndexDir: string): Promise<LegacyManifestDocument[]> {
+  async function loadLegacyManifest(legacyIndexDir: string): Promise<LegacyManifest> {
     try {
       const saved = JSON.parse(await readFile(indexMigrationManifestPath, "utf-8")) as {
         version?: unknown;
         documents?: unknown;
+        folders?: unknown;
       };
-      if (saved.version === 1 && Array.isArray(saved.documents)) {
-        return (saved.documents as LegacyManifestDocument[]).filter(
+      if (saved.version === 2 && Array.isArray(saved.documents)) {
+        const documents = (saved.documents as LegacyManifestDocument[]).filter(
           (doc) => typeof doc?.path === "string" && typeof doc.mtimeMs === "number" && typeof doc.hadVectors === "boolean",
         );
+        const folders = Array.isArray(saved.folders) && saved.folders.every((f) => typeof f === "string")
+          ? (saved.folders as string[])
+          : null;
+        return { documents, folders };
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -2610,37 +2696,98 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         });
       }
     }
-    // The worker reads a copy in its workspace: it cannot read the plugin's
-    // data directory, and a copy with its -wal keeps rows the WAL has not
-    // checkpointed yet.
+    // The folder list the old index was built from: the evidence that a
+    // folder missing from a later list was removed by the user.
+    const folderSet = await loadPersistedFolderSet();
+    const folders = folderSet.source === "saved" ? [...folderSet.folders] : null;
     const copyDir = join(workspace, ".legacy-index-manifest");
     await rm(copyDir, { recursive: true, force: true });
     await mkdir(copyDir, { recursive: true });
     try {
-      const copyPath = join(copyDir, "fts5.sqlite");
-      await copyFile(join(legacyIndexDir, "fts5.sqlite"), copyPath);
-      for (const suffix of ["-wal", "-shm"]) {
-        try {
-          await copyFile(join(legacyIndexDir, `fts5.sqlite${suffix}`), `${copyPath}${suffix}`);
-        } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-        }
-      }
+      const copyPath = await copyLegacyIndex(legacyIndexDir, copyDir);
       const rows = await workerClient.legacyIndexManifest(copyPath);
       const documents: LegacyManifestDocument[] = rows.map((row) => ({
         path: row.path,
         mtimeMs: row.mtimeMs,
         hadVectors: row.hadVectors,
       }));
-      await writeFile(indexMigrationManifestPath, JSON.stringify({ version: 1, documents }), "utf-8");
+      await writeFile(indexMigrationManifestPath, JSON.stringify({ version: 2, documents, folders }), "utf-8");
       hostApi.logEvent("info", "local_indexer.index_migration.manifest", {
         documents: documents.length,
         withVectors: documents.filter((doc) => doc.hadVectors).length,
+        folders: folders?.length ?? null,
       });
-      return documents;
+      return { documents, folders };
     } finally {
       await rm(copyDir, { recursive: true, force: true }).catch(() => {});
     }
+  }
+
+  const LEGACY_INDEX_PARTS = ["fts5.sqlite", "fts5.sqlite-wal", "fts5.sqlite-shm"] as const;
+  const LEGACY_COPY_TRIES = 3;
+  // Free space kept beyond the copy itself.
+  const LEGACY_COPY_HEADROOM = 64 * 1024 * 1024;
+
+  /** Size and mtime of each part of the old index (absent parts included). */
+  async function legacyIndexShape(dir: string): Promise<{ key: string; bytes: number }> {
+    const parts: string[] = [];
+    let bytes = 0;
+    for (const name of LEGACY_INDEX_PARTS) {
+      try {
+        const st = await stat(join(dir, name));
+        parts.push(`${name}:${st.size}:${st.mtimeMs}`);
+        bytes += st.size;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        parts.push(`${name}:absent`);
+      }
+    }
+    return { key: parts.join("|"), bytes };
+  }
+
+  /**
+   * Copy the old index (main file, -wal, -shm) into the worker's workspace as
+   * one consistent set. A checkpoint between copying the main file and the
+   * -wal would lose rows silently, so every part's size and mtime must be the
+   * same before and after the copy; otherwise it is retried, and after
+   * LEGACY_COPY_TRIES the read waits for the next start without using up an
+   * attempt. So does a disk without room for the copy.
+   */
+  async function copyLegacyIndex(legacyIndexDir: string, copyDir: string): Promise<string> {
+    const copyPath = join(copyDir, "fts5.sqlite");
+    for (let attempt = 1; attempt <= LEGACY_COPY_TRIES; attempt += 1) {
+      const before = await legacyIndexShape(legacyIndexDir);
+      const space = await statfs(copyDir);
+      const free = Number(space.bavail) * Number(space.bsize);
+      if (free < before.bytes + LEGACY_COPY_HEADROOM) {
+        throw new MigrationDeferred(
+          "no-space",
+          `not enough free disk space to read the old index (${before.bytes} bytes to copy, ${free} free)`,
+        );
+      }
+      try {
+        for (const name of LEGACY_INDEX_PARTS) {
+          await rm(join(copyDir, name), { force: true });
+          try {
+            await copyFile(join(legacyIndexDir, name), join(copyDir, name));
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== "ENOENT" || name === "fts5.sqlite") throw err;
+          }
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOSPC") {
+          throw new MigrationDeferred("no-space", "the disk filled up while reading the old index");
+        }
+        throw err;
+      }
+      const after = await legacyIndexShape(legacyIndexDir);
+      if (after.key === before.key) return copyPath;
+      hostApi.logEvent("warn", "local_indexer.index_migration.copy_torn", { attempt });
+    }
+    throw new MigrationDeferred(
+      "index-busy",
+      `the old index kept changing while it was copied (${LEGACY_COPY_TRIES} tries); is another copy of the app running?`,
+    );
   }
 
   const indexMigrationNotice = (status: IndexMigrationStatus): IndexWarningPayload | null => {
@@ -2654,6 +2801,18 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             "재인덱싱이 끝나고 확인되면 이전 인덱스(" + status.legacyIndexDir + ")를 삭제합니다.",
         };
       case "kept-old":
+        if (status.deferred) {
+          return {
+            kind: "index-migration",
+            path: status.legacyIndexDir,
+            reason: status.reason,
+            message:
+              (status.deferred === "no-space"
+                ? "디스크 공간이 부족해 이전 인덱스를 읽지 못했습니다 (" + (status.reason ?? "") + "). 공간을 확보하면 "
+                : "이전 인덱스를 읽는 동안 파일이 계속 바뀌었습니다 (" + (status.reason ?? "") + "). ") +
+              "다음 시작 때 다시 시도하며, 이번 시도는 자동 재시도 횟수에 넣지 않습니다. 이전 인덱스는 보존합니다.",
+          };
+        }
         return {
           kind: "index-migration",
           path: status.legacyIndexDir,
@@ -2700,6 +2859,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         coverage: status.coverage
           ? { ...status.coverage, excludedCorrupt: status.coverage.excludedCorrupt.length }
           : undefined,
+        deferred: status.deferred,
         notes: status.notes,
         reason: status.reason,
       },
@@ -2753,7 +2913,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             ((await plugin.listDocuments()) as LocalIndexerDocumentMeta[])
               .filter((doc) => typeof doc.path === "string" && doc.path.length > 0)
               .map((doc) => ({ path: doc.path!, status: doc.status, contentState: doc.content_state })),
-          embeddingConfigured: embeddingConfiguredNow,
+          embeddingState: embeddingStateNow,
+          realpath: (path) => realpath(path),
+          // The macOS and Windows filesystems fold case by default.
+          caseInsensitive: osPlatform() === "darwin" || osPlatform() === "win32",
           fileMtime: async (path) => {
             try {
               return (await stat(path)).mtimeMs;

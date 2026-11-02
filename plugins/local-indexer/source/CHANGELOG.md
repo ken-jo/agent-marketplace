@@ -36,28 +36,45 @@ rebuilds the index once (see below).
   of the registered folders. The scan shows its progress and an
   `index-migration` warning, and `index_scan_status` reports
   `indexMigration`. The old directory is deleted only when the new index
-  covers what the old one held:
+  covers what the old one held, and the check fails closed: an old document
+  leaves the required set only on positive evidence of a named exclusion, a
+  required vector is waived only when the settings turn embedding off, and
+  anything that cannot be decided keeps the old index, with a count.
   - Before the scan the plugin reads a manifest of the old index: each
     document it held as indexed (its path, the mtime it was read at, and
-    whether any of its chunks had an embedding). The worker reads a copy of
-    `fts5.sqlite` with its `-wal` in the workspace (the new
-    `legacy_index_manifest` request), and the plugin keeps the manifest in
-    `index-migration-manifest.json` beside the old directory until it is gone.
-  - An old document is excluded when its file is gone, when it is no longer
-    under a registered folder (the user removed that folder), when the
-    current settings no longer index its type, or when the file is unchanged
-    since the old index read it and the new parser rejects it as unreadable
-    (the completion message names these).
-  - Every other old document must be in the new index. If it had vectors and
-    embedding is configured now, it must have vectors there too. Documents
+    whether any of its chunks had an embedding), and the saved folder list
+    at that moment. The worker reads a copy of `fts5.sqlite` with its `-wal`
+    and `-shm` in the workspace (the new `legacy_index_manifest` request,
+    which runs `PRAGMA quick_check` first). The copy is taken only when every
+    part's size and mtime are the same before and after it, up to 3 tries,
+    and only with room on the disk; otherwise the read waits for the next
+    start without using up an attempt, with its own status. The plugin keeps
+    the manifest in `index-migration-manifest.json` beside the old directory
+    until it is gone.
+  - Paths are compared in every form a folder takes (as registered, its real
+    path, NFC), case-folded on macOS and Windows, so a symlinked folder, a
+    mapped drive and its UNC path, or a case-only rename names the same
+    place.
+  - An old document is excluded when its file is gone (under a folder that
+    lists and still shows files); when its folder was in the manifest-time
+    list and is no longer registered, and every current folder resolves;
+    when the current settings no longer index its type; or when the file is
+    unchanged since the old index read it and the worker judged it
+    `unparseable` (the completion message names these).
+  - Every other old document must be in the new index. If it had vectors,
+    it must have vectors there too, unless the settings turn embedding off
+    (plugin-key mode with no key stored, or a custom endpoint the host key
+    is withheld from). A refused or failed host lease, or a key store that
+    throws, leaves the vectors undecided, and the old index stays. Documents
     embedded without vectors during the rebuild are re-embedded before the
     check, and the pass stops after 3 in a row stay without vectors.
-  - A document under a folder the scan could not list (an unmounted volume,
-    a folder the OS refuses), or under a folder that held old documents and
-    now lists no files at all (an unmounted volume's empty mountpoint), keeps
-    the old index. So does a scan that used the default folders because the
-    saved folder list was missing or corrupt. The rebuild walks every
-    registered folder, including ones whose summary reads empty.
+  - A folder that cannot be listed or resolved, a folder that held old
+    documents and now lists no files (an unmounted volume's empty
+    mountpoint), a document under no folder that was registered or
+    demonstrably removed, a stat error, or a scan that used the default
+    folders because the saved list was missing keeps the old index. The
+    rebuild walks every registered folder, including ones whose summary
+    reads empty.
 
   Whether a failure may pass (a lost worker, a rate-limited or failed
   provider call, the worker's `retryable` flag) only shapes the status text.
@@ -69,10 +86,15 @@ rebuilds the index once (see below).
   stopped, runs the rebuild once more.
 - The start-up heal re-embeds documents held without vectors
   (`content_state = 'embed_failed'`) as well as the drifted ones, up to 50
-  per start, when an embedding key is available. A scan skips a file it
-  already holds at that mtime, so nothing else re-embeds them.
-- A file the parser cannot read (a corrupt PDF or DOCX) is a failed result
-  that is not `retryable`, instead of an unexpected worker error.
+  per start, when an embedding key is available. It stops after 3 failures
+  in a row, and documents that keep failing go to the back of the queue
+  (`heal-attempts.json`), so they cannot take the whole budget.
+- A failed `indexer_reindex` result carries `failure_kind`: `unparseable`
+  (the bytes read in full and the format parser rejected them, as for a
+  corrupt PDF or DOCX; not `retryable`), `io` (a read failure such as
+  permission denied, a sharing violation or EIO; `retryable`), `caption` or
+  `too_large`. A parser exception is a failed result instead of an
+  unexpected worker error.
 - `documents_list` is paged (`limit` up to 1000, keyset cursor `after`), and
   each page also stops before three quarters of the negotiated frame limit,
   so long multi-byte paths cannot overflow a frame. `runtime_info` counts
