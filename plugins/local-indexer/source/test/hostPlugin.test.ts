@@ -939,6 +939,82 @@ describe("hostPlugin createPlugin", () => {
       await plugin.stop();
     });
 
+    it("keeps the old index when a folder the index state says held documents now shows no files", async () => {
+      const legacy = await legacyIndexFixture();
+      const docs = await savedFolders();
+      indexedAsWorkerHolds(docs);
+      // index-state.json (beside the old index) recorded documents under the
+      // folder; the mocked walk reports no files for it (an empty mountpoint).
+      const entries = Object.fromEntries(
+        ["x.md", "y.md"].map((name) => [join(docs, name), { docId: name, mtimeMs: 1, chunkHash: "", indexedAt: "2026-01-01T00:00:00Z" }]),
+      );
+      await writeFile(join(hostRoot, "index-state.json"), JSON.stringify({ version: 1, entries }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/held indexed documents now show no files .*docs had 2/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("the rebuild scan walks every registered folder, even ones whose summary reads empty", async () => {
+      await legacyIndexFixture();
+      indexedAsWorkerHolds(await savedFolders());
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      await settledMigration(plugin);
+      const targets = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls
+        .filter(([, event]: [string, string]) => event === "index_scan.target_folders")
+        .map(([, , fields]: [string, string, any]) => fields);
+      // docs/ is empty on disk, so its summary is "empty" and a normal scan
+      // would skip it; the rebuild must walk it.
+      expect(targets.at(0)).toMatchObject({ total: 1, pending: 0, scanning: [join(hostRoot, "docs")] });
+      await plugin.stop();
+    });
+
+    it("a manual full scan resets the attempt bound and, once retries had stopped, rebuilds again", async () => {
+      const legacy = await legacyIndexFixture();
+      indexedAsWorkerHolds(await savedFolders());
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "1 folder(s) could not be read: /x" }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).retriesExhausted).toBe(true);
+
+      await plugin.handlers.index_scan();
+      await vi.waitFor(async () => {
+        expect((await plugin.handlers.index_scan_status()).indexMigration?.phase).toBe("completed");
+      });
+      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      const events = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(events).toContain("local_indexer.index_migration.manual_retry");
+      // Once the old index is gone, another manual scan starts no rebuild.
+      await plugin.handlers.index_scan();
+      await new Promise((r) => setTimeout(r, 20));
+      const after = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(after.filter((e: string) => e === "local_indexer.index_migration.rebuilding")).toHaveLength(1);
+      expect(after.filter((e: string) => e === "local_indexer.index_migration.manual_retry")).toHaveLength(1);
+      await plugin.stop();
+    });
+
+    it("a manual full scan clears a partial attempt count", async () => {
+      await legacyIndexFixture();
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 2, lastReason: "earlier" }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      await settledMigration(plugin); // fallback folders: kept-old, attempt 3
+      expect(JSON.parse(await readFile(ledgerPath(), "utf-8"))).toMatchObject({ attempts: 3 });
+      await plugin.handlers.index_scan();
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await plugin.stop();
+    });
+
     it("runs no rebuild when there is no old index", async () => {
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);

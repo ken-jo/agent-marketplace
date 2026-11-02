@@ -21,7 +21,8 @@ import {
   type IndexMigrationStatus,
   type MigrationAttempts,
 } from "../src/indexMigration";
-import { WorkerCallError, WorkerIndexFailure } from "../src/workerClient";
+import { WORKER_PATH_NOT_ALLOWED, WorkerCallError, WorkerClient, WorkerIndexFailure } from "../src/workerClient";
+import { FakeStdioWorker } from "./support/fakeStdioWorker";
 
 /** The worker's documents table: one row per absolute path. */
 class FakeWorkerIndex {
@@ -81,7 +82,11 @@ function scanDeps(
   fx: Fixture,
   worker: FakeWorkerIndex,
   folders: string[],
-  opts: { folderSource?: FolderSource; attempts?: ReturnType<typeof memoryAttempts> } = {},
+  opts: {
+    folderSource?: FolderSource;
+    attempts?: ReturnType<typeof memoryAttempts>;
+    previouslyIndexedByFolder?: Record<string, number>;
+  } = {},
 ) {
   const reports: IndexMigrationStatus[] = [];
   const removeDirectory = vi.fn(async (path: string) => {
@@ -101,6 +106,7 @@ function scanDeps(
       result: await indexer.scanOnce(),
       folderSource: opts.folderSource ?? "saved",
       registeredFolders: folders.length,
+      ...(opts.previouslyIndexedByFolder ? { previouslyIndexedByFolder: opts.previouslyIndexedByFolder } : {}),
     }),
     verifyIndexed: async () => {
       const held = new Set(worker.rows.values());
@@ -194,11 +200,15 @@ describe("migrateLegacyIndex — verified rebuild", () => {
   it("a worker refusal of the file itself (invalid params, not found) counts as done", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["ok.md", "outside.md"]);
+      await writeDocs(docs, ["ok.md", "badmode.md", "gone.md"]);
       const worker = new FakeWorkerIndex();
       worker.failures.set(
-        resolve(docs, "outside.md"),
-        () => new WorkerCallError("path outside allowed roots", "worker-request-failed", -32602),
+        resolve(docs, "badmode.md"),
+        () => new WorkerCallError("mode: String should match pattern", "worker-request-failed", -32602),
+      );
+      worker.failures.set(
+        resolve(docs, "gone.md"),
+        () => new WorkerCallError("File not found", "worker-request-failed", -32004),
       );
       const { deps } = scanDeps(fx, worker, [docs]);
       expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
@@ -223,6 +233,98 @@ describe("migrateLegacyIndex — verified rebuild", () => {
 });
 
 describe("migrateLegacyIndex — keeps the old index", () => {
+  /** A scan whose files go through the real WorkerClient against a scripted worker answer. */
+  function clientBacked(answer: (filePath: string) => unknown) {
+    const handle = new FakeStdioWorker({
+      indexer_reindex: (params) => answer((params as { file_path: string }).file_path),
+    });
+    const client = new WorkerClient();
+    client.attach(handle);
+    const worker = new FakeWorkerIndex();
+    worker.client.indexDocument.mockImplementation(async (filePath: string) => {
+      const docId = await client.indexDocument(filePath);
+      worker.rows.set(resolve(filePath), docId);
+      return docId;
+    });
+    return worker;
+  }
+
+  it("when a caption was rate limited (429): the worker marks the failed result retryable", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      await writeDocs(docs, ["a.md", "chart.md"]);
+      const worker = clientBacked((filePath) =>
+        filePath.endsWith("chart.md")
+          ? { doc_id: "c", doc_name: "chart.md", doc_type: "image", chunk_count: 0, status: "failed",
+              errors: ["OpenAI Vision 호출 실패: Error code: 429"], retryable: true }
+          : { doc_id: `d-${filePath}`, doc_name: "a.md", doc_type: "md", chunk_count: 1, status: "indexed" },
+      );
+      const { deps, removeDirectory } = scanDeps(fx, worker, [docs]);
+      const result = await migrateLegacyIndex(deps);
+      expectKept(result, fx, /1 file\(s\) failed for a reason that may pass/);
+      expect(result?.scan).toMatchObject({ failed: 1, failedTransient: 1 });
+      expect(removeDirectory).not.toHaveBeenCalled();
+    });
+  });
+
+  it("but a failed result the worker does not mark retryable still counts as done", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      await writeDocs(docs, ["a.md", "huge.md"]);
+      const worker = clientBacked((filePath) =>
+        filePath.endsWith("huge.md")
+          ? { doc_id: "h", doc_name: "huge.md", doc_type: "md", chunk_count: 0, status: "failed", errors: ["too large"] }
+          : { doc_id: `d-${filePath}`, doc_name: "a.md", doc_type: "md", chunk_count: 1, status: "indexed" },
+      );
+      const { deps } = scanDeps(fx, worker, [docs]);
+      expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
+    });
+  });
+
+  it("when a file was outside the roots the worker held at that moment (a roots sync may fix it)", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "mapped-drive");
+      await writeDocs(docs, ["a.md"]);
+      const worker = new FakeWorkerIndex();
+      worker.failures.set(
+        resolve(docs, "a.md"),
+        () => new WorkerCallError("file_path: file_path outside allowed roots", "worker-request-failed", WORKER_PATH_NOT_ALLOWED),
+      );
+      const { deps } = scanDeps(fx, worker, [docs]);
+      expectKept(await migrateLegacyIndex(deps), fx, /may pass/);
+    });
+  });
+
+  it("when a folder that held indexed documents now shows no files (an empty, unmounted mountpoint)", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      await writeDocs(docs, ["a.md"]);
+      const mountpoint = join(fx.root, "Volumes", "Archive");
+      await mkdir(mountpoint, { recursive: true }); // lists cleanly, holds nothing
+      const worker = new FakeWorkerIndex();
+      const { deps } = scanDeps(fx, worker, [docs, mountpoint], {
+        previouslyIndexedByFolder: { [docs]: 1, [mountpoint]: 240 },
+      });
+      const result = await migrateLegacyIndex(deps);
+      expectKept(result, fx, /1 folder\(s\) that held indexed documents now show no files .*Archive had 240/);
+      expect(result?.scan?.unreadableFolders).toEqual([]);
+      expect(worker.rows.size).toBe(1); // the mounted folder was still rebuilt
+    });
+  });
+
+  it("an empty folder that never held documents does not block the rebuild", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      await writeDocs(docs, ["a.md"]);
+      const empty = join(fx.root, "new-empty");
+      await mkdir(empty);
+      const { deps } = scanDeps(fx, new FakeWorkerIndex(), [docs, empty], {
+        previouslyIndexedByFolder: { [docs]: 1, [empty]: 0 },
+      });
+      expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
+    });
+  });
+
   it("when a registered folder cannot be read (unmounted volume, gone)", async () => {
     await withLegacy(async (fx) => {
       const gone = join(fx.root, "unmounted-volume");

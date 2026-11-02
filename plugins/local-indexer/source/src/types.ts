@@ -207,6 +207,8 @@ export interface FolderAutoIndexerResult {
   failedTransient?: number;
   /** Files the walk saw, before the supported-type filter. */
   walked?: number;
+  /** The same, per scanned folder (keyed as the folder was given). */
+  walkedByFolder?: Record<string, number>;
   /** Directories whose listing failed (unmounted, permission denied, gone). */
   unreadableFolders?: string[];
   canceled?: boolean;

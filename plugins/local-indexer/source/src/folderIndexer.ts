@@ -298,6 +298,7 @@ export class FolderAutoIndexer {
       let failed = 0;
       let failedTransient = 0;
       let walked = 0;
+      let walkedByFolder: Record<string, number> = {};
       let unreadableFolders: string[] = [];
       let lastError: string | undefined;
       let canceled = false;
@@ -331,6 +332,7 @@ export class FolderAutoIndexer {
         const collected = await this.collectSupportedFiles(readdir, foldersOverride);
         const allFiles = collected.files;
         walked = collected.walked;
+        walkedByFolder = collected.walkedByFolder;
         unreadableFolders = collected.unreadable;
 
         // Pre-filter: 이미 캐시에 있고 mtime이 동일한(up-to-date) 파일은 제외.
@@ -490,6 +492,7 @@ export class FolderAutoIndexer {
           failed,
           failedTransient,
           walked,
+          walkedByFolder,
           unreadableFolders,
           totalIndexed: this.docIdByPath.size,
           canceled,
@@ -711,14 +714,19 @@ export class FolderAutoIndexer {
   private async collectSupportedFiles(
     readdir: typeof import("node:fs/promises").readdir,
     foldersOverride?: string[],
-  ): Promise<{ files: string[]; walked: number; unreadable: string[] }> {
+  ): Promise<{ files: string[]; walked: number; walkedByFolder: Record<string, number>; unreadable: string[] }> {
     const folders = foldersOverride ?? this.folders;
     const unreadable: string[] = [];
     const allFiles = await Promise.all(folders.map((folder) => this.walkDir(folder, readdir, unreadable)));
+    const walkedByFolder: Record<string, number> = {};
+    folders.forEach((folder, i) => {
+      walkedByFolder[folder] = (walkedByFolder[folder] ?? 0) + (allFiles[i]?.length ?? 0);
+    });
     const walkedFiles = [...new Set(allFiles.flat())];
     return {
       files: walkedFiles.filter((filePath) => this.isSupportedFile(filePath)),
       walked: walkedFiles.length,
+      walkedByFolder,
       unreadable,
     };
   }

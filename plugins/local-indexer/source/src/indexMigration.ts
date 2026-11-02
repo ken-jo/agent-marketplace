@@ -13,7 +13,9 @@
  *     fallback set used when that list is missing or unreadable;
  *   - every directory under them could be listed (an unmounted volume or a
  *     folder the OS refuses is not an empty folder);
- *   - with at least one registered folder, the walk saw at least one file;
+ *   - with at least one registered folder, the walk saw at least one file,
+ *     and no folder that the plugin's index state says held documents now
+ *     shows none (an unmounted volume's empty mountpoint lists cleanly);
  *   - the scan was not cancelled, and no file failed for a reason that may
  *     pass (a lost worker, a cancelled or backed-up request). A file the
  *     worker itself judged unindexable (too large, encrypted, unparseable)
@@ -72,6 +74,13 @@ export interface MigrationScan {
   result: FolderAutoIndexerResult;
   folderSource: FolderSource;
   registeredFolders: number;
+  /**
+   * Per registered folder, how many documents the plugin's own index state
+   * (index-state.json, kept beside the old index) recorded under it before
+   * this scan. A folder that had documents and now shows no files at all is
+   * most likely an unmounted volume whose empty mountpoint lists cleanly.
+   */
+  previouslyIndexedByFolder?: Record<string, number>;
 }
 
 /** Persisted across starts so the attempt bound survives a restart. */
@@ -122,6 +131,16 @@ function incompleteScanReason(scan: MigrationScan): string | null {
   }
   if (scan.registeredFolders > 0 && (result.walked ?? 0) === 0) {
     return `the ${scan.registeredFolders} registered folder(s) held no files`;
+  }
+  const vanished = Object.entries(scan.previouslyIndexedByFolder ?? {}).filter(
+    ([folder, before]) => before > 0 && (result.walkedByFolder?.[folder] ?? 0) === 0,
+  );
+  if (vanished.length > 0) {
+    const [folder, before] = vanished[0]!;
+    return (
+      `${vanished.length} folder(s) that held indexed documents now show no files ` +
+      `(${folder} had ${before}; an unmounted volume? If the folder was emptied on purpose, remove it from the index folders)`
+    );
   }
   const transient = result.failedTransient ?? 0;
   if (transient > 0) {

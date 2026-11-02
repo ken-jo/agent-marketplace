@@ -2627,6 +2627,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   function startIndexMigration(): void {
     const location = plugin.getIndexLocation();
     if (!location?.legacyIndexDir || indexMigrationPromise) return;
+    // Nothing left to migrate once a rebuild removed it (the location is read at start).
+    if (!existsSync(join(location.legacyIndexDir, "fts5.sqlite"))) return;
     context.log(
       `index location changed: rebuilding ${location.indexRoot} from the registered folders; ` +
         `${location.legacyIndexDir} is removed once the rebuild is verified`,
@@ -2639,6 +2641,17 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         location,
         workspace,
         runFullScan: async (status) => {
+          // What the plugin's own index state recorded per folder before the scan.
+          const before = await loadMergedIndexState().catch(
+            () => new Map<string, { docId: string; mtimeMs: number; indexedAt: string }>(),
+          );
+          const registered = await loadPersistedFolders();
+          const previouslyIndexedByFolder: Record<string, number> = {};
+          for (const folder of registered) {
+            let n = 0;
+            for (const filePath of before.keys()) if (isWithinFolder(filePath, folder)) n += 1;
+            previouslyIndexedByFolder[folder] = n;
+          }
           let folderSet: { source: FolderSource; count: number } | null = null;
           const result = await handlerImpls.index_scan({
             migration: status,
@@ -2646,7 +2659,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           });
           if (!folderSet) throw new Error("index_scan did not report its folder list");
           const used = folderSet as { source: FolderSource; count: number };
-          return { result, folderSource: used.source, registeredFolders: used.count };
+          return { result, folderSource: used.source, registeredFolders: used.count, previouslyIndexedByFolder };
         },
         verifyIndexed: async () => {
           const expected = new Set(autoIndexer.getIndexedEntries().map((entry) => entry.docId));
@@ -3283,7 +3296,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             pendingFolders.push(folder);
           }
         }
-        const foldersToScan = pendingFolders.length > 0 ? pendingFolders : allFolders;
+        // The location rebuild walks every registered folder: a folder whose
+        // summary reads "empty" may be an unmounted volume, and only a walk
+        // reports it unreadable or empty.
+        const foldersToScan = opts.migration
+          ? allFolders
+          : pendingFolders.length > 0 ? pendingFolders : allFolders;
         hostApi.logEvent("info", "index_scan.target_folders", {
           total: allFolders.length,
           pending: pendingFolders.length,
@@ -4270,7 +4288,21 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         if (typeof p.folder === "string" && p.folder.length > 0) {
           return handlerImpls.index_refresh_folder(payload);
         }
-        return handlerImpls.index_scan();
+        const result = await handlerImpls.index_scan();
+        // A full scan the user asked for resets the rebuild's attempt bound:
+        // the cause may be fixed now (volume mounted, permission granted).
+        // When automatic retries had stopped, try the rebuild once more.
+        const stopped = indexMigrationStatus?.retriesExhausted === true;
+        try {
+          await indexMigrationAttempts.clear();
+        } catch (err) {
+          hostApi.logEvent("warn", "local_indexer.index_migration.ledger_reset_failed", { error: (err as Error).message });
+        }
+        if (stopped) {
+          hostApi.logEvent("info", "local_indexer.index_migration.manual_retry", {});
+          startIndexMigration();
+        }
+        return result;
       },
       index_scan_cancel: handlerImpls.index_scan_cancel,
       index_scan_status: handlerImpls.index_scan_status,

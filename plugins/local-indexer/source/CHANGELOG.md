@@ -40,23 +40,36 @@ rebuilds the index once (see below).
     counts), not the default set used when that list is missing or corrupt;
   - every directory could be listed, so an unmounted volume or a folder the
     OS refuses keeps the old index;
-  - registered folders held at least one file;
-  - nothing was cancelled, and no file failed for a reason that may pass (a
-    lost worker, a cancelled request). A file the worker itself rejects (too
-    large, encrypted) fails the same way every time and counts as done;
+  - registered folders held at least one file, and no folder that the
+    plugin's index state says held documents now shows none (an unmounted
+    volume's empty mountpoint lists cleanly). The rebuild walks every
+    registered folder, including ones whose summary reads empty;
+  - nothing was cancelled, and no file failed for a reason that may pass: a
+    lost worker, a cancelled request, a path outside the roots the worker
+    held at that moment, or a caption call that was rate limited, timed out,
+    hit a 5xx, lost its connection or was refused egress (the worker marks
+    such a failed result `retryable`). A file the worker itself rejects (too
+    large, encrypted, missing caption config) fails the same way every time
+    and counts as done;
   - every document the scan indexed is in the worker.
 
   Otherwise the old directory is kept and the next start tries again. After
   5 attempts the automatic rebuild stops, the old directory stays, and the
-  status says why. A cancelled scan does not count as an attempt.
-- `documents_list` is paged (`limit` up to 1000, keyset cursor `after`), so
-  a large index no longer exceeds the 16 MiB frame. `runtime_info` counts
+  status says why. A cancelled scan does not count as an attempt. A full
+  scan the user starts resets the count and, if retries had stopped, runs
+  the rebuild once more.
+- `documents_list` is paged (`limit` up to 1000, keyset cursor `after`), and
+  each page also stops before three quarters of the negotiated frame limit,
+  so long multi-byte paths cannot overflow a frame. `runtime_info` counts
   documents in SQL.
+- A path outside the worker's allowed roots is refused with its own code
+  (-32011) instead of invalid params, since the roots are runtime state.
 
 ### Fixed
 
-- The Azure OpenAI Responses caption errors were saved in a broken encoding
-  and read as mojibake. They now read as the other caption errors do.
+- The Azure OpenAI Responses caption errors, including the call failure,
+  were saved in a broken encoding and read as mojibake. They now read as
+  the other caption errors do.
 - The worker keeps to the frame limit the host announces in its hello, and
   refuses a frame one byte over it. A worker request with no timeout waits
   for a free request slot, and a timeout covers the slot wait and the answer
