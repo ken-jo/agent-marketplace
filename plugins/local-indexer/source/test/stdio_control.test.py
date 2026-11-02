@@ -521,3 +521,17 @@ def test_claim_stdout_sends_output_buffered_before_the_claim_to_stderr() -> None
     proc = subprocess.run([sys.executable, "-c", script], capture_output=True, timeout=30, check=True)
     assert proc.stdout == b'{"frame":1}\n'
     assert b"import-time noise" in proc.stderr
+
+
+@pytest.mark.parametrize("limit", [16, sc.FRAME_BYTES_MAX])
+def test_read_frame_line_takes_exactly_the_limit_and_refuses_one_byte_more(limit: int) -> None:
+    exact = b"a" * limit
+    reader = io.BytesIO(exact + b"\n" + b"b" * (limit + 1) + b"\n")
+    assert sc.read_frame_line(reader, limit) == exact + b"\n"
+    with pytest.raises(sc.FrameTooLarge):
+        sc.read_frame_line(reader, limit)
+    # A last frame without its newline is read whole at the limit, refused past it.
+    assert sc.read_frame_line(io.BytesIO(exact), limit) == exact
+    with pytest.raises(sc.FrameTooLarge):
+        sc.read_frame_line(io.BytesIO(exact + b"c"), limit)
+    assert sc.read_frame_line(io.BytesIO(b""), limit) == b""

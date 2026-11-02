@@ -120,6 +120,19 @@ def encode_frame(frame: Mapping[str, Any], limit: int = FRAME_BYTES_MAX) -> byte
     return data + b"\n"
 
 
+def read_frame_line(reader: Any, limit: int) -> bytes:
+    """Read one frame line of at most ``limit`` bytes before its newline.
+
+    Asks for ``limit + 1`` bytes, the largest frame plus its newline, so a
+    longer line is never buffered whole. Returns b"" at EOF, and raises
+    ``FrameTooLarge`` for a line longer than ``limit``.
+    """
+    line = reader.readline(limit + 1)
+    if len(line.rstrip(b"\n")) > limit:
+        raise FrameTooLarge(f"frame line of more than {limit} bytes")
+    return line
+
+
 class StdioPeer:
     """Both directions of worker stdio control v1 over two file descriptors."""
 
@@ -351,15 +364,13 @@ class StdioPeer:
         reason = "stdin-eof"
         try:
             while True:
-                # At most the largest frame plus its newline. A line that comes
-                # back longer than the limit without a newline is too large;
-                # one at exactly the limit with its newline is not.
-                line = reader.readline(FRAME_BYTES_MAX + 1)
-                if not line:
-                    break
-                if len(line.rstrip(b"\n")) > FRAME_BYTES_MAX:
-                    _log("worker.control.oversized_frame", bytes=len(line))
+                try:
+                    line = read_frame_line(reader, FRAME_BYTES_MAX)
+                except FrameTooLarge as exc:
+                    _log("worker.control.oversized_frame", error=str(exc))
                     reason = "oversized-frame"
+                    break
+                if not line:
                     break
                 self._post(self._on_line, line)
         except Exception as exc:  # pragma: no cover - a vanished descriptor
@@ -491,6 +502,7 @@ def claim_stdout_for_frames() -> int:
 
 
 __all__ = [
+    "read_frame_line",
     "CANCEL_METHOD",
     "FRAME_BYTES_MAX",
     "FrameTooLarge",
