@@ -1,27 +1,30 @@
-"""Embedding-key channel: the host-injected env channel under the retired
-product prefix (``RETIRED_INDEXER_KEY_ENV`` below) was removed. The worker
-now boots with an empty key and receives the credential exclusively through the runtime ``/indexer/set_egress_token``
-push, which must reach ALL THREE key consumers — the indexer, the
-``SearchService`` (query-time vector search), and the ``AppState`` copy that
-backs the caption fallback. The only env channel kept is the user's own
-``OPENAI_API_KEY`` dev opt-in (gated host-side by ``AVE_ALLOW_ENV_API_KEY=1``).
+"""Embedding credential: the worker holds none.
+
+The host-injected env channel under the retired product prefix
+(``RETIRED_INDEXER_KEY_ENV`` below) was removed, and the worker's provider
+egress is relayed to the plugin, which supplies the credential per request.
+What the plugin pushes is only whether a credential exists
+(``indexer_set_embedding_egress``), and that push must reach BOTH consumers:
+the indexer and the ``SearchService`` (query-time vector search). The only env
+channel kept is the user's own ``OPENAI_API_KEY`` dev opt-in on the direct
+(eval) path, and it is off whenever egress is relayed.
 
 These tests prove:
     * ``OpenAIEmbeddingClient`` no longer consults ``RETIRED_INDEXER_KEY_ENV``;
-    * the worker boots with an empty key on all three consumers;
-    * the push feeds all three, and — the load-bearing assertion —
-      ``SearchService.search_vector`` returns nothing BEFORE the push (no key
-      ⇒ no embedding client ⇒ BM25-only) and real hits AFTER it;
-    * ``/shutdown`` scrubs the key from all three consumers.
+    * the relayed worker boots with embedding off on both consumers;
+    * the push turns both on, and — the load-bearing assertion —
+      ``SearchService.search_vector`` returns nothing BEFORE the push
+      (BM25-only) and real hits AFTER it;
+    * ``worker_shutdown`` turns both off and closes the stores.
 """
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _WORKER_DIR = _REPO_ROOT / "worker"
@@ -32,7 +35,7 @@ sys.path.insert(0, str(_EVAL_DIR))
 from embedding_client import OpenAIEmbeddingClient  # noqa: E402
 from local_indexer import LocalIndexer  # noqa: E402
 from local_indexer_search import SearchService  # noqa: E402
-from local_indexer_worker import AppState, create_app  # noqa: E402
+from local_indexer_worker import AppState, build_handlers  # noqa: E402
 
 # The removed channel's real variable name. Its prefix is the retired product
 # name, built from code points the way tools/check-retired-name.mjs builds it,
@@ -103,9 +106,20 @@ def test_empty_string_arg_falls_through_to_openai_optin(
 
 
 # ----------------------------------------------------------------------
-# Push lifecycle — boot empty, push feeds all three, search_vector revives
+# Push lifecycle — boot off, push turns both on, search_vector revives
 # ----------------------------------------------------------------------
-def test_push_feeds_all_three_and_revives_vector_search(
+class _Relay:
+    """Stands in for ``stdio_egress.EgressRelay``; never reached here."""
+
+    def http_client(self, channel: str) -> object:
+        raise AssertionError(f"no provider call expected ({channel})")
+
+
+def _call(handlers: dict, method: str, params: object = None) -> object:
+    return asyncio.run(handlers[method](params))
+
+
+def test_push_feeds_both_and_revives_vector_search(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     kiwipiepy = pytest.importorskip("kiwipiepy")  # noqa: F841
@@ -130,16 +144,17 @@ def test_push_feeds_all_three_and_revives_vector_search(
         workspace=str(tmp_path / "ws"),
         sqlite_path=str(tmp_path / "fts5.sqlite"),
         lance_path=str(tmp_path / "vectors.lance"),
-        openai_api_key="",  # worker boots with NO resident key
+        openai_api_key="",
         tokenizer=tokenizer,
         embedding_client=embedder,
         vector_store=store,
     )
     indexer.index_file(str(doc), mode="md")
 
-    # The SearchService boots WITHOUT an injected embedding client and WITHOUT a
-    # key — exactly the post-env-removal boot state. Its query-time vector path
-    # is gated on the pushed key.
+    relay = _Relay()
+    # The SearchService boots relayed WITHOUT an injected embedding client:
+    # exactly the worker's boot state. Its query-time vector path waits for
+    # the plugin's push.
     search = SearchService(
         sqlite_path=indexer.sqlite_path,
         tokenizer=tokenizer,
@@ -147,124 +162,104 @@ def test_push_feeds_all_three_and_revives_vector_search(
         vector_store=store,
         openai_api_key="",
         embedding_provider="openai",
+        egress_relay=relay,
     )
-    state = AppState(
-        indexer=indexer, search=search, runtime_info={"pid": 1}, openai_api_key=""
+    relayed_indexer = LocalIndexer(
+        workspace=str(tmp_path / "ws2"),
+        sqlite_path=str(tmp_path / "fts5-2.sqlite"),
+        lance_path=str(tmp_path / "vectors-2.lance"),
+        openai_api_key="",
+        egress_relay=relay,
     )
+    state = AppState(indexer=relayed_indexer, search=search, runtime_info={"pid": 1})
+    handlers = build_handlers(state, egress_relay=relay)
 
-    # All three boot empty.
-    assert indexer._openai_api_key == ""
-    assert search._openai_api_key == ""
-    assert state.openai_api_key == ""
+    assert relayed_indexer._embedding_egress_enabled is False
+    assert search._embedding_egress_enabled is False
 
     query = "quarterly budget report revenue"
 
-    # BEFORE the push: no key ⇒ no embedding client ⇒ vector search empty
-    # (search silently degrades to BM25-only). This is the exact failure the
-    # search-key-feed fix prevents.
+    # BEFORE the push: no embedding client, so vector search is empty and
+    # search degrades to BM25-only.
     assert search.search_vector(query, top_k=5) == []
+    assert relayed_indexer.get_embedding_client() is None
 
-    # The pushed key rebuilds the embedding client. In production that is the
-    # real OpenAI client; here we substitute the deterministic offline embedder
-    # so the query embeds into the same space the corpus was indexed in.
-    monkeypatch.setattr(
-        "embedding_client.create_embedding_client",
-        lambda **kwargs: embedder,
-    )
-    monkeypatch.setattr("local_indexer_worker.SHUTDOWN_TOKEN", "secret-token")
+    # After the push the client is rebuilt. In production it is the relayed
+    # OpenAI client; here the deterministic offline embedder stands in so the
+    # query embeds into the same space the corpus was indexed in.
+    built: list[dict] = []
 
-    client = TestClient(create_app(state))
-    resp = client.post(
-        "/indexer/set_egress_token",
-        headers={"x-ave-shutdown-token": "secret-token"},
-        json={"token": "sk-pushed"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["data"]["hasEmbeddingKey"] is True
+    def _factory(**kwargs: object) -> object:
+        built.append(kwargs)
+        return embedder
 
-    # ALL THREE consumers now hold the pushed key (indexer + search + the
-    # AppState copy that backs the caption fallback).
-    assert indexer._openai_api_key == "sk-pushed"
-    assert search._openai_api_key == "sk-pushed"
-    assert state.openai_api_key == "sk-pushed"
+    monkeypatch.setattr("embedding_client.create_embedding_client", _factory)
 
-    # AFTER the push: the SEARCH path has a key ⇒ vector search returns the
-    # indexed chunk. This is the load-bearing proof that the push reaches the
-    # search consumer, not just the indexer.
+    assert _call(handlers, "indexer_set_embedding_egress", {"enabled": True}) == {"embeddingEgress": True}
+
+    assert relayed_indexer._embedding_egress_enabled is True
+    assert search._embedding_egress_enabled is True
+
+    # AFTER the push the SEARCH path has an embedding client, so vector search
+    # returns the indexed chunk: the push reaches the search consumer, not just
+    # the indexer.
     hits = search.search_vector(query, top_k=5)
-    assert hits, "vector search returned no hits after the key push"
+    assert hits, "vector search returned no hits after the push"
+    # Built relayed: no key, no endpoint, the relay passed through.
+    assert built[0]["api_key"] is None
+    assert built[0]["endpoint"] is None
+    assert built[0]["egress_relay"] is relay
 
 
-def test_shutdown_scrubs_embedding_key_from_all_consumers(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_push_rejects_a_missing_flag(tmp_path: Path) -> None:
+    from stdio_control import RequestError  # noqa: E402
+
+    relay = _Relay()
     indexer = LocalIndexer(
         workspace=str(tmp_path / "ws"),
         sqlite_path=str(tmp_path / "fts5.sqlite"),
         lance_path=str(tmp_path / "vectors.lance"),
-        openai_api_key="sk-live",
+        openai_api_key="",
+        egress_relay=relay,
     )
-    search = SearchService(
-        sqlite_path=str(tmp_path / "fts5.sqlite"),
-        openai_api_key="sk-live",
-        embedding_provider="openai",
-    )
-    state = AppState(
-        indexer=indexer, search=search, runtime_info={"pid": 1}, openai_api_key="sk-live"
-    )
-
-    # Neutralise the post-response shutdown timer: with a fake server attached,
-    # _request_shutdown flips ``should_exit`` instead of os.kill-ing pytest.
-    class _FakeServer:
-        should_exit = False
-
-    state.server = _FakeServer()
-
-    monkeypatch.setattr("local_indexer_worker.SHUTDOWN_TOKEN", "secret-token")
-    client = TestClient(create_app(state))
-    resp = client.post(
-        "/shutdown", headers={"x-ave-shutdown-token": "secret-token"}
-    )
-    assert resp.status_code == 200
-
-    # Memory scrub: the key is gone from all three consumers.
-    assert indexer._openai_api_key is None
-    assert search._openai_api_key is None
-    assert state.openai_api_key == ""
+    search = SearchService(sqlite_path=str(tmp_path / "fts5.sqlite"), egress_relay=relay)
+    handlers = build_handlers(AppState(indexer=indexer, search=search, runtime_info={}), egress_relay=relay)
+    with pytest.raises(RequestError) as excinfo:
+        _call(handlers, "indexer_set_embedding_egress", {})
+    assert excinfo.value.code == -32602
+    assert indexer._embedding_egress_enabled is False
 
 
-def test_shutdown_closes_storage_handles(
+def test_shutdown_turns_egress_off_and_closes_storage(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    relay = _Relay()
     indexer = LocalIndexer(
         workspace=str(tmp_path / "ws"),
         sqlite_path=str(tmp_path / "fts5.sqlite"),
         lance_path=str(tmp_path / "vectors.lance"),
-        openai_api_key="sk-live",
+        openai_api_key="",
+        egress_relay=relay,
     )
     search = SearchService(
         sqlite_path=str(tmp_path / "fts5.sqlite"),
-        openai_api_key="sk-live",
         embedding_provider="openai",
+        egress_relay=relay,
     )
-    state = AppState(
-        indexer=indexer, search=search, runtime_info={"pid": 1}, openai_api_key="sk-live"
-    )
+    state = AppState(indexer=indexer, search=search, runtime_info={"pid": 1}, openai_api_key="sk-dev")
+    handlers = build_handlers(state, egress_relay=relay)
+    _call(handlers, "indexer_set_embedding_egress", {"enabled": True})
 
-    class _FakeServer:
-        should_exit = False
-
-    state.server = _FakeServer()
     close_calls: list[str] = []
-
     monkeypatch.setattr(indexer, "close", lambda: close_calls.append("indexer"))
     monkeypatch.setattr(search, "close", lambda: close_calls.append("search"))
-    monkeypatch.setattr("local_indexer_worker.SHUTDOWN_TOKEN", "secret-token")
 
-    client = TestClient(create_app(state))
-    resp = client.post(
-        "/shutdown", headers={"x-ave-shutdown-token": "secret-token"}
-    )
+    assert _call(handlers, "worker_shutdown") == {"bye": True}
 
-    assert resp.status_code == 200
+    assert indexer._embedding_egress_enabled is False
+    assert search._embedding_egress_enabled is False
+    assert state.openai_api_key == ""
+    assert close_calls == ["indexer", "search"]
+    # Closing twice (the shutdown method, then stdin EOF) closes once.
+    state.close_storage()
     assert close_calls == ["indexer", "search"]

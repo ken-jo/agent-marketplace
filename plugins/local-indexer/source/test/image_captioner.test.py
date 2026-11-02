@@ -3,7 +3,7 @@
 The captioner forwards a file's bytes to a cloud vision provider. Every
 provider path goes through ``_image_to_data_url``, so that one function is
 where the file is validated: the extension must be one the providers accept,
-the size must fit under ``MAX_IMAGE_BYTES`` (checked on ``st_size`` before
+the size must fit under ``CAPTION_IMAGE_BYTES_MAX`` (checked on ``st_size`` before
 the file is read), and the leading bytes must carry the signature the
 extension claims. A model identifier is checked against the naming rule of
 the provider that will receive it, before any SDK client is constructed.
@@ -107,27 +107,28 @@ def test_oversized_file_is_rejected_before_it_is_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     big = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG) - 1)
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG) - 1)
 
     def _no_read(*args: object, **kwargs: object) -> None:
-        raise AssertionError("file opened despite exceeding MAX_IMAGE_BYTES")
+        raise AssertionError("file opened despite exceeding CAPTION_IMAGE_BYTES_MAX")
 
     monkeypatch.setattr(Path, "open", _no_read)
-    with pytest.raises(ic.CaptionError, match="너무 큽니다"):
+    with pytest.raises(ic.CaptionError, match="캡션 한도"):
         ic._image_to_data_url(big)
 
 
-def test_size_cap_is_azure_openai_per_image_limit() -> None:
-    # 20 MB decimal — Azure OpenAI's documented per-image vision limit; a
-    # 20 MiB cap (20,971,520) would admit files Azure refuses.
-    assert ic.MAX_IMAGE_BYTES == 20_000_000
+def test_size_cap_is_the_relay_cap() -> None:
+    # 11 MiB: the largest image whose base64 data URL still fits one 16 MiB
+    # worker control frame with the request around it. It is below Azure's own
+    # 20 MB per-image limit, so it is the binding one.
+    assert ic.CAPTION_IMAGE_BYTES_MAX == 11 * 1024 * 1024
 
 
 def test_file_that_grows_after_the_stat_is_still_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     growing = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG) + 8)
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG) + 8)
     real_open = Path.open
 
     def grow_then_open(self: Path, *args: object, **kwargs: object) -> object:
@@ -145,7 +146,7 @@ def test_read_is_bounded_to_one_byte_over_the_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     png = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG))
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG))
     real_open = Path.open
     requested: list[object] = []
 
@@ -170,7 +171,7 @@ def test_read_is_bounded_to_one_byte_over_the_cap(
 
 def test_file_at_the_cap_is_accepted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     exact = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG))
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG))
     assert ic._image_to_data_url(exact).startswith("data:image/png;base64,")
 
 
