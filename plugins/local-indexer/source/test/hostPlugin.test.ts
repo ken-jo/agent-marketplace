@@ -962,7 +962,17 @@ describe("hostPlugin createPlugin", () => {
 
     it("the rebuild scan walks every registered folder, even ones whose summary reads empty", async () => {
       await legacyIndexFixture();
-      indexedAsWorkerHolds(await savedFolders());
+      const docs = await savedFolders();
+      indexedAsWorkerHolds(docs);
+      // A mixed set: docs/ holds a file (pending), mount/ is empty (summary
+      // "empty"). A normal scan walks only the pending folder.
+      await writeFile(join(docs, "note.md"), "# note");
+      const mount = join(hostRoot, "mount");
+      await mkdir(mount, { recursive: true });
+      await writeFile(
+        join(hostRoot, ".local-indexer-workspace", "folders.json"),
+        JSON.stringify({ folders: [docs, mount] }),
+      );
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
@@ -970,9 +980,7 @@ describe("hostPlugin createPlugin", () => {
       const targets = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls
         .filter(([, event]: [string, string]) => event === "index_scan.target_folders")
         .map(([, , fields]: [string, string, any]) => fields);
-      // docs/ is empty on disk, so its summary is "empty" and a normal scan
-      // would skip it; the rebuild must walk it.
-      expect(targets.at(0)).toMatchObject({ total: 1, pending: 0, scanning: [join(hostRoot, "docs")] });
+      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: [docs, mount] });
       await plugin.stop();
     });
 
@@ -999,6 +1007,25 @@ describe("hostPlugin createPlugin", () => {
       const after = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
       expect(after.filter((e: string) => e === "local_indexer.index_migration.rebuilding")).toHaveLength(1);
       expect(after.filter((e: string) => e === "local_indexer.index_migration.manual_retry")).toHaveLength(1);
+      await plugin.stop();
+    });
+
+    it("a manual full scan starts no rebuild once the old index was removed by hand", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "x" }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).retriesExhausted).toBe(true);
+      await rm(legacy, { recursive: true, force: true }); // the user followed the banner
+      await plugin.handlers.index_scan();
+      await new Promise((r) => setTimeout(r, 20));
+      const events = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(events).toContain("local_indexer.index_migration.manual_retry");
+      expect(events).not.toContain("local_indexer.index_migration.rebuilding");
+      // The stale "kept the old index" status goes with it.
+      expect((await plugin.handlers.index_scan_status()).indexMigration).toBeNull();
+      expect(events).toContain("local_indexer.index_migration.cleared");
       await plugin.stop();
     });
 

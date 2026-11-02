@@ -2627,8 +2627,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   function startIndexMigration(): void {
     const location = plugin.getIndexLocation();
     if (!location?.legacyIndexDir || indexMigrationPromise) return;
-    // Nothing left to migrate once a rebuild removed it (the location is read at start).
-    if (!existsSync(join(location.legacyIndexDir, "fts5.sqlite"))) return;
+    // Nothing left to migrate once a rebuild, or the user, removed it (the
+    // location is read at start). A kept-old status about it is stale then.
+    if (!existsSync(join(location.legacyIndexDir, "fts5.sqlite"))) {
+      if (indexMigrationStatus?.phase === "kept-old") {
+        hostApi.logEvent("info", "local_indexer.index_migration.cleared", { legacyIndexDir: location.legacyIndexDir });
+        indexMigrationStatus = null;
+      }
+      return;
+    }
     context.log(
       `index location changed: rebuilding ${location.indexRoot} from the registered folders; ` +
         `${location.legacyIndexDir} is removed once the rebuild is verified`,
