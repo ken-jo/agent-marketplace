@@ -1181,35 +1181,52 @@ describe("hostPlugin createPlugin", () => {
       await plugin.stop();
     });
 
-    it("waives the old vectors only when the settings turn embedding off (plugin key mode, no key)", async () => {
+    it("a plugin key that reads null, or a key store that throws, keeps the old vectors and says what to do", async () => {
+      for (const read of [async () => null, async () => { throw new Error("keychain locked"); }]) {
+        const legacy = await legacyIndexFixture();
+        await oldIndexHolds(await savedFolders());
+        for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
+        const { ctx, events } = makeContext(hostRoot, {}, {
+          pluginDataDir: hostRoot,
+          configValues: { apiKeySource: "plugin", embeddingProvider: "openai" },
+        });
+        ctx.hostApi.getSecret = vi.fn(read) as any;
+        const plugin = await createPlugin(ctx);
+        await plugin.onPublished?.();
+        const status = await settledMigration(plugin);
+        expect(status).toMatchObject({ phase: "kept-old", coverage: { undecidedVectors: 2, embedding: "no-key" } });
+        expect(status.reason).toMatch(/embedding API key could not be read or is not set.*re-enter the key/);
+        expect(migrationNotices(events).at(-1)).toMatch(/re-enter the key/);
+        expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+        await plugin.stop();
+      }
+    });
+
+    it("the one setting that reads as embedding off (host key withheld from a custom endpoint) is refused by the scan itself", async () => {
+      // There is no switch that turns embedding off and no "no provider"
+      // choice, so the only "off" is a configuration index_scan rejects
+      // before it starts: the rebuild keeps the old index for that reason,
+      // never by waiving vectors.
       const legacy = await legacyIndexFixture();
       await oldIndexHolds(await savedFolders());
       for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
-        configValues: { apiKeySource: "plugin", embeddingProvider: "openai" },
+        configValues: {
+          apiKeySource: "host",
+          hostApiVendor: "openai",
+          embeddingProvider: "openai",
+          embeddingEndpoint: "https://embeddings.example.net/v1",
+        },
       });
-      ctx.hostApi.getSecret = vi.fn(async () => null) as any;
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
-      expect(await settledMigration(plugin)).toMatchObject({ phase: "completed", coverage: { covered: 2 } });
-      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/the rebuild scan failed: .*embeddingEndpoint/);
+      expect(status.coverage).toBeUndefined();
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
-
-      // The same with a key store that throws: undecided, so the old index stays.
-      const legacy2 = await legacyIndexFixture();
-      await oldIndexHolds(await savedFolders());
-      for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
-      const again = makeContext(hostRoot, {}, {
-        pluginDataDir: hostRoot,
-        configValues: { apiKeySource: "plugin", embeddingProvider: "openai" },
-      });
-      again.ctx.hostApi.getSecret = vi.fn(async () => { throw new Error("keychain locked"); }) as any;
-      const plugin2 = await createPlugin(again.ctx);
-      await plugin2.onPublished?.();
-      expect(await settledMigration(plugin2)).toMatchObject({ phase: "kept-old", coverage: { undecidedVectors: 2 } });
-      expect((await stat(join(legacy2, "fts5.sqlite"))).isFile()).toBe(true);
-      await plugin2.stop();
     });
 
     it("indexes an old document from outside the folders (a dropped file) directly, then completes", async () => {

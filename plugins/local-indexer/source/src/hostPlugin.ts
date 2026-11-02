@@ -2416,11 +2416,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
   /**
    * Whether embedding is available now, as the rebuild's coverage check needs
-   * it: "off" only when the settings say so (plugin-key mode with no key
-   * stored, or a custom endpoint the host key is withheld from), "unknown"
-   * when it cannot be determined (the host refused or failed the lease, the
-   * key store threw). resolveHostKeyHandle folds a refusal into null for its
-   * other callers; this asks the host directly so a refusal is not "off".
+   * it. "off" only when the settings make embedding unusable: host-key mode
+   * with a custom endpoint the host key is withheld from. The settings have
+   * no switch that turns embedding off and no "no provider" choice
+   * (embeddingProvider is openai or azure, default openai), so plugin-key
+   * mode is never "off": a key the store does not return, or a store that
+   * throws, is "no-key" (undecided; the user can re-enter it). A refused or
+   * failed host lease is "unknown". resolveHostKeyHandle folds a refusal
+   * into null for its other callers; this asks the host directly.
    */
   async function embeddingStateNow(): Promise<EmbeddingState> {
     if (isUntrustedHostEndpoint(getConfig("embeddingEndpoint"))) return "off";
@@ -2429,11 +2432,13 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       try {
         stored = await hostApi.getSecret(`plugin.${context.pluginId}.embeddingApiKey`);
       } catch {
-        return "unknown";
+        return "no-key";
       }
       if (typeof stored === "string" && stored.length > 0) return "on";
       if (process.env.AVE_ALLOW_ENV_API_KEY === "1" && process.env.OPENAI_API_KEY) return "on";
-      return "off";
+      // Null may be a key never entered, or one the host withholds for now
+      // (a gate denial, a key being restored): not proof embedding is off.
+      return "no-key";
     }
     try {
       const lease = await requestHostLease("embedding");

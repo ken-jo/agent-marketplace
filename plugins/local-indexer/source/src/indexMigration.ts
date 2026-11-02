@@ -47,12 +47,13 @@ export const BACKFILL_STOP_AFTER = 3;
 export type FolderSource = "saved" | "fallback";
 
 /**
- * Whether embedding is available now: "on", "off" only when the settings say
- * so (no plugin key stored, or a custom endpoint the host key is withheld
- * from), and "unknown" when it could not be determined (a refused or failed
- * host lease, an unreadable key store).
+ * Whether embedding is available now: "on"; "off" only when the settings
+ * make it unusable (a custom endpoint the host key is withheld from);
+ * "no-key" when the plugin's own key could not be read or is not set; and
+ * "unknown" when it could not be determined (a refused or failed host
+ * lease). Only "off" waives the old vectors.
  */
-export type EmbeddingState = "on" | "off" | "unknown";
+export type EmbeddingState = "on" | "off" | "no-key" | "unknown";
 
 /** One document the old index held as indexed. */
 export interface LegacyManifestDocument {
@@ -126,6 +127,8 @@ export interface IndexCoverage {
   missingRetryable: number;
   /** Documents re-embedded during this attempt, and how many got vectors. */
   backfill?: { attempted: number; embedded: number };
+  /** The embedding state the vector requirement was decided against. */
+  embedding?: EmbeddingState;
 }
 
 /** What the plugin shows and logs about the rebuild. */
@@ -432,6 +435,7 @@ export async function assessCoverage(
     unavailableFolders: [],
     vanishedFolders: [],
     missingRetryable: 0,
+    embedding,
   };
   const vectorGaps: string[] = [];
   const outsidePending: string[] = [];
@@ -602,8 +606,13 @@ function coverageGapReason(coverage: IndexCoverage): string | null {
   }
   if (coverage.undecidedVectors > 0) {
     parts.push(
-      `whether embedding is available could not be determined, so the vectors of ` +
-        `${coverage.undecidedVectors} document(s) cannot be waived`,
+      coverage.embedding === "no-key"
+        ? `the embedding API key could not be read or is not set, so the vectors of ` +
+            `${coverage.undecidedVectors} document(s) cannot be rebuilt or waived; re-enter the key in the ` +
+            "settings (or switch the key source to the host), or delete the old index by hand if its " +
+            "vectors are not needed"
+        : `whether embedding is available could not be determined, so the vectors of ` +
+            `${coverage.undecidedVectors} document(s) cannot be waived`,
     );
   }
   return parts.length > 0 ? parts.join("; ") : null;

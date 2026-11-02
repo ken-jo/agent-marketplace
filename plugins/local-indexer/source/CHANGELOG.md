@@ -72,10 +72,12 @@ rebuilds the index once (see below).
     limit was lowered) stays required; the status names how many and the
     first paths, so the limit can be raised or the files removed.
   - Every other old document must be in the new index. If it had vectors,
-    it must have vectors there too, unless the settings turn embedding off
-    (plugin-key mode with no key stored, or a custom endpoint the host key
-    is withheld from). A refused or failed host lease, or a key store that
-    throws, leaves the vectors undecided, and the old index stays. Documents
+    it must have vectors there too, unless the settings make embedding
+    unusable (a custom endpoint the host key is withheld from; the settings
+    have no switch that turns embedding off). A plugin key that reads null
+    or a key store that throws leaves the vectors undecided, and the status
+    says to re-enter the key or switch the key source to the host; a refused
+    or failed host lease is undecided too. Either way the old index stays. Documents
     embedded without vectors during the rebuild are re-embedded before the
     check, and the pass stops after 3 in a row stay without vectors.
   - A folder that cannot be listed or resolved, a folder that held old

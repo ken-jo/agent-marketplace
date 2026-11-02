@@ -347,7 +347,7 @@ describe("migrateLegacyIndex — completes when the new index covers the old one
       const { deps } = scanDeps(fx, worker, [join(fx.root, "docs")], await oldIndexOf(paths, false));
       expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
     });
-    // The old documents had vectors, but no key is configured now: they cannot be rebuilt.
+    // The old documents had vectors, but the settings make embedding unusable now: waived.
     await withLegacy(async (fx) => {
       const paths = await writeDocs(join(fx.root, "docs"), ["a.md"]);
       const worker = new FakeWorker();
@@ -837,6 +837,10 @@ describe("migrateLegacyIndex — coverage fails closed", () => {
       expect: "completed" },
     { name: "embedding state unknown (lease refused), vectors missing", folders: ["/d"], doc: "/d/a.pdf",
       hadVectors: true, embedding: "unknown", held: { path: "/d/a.pdf", contentState: "embed_failed" },
+      expect: "kept-old" },
+    { name: "plugin key reads null (embedding configured), vectors missing", folders: ["/d"], doc: "/d/a.pdf",
+      hadVectors: true, embedding: "no-key", held: { path: "/d/a.pdf", contentState: "embed_failed" },
+      reason: /embedding API key could not be read or is not set, so the vectors of 1 document\(s\) cannot be rebuilt or waived; re-enter the key/,
       expect: "kept-old" },
     { name: "embedding off in the settings, vectors missing (waived)", folders: ["/d"], doc: "/d/a.pdf",
       hadVectors: true, embedding: "off", held: { path: "/d/a.pdf", contentState: "embed_failed" },
