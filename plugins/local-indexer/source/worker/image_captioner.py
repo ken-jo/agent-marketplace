@@ -392,14 +392,14 @@ def _caption_azure_openai_responses(
         endpoint = EGRESS_BASE_URL
     if not endpoint:
         raise CaptionError(
-            "Azure OpenAI Responses 罹≪뀡???ъ슜?섎젮硫?endpoint (由ъ냼??root URL) 媛 ?꾩슂?⑸땲??"
-            "(?? https://<resource>.openai.azure.com/ ?먮뒗 .cognitiveservices.azure.com/)."
+            "Azure OpenAI Responses 캡션을 사용하려면 endpoint (리소스 root URL) 가 필요합니다 "
+            "(예: https://<resource>.openai.azure.com/ 또는 .cognitiveservices.azure.com/)."
         )
     if egress_relay is None and not api_key:
-        raise CaptionError("Azure OpenAI Responses 罹≪뀡???ъ슜?섎젮硫?apiKey 媛 ?꾩슂?⑸땲??")
+        raise CaptionError("Azure OpenAI Responses 캡션을 사용하려면 apiKey 가 필요합니다.")
     if not model:
         raise CaptionError(
-            "Azure OpenAI Responses 罹≪뀡???ъ슜?섎젮硫?model (vision-capable deployment ?대쫫) ???꾩슂?⑸땲??"
+            "Azure OpenAI Responses 캡션을 사용하려면 model (vision-capable deployment 이름) 이 필요합니다."
         )
 
     try:
@@ -407,13 +407,13 @@ def _caption_azure_openai_responses(
         from urllib.parse import urlparse
     except Exception as exc:  # pragma: no cover - dep guard
         raise CaptionError(
-            f"openai SDK ??AzureOpenAI ?대옒??濡쒕뱶 ?ㅽ뙣: {exc}"
+            f"openai SDK 의 AzureOpenAI 클래스 로드 실패: {exc}"
         ) from exc
 
     parsed = urlparse(endpoint)
     if not parsed.scheme or not parsed.netloc:
         raise CaptionError(
-            f"Azure OpenAI endpoint URL ?뺤떇???섎せ?먯뒿?덈떎: {endpoint}"
+            f"Azure OpenAI endpoint URL 형식이 잘못됐습니다: {endpoint}"
         )
     # Normalize to the resource root; relayed, that root is EGRESS_BASE_URL.
     normalized_endpoint = f"{parsed.scheme}://{parsed.netloc}/"

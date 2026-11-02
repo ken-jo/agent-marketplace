@@ -262,3 +262,30 @@ def test_local_provider_no_longer_exists(tmp_path: Path) -> None:
     png = _write(tmp_path, "img.png", PNG)
     with pytest.raises(ic.CaptionError, match="provider"):
         ic.caption_image(str(png), provider="local")  # type: ignore[arg-type]
+
+
+def test_azure_responses_config_errors_read_as_korean() -> None:
+    # These three messages had been saved through a CP949 round trip and read
+    # as mojibake; they must say what is missing, like the chat-path siblings.
+    with pytest.raises(ic.CaptionError, match="Azure OpenAI Responses 캡션을 사용하려면 endpoint"):
+        ic._caption_azure_openai_responses("data:image/png;base64,", None, "k", "m")
+    with pytest.raises(ic.CaptionError, match="Azure OpenAI Responses 캡션을 사용하려면 apiKey 가 필요합니다"):
+        ic._caption_azure_openai_responses("data:image/png;base64,", "https://r.openai.azure.com/", None, "m")
+    with pytest.raises(ic.CaptionError, match="deployment 이름\\) 이 필요합니다"):
+        ic._caption_azure_openai_responses("data:image/png;base64,", "https://r.openai.azure.com/", "k", None)
+
+
+def test_worker_sources_carry_no_cp949_mojibake() -> None:
+    import re
+
+    worker_dir = Path(__file__).resolve().parent.parent / "worker"
+    # Han ideographs and C1 controls do not occur in this code's Korean text;
+    # both are what a UTF-8 → CP949 round trip leaves behind.
+    pattern = re.compile("[一-鿿\u0080-\u009f]")
+    hits = [
+        f"{path.name}:{number}"
+        for path in sorted(worker_dir.glob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if pattern.search(line)
+    ]
+    assert hits == []
