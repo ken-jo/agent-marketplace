@@ -205,6 +205,8 @@ export interface FolderAutoIndexerResult {
    * own verdict on the file and fail again the same way.
    */
   failedTransient?: number;
+  /** Each file that failed this scan, and whether that failure may pass. */
+  failures?: Array<{ path: string; retryable: boolean }>;
   /** Files the walk saw, before the supported-type filter. */
   walked?: number;
   /** The same, per scanned folder (keyed as the folder was given). */

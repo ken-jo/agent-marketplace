@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep as pathSep } from "node:path";
@@ -74,6 +74,7 @@ import {
   migrateLegacyIndex,
   type FolderSource,
   type IndexMigrationStatus,
+  type LegacyManifestDocument,
   type MigrationAttempts,
 } from "./indexMigration.js";
 import { LruCache } from "./lruCache.js";
@@ -2405,10 +2406,28 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     });
   }
 
+  /** Whether an embedding credential is available now (the scan's own test). */
+  async function embeddingConfiguredNow(): Promise<boolean> {
+    const handle = await resolveHostKeyHandle("embedding");
+    try {
+      return (await resolveEmbeddingKeyForEndpoint(getConfig("embeddingEndpoint"), handle)).length > 0;
+    } finally {
+      if (handle) {
+        try { await handle.release(); } catch { /* best effort */ }
+      }
+    }
+  }
+
   async function runStartupWarmup(folders: string[]): Promise<void> {
+    // Documents indexed without vectors (an embedding outage, a missing key),
+    // which the heal below re-embeds once a key is available.
+    let embedFailedPaths: string[] = [];
     try {
       const existingDocs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);
       hostApi.logEvent("info", "local_indexer.cache_from_db", { count: existingDocs.length });
+      embedFailedPaths = existingDocs
+        .filter((doc) => doc.path && doc.status === "indexed" && doc.content_state === "embed_failed")
+        .map((doc) => resolve(doc.path));
 
       if (existingDocs.length > 0) {
         // DB에 실제로 있는 파일만 스캔 skip 대상으로. DB가 비어있으면
@@ -2476,45 +2495,45 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         drifted: report.drifted_doc_count,
         orphanVectorsDeleted: report.orphan_vectors_deleted,
       });
-      const drifted = report.drifted_docs ?? [];
-      if (drifted.length > 0) {
-        const healHandle = await resolveHostKeyHandle("embedding");
-        try {
-          const bearer = await resolveEmbeddingKeyForEndpoint(
-            getConfig("embeddingEndpoint"),
-            healHandle,
-          );
-          if (!bearer) {
-            // No embedding key yet — re-embed is impossible. The docs are
-            // already marked for re-embed, so a later cycle (after a key push)
-            // heals them. They remain BM25-only meanwhile (graceful).
-            hostApi.logEvent("info", "local_indexer.reconcile_heal_deferred", {
-              drifted: drifted.length,
-              reason: "no embedding key",
-            });
-          } else {
-            const toHeal = drifted.slice(0, RECONCILE_HEAL_CAP);
-            let healed = 0;
-            for (const doc of toHeal) {
-              try {
-                await workerClient.reindex(doc.path);
-                healed += 1;
-              } catch (err) {
-                hostApi.logEvent("warn", "local_indexer.reconcile_heal_failed", {
-                  path: doc.path,
-                  error: (err as Error).message,
-                });
-              }
+      // Heal both the drifted documents and those indexed without vectors:
+      // a scan skips a file it already holds at that mtime, so nothing else
+      // ever re-embeds them.
+      const toHealAll: string[] = [];
+      const seen = new Set<string>();
+      for (const path of [...(report.drifted_docs ?? []).map((doc) => doc.path), ...embedFailedPaths]) {
+        const key = resolve(path);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        toHealAll.push(path);
+      }
+      if (toHealAll.length > 0) {
+        if (!(await embeddingConfiguredNow())) {
+          // No embedding key yet — re-embed is impossible. The docs are
+          // already marked for re-embed, so a later cycle (after a key push)
+          // heals them. They remain BM25-only meanwhile (graceful).
+          hostApi.logEvent("info", "local_indexer.reconcile_heal_deferred", {
+            drifted: report.drifted_docs?.length ?? 0,
+            embedFailed: embedFailedPaths.length,
+            reason: "no embedding key",
+          });
+        } else {
+          const toHeal = toHealAll.slice(0, RECONCILE_HEAL_CAP);
+          let healed = 0;
+          for (const path of toHeal) {
+            try {
+              await workerClient.reindex(path);
+              healed += 1;
+            } catch (err) {
+              hostApi.logEvent("warn", "local_indexer.reconcile_heal_failed", {
+                path,
+                error: (err as Error).message,
+              });
             }
-            hostApi.logEvent("info", "local_indexer.reconcile_healed", {
-              healed,
-              remaining: Math.max(0, drifted.length - toHeal.length),
-            });
           }
-        } finally {
-          if (healHandle) {
-            try { await healHandle.release(); } catch { /* best effort */ }
-          }
+          hostApi.logEvent("info", "local_indexer.reconcile_healed", {
+            healed,
+            remaining: Math.max(0, toHealAll.length - toHeal.length),
+          });
         }
       }
     } catch (err) {
@@ -2564,6 +2583,62 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   };
   let indexMigrationPromise: Promise<void> | null = null;
 
+  // The old index's manifest (what it held, and which documents had
+  // vectors), read once and kept beside the old directory so a retry, or a
+  // start after the user moved files, measures against the same list.
+  const indexMigrationManifestPath = join(pluginDataDir, "index-migration-manifest.json");
+
+  async function loadLegacyManifest(legacyIndexDir: string): Promise<LegacyManifestDocument[]> {
+    try {
+      const saved = JSON.parse(await readFile(indexMigrationManifestPath, "utf-8")) as {
+        version?: unknown;
+        documents?: unknown;
+      };
+      if (saved.version === 1 && Array.isArray(saved.documents)) {
+        return (saved.documents as LegacyManifestDocument[]).filter(
+          (doc) => typeof doc?.path === "string" && typeof doc.mtimeMs === "number" && typeof doc.hadVectors === "boolean",
+        );
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        hostApi.logEvent("warn", "local_indexer.index_migration.manifest_unreadable", {
+          error: (err as Error).message,
+        });
+      }
+    }
+    // The worker reads a copy in its workspace: it cannot read the plugin's
+    // data directory, and a copy with its -wal keeps rows the WAL has not
+    // checkpointed yet.
+    const copyDir = join(workspace, ".legacy-index-manifest");
+    await rm(copyDir, { recursive: true, force: true });
+    await mkdir(copyDir, { recursive: true });
+    try {
+      const copyPath = join(copyDir, "fts5.sqlite");
+      await copyFile(join(legacyIndexDir, "fts5.sqlite"), copyPath);
+      for (const suffix of ["-wal", "-shm"]) {
+        try {
+          await copyFile(join(legacyIndexDir, `fts5.sqlite${suffix}`), `${copyPath}${suffix}`);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        }
+      }
+      const rows = await workerClient.legacyIndexManifest(copyPath);
+      const documents: LegacyManifestDocument[] = rows.map((row) => ({
+        path: row.path,
+        mtimeMs: row.mtimeMs,
+        hadVectors: row.hadVectors,
+      }));
+      await writeFile(indexMigrationManifestPath, JSON.stringify({ version: 1, documents }), "utf-8");
+      hostApi.logEvent("info", "local_indexer.index_migration.manifest", {
+        documents: documents.length,
+        withVectors: documents.filter((doc) => doc.hadVectors).length,
+      });
+      return documents;
+    } finally {
+      await rm(copyDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
   const indexMigrationNotice = (status: IndexMigrationStatus): IndexWarningPayload | null => {
     switch (status.phase) {
       case "rebuilding":
@@ -2592,7 +2667,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           path: status.legacyIndexDir,
           message:
             "인덱스 재구축 완료 (" + String(status.documentsAfter ?? 0) + "개 문서). " +
-            "이전 인덱스(" + status.legacyIndexDir + ")를 삭제했습니다.",
+            "이전 인덱스(" + status.legacyIndexDir + ")를 삭제했습니다." +
+            (status.coverage && status.coverage.excludedCorrupt.length > 0
+              ? " 새 파서가 읽지 못한 문서 " + String(status.coverage.excludedCorrupt.length) +
+                "개는 제외했습니다 (" + status.coverage.excludedCorrupt.slice(0, 3).join(", ") + ")."
+              : ""),
         };
       default:
         return null;
@@ -2613,6 +2692,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         documentsBefore: status.documentsBefore,
         documentsAfter: status.documentsAfter,
         scan: status.scan,
+        legacyDocuments: status.legacyDocuments,
+        coverage: status.coverage
+          ? { ...status.coverage, excludedCorrupt: status.coverage.excludedCorrupt.length }
+          : undefined,
+        notes: status.notes,
         reason: status.reason,
       },
     );
@@ -2630,6 +2714,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     // Nothing left to migrate once a rebuild, or the user, removed it (the
     // location is read at start). A kept-old status about it is stale then.
     if (!existsSync(join(location.legacyIndexDir, "fts5.sqlite"))) {
+      void rm(indexMigrationManifestPath, { force: true }).catch(() => {});
       if (indexMigrationStatus?.phase === "kept-old") {
         hostApi.logEvent("info", "local_indexer.index_migration.cleared", { legacyIndexDir: location.legacyIndexDir });
         indexMigrationStatus = null;
@@ -2647,35 +2732,40 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       await migrateLegacyIndex({
         location,
         workspace,
+        loadManifest: () => loadLegacyManifest(location.legacyIndexDir!),
+        discardManifest: () => rm(indexMigrationManifestPath, { force: true }),
         runFullScan: async (status) => {
-          // What the plugin's own index state recorded per folder before the scan.
-          const before = await loadMergedIndexState().catch(
-            () => new Map<string, { docId: string; mtimeMs: number; indexedAt: string }>(),
-          );
-          const registered = await loadPersistedFolders();
-          const previouslyIndexedByFolder: Record<string, number> = {};
-          for (const folder of registered) {
-            let n = 0;
-            for (const filePath of before.keys()) if (isWithinFolder(filePath, folder)) n += 1;
-            previouslyIndexedByFolder[folder] = n;
-          }
-          let folderSet: { source: FolderSource; count: number } | null = null;
+          let folderSet: { source: FolderSource; folders: string[] } | null = null;
           const result = await handlerImpls.index_scan({
             migration: status,
             onFolderSet: (set) => { folderSet = set; },
           });
           if (!folderSet) throw new Error("index_scan did not report its folder list");
-          const used = folderSet as { source: FolderSource; count: number };
-          return { result, folderSource: used.source, registeredFolders: used.count, previouslyIndexedByFolder };
+          const used = folderSet as { source: FolderSource; folders: string[] };
+          return { result, folderSource: used.source, folders: used.folders };
         },
-        verifyIndexed: async () => {
-          const expected = new Set(autoIndexer.getIndexedEntries().map((entry) => entry.docId));
-          const held = new Set((await plugin.listDocuments()).map((doc) => doc.doc_id));
-          let missing = 0;
-          for (const docId of expected) if (!held.has(docId)) missing += 1;
-          const info = await workerClient.runtimeInfo();
-          return { documentCount: info.document_count, missing };
+        coverage: {
+          listNewDocuments: async () =>
+            ((await plugin.listDocuments()) as LocalIndexerDocumentMeta[])
+              .filter((doc) => typeof doc.path === "string" && doc.path.length > 0)
+              .map((doc) => ({ path: doc.path!, status: doc.status, contentState: doc.content_state })),
+          embeddingConfigured: embeddingConfiguredNow,
+          fileMtime: async (path) => {
+            try {
+              return (await stat(path)).mtimeMs;
+            } catch (err) {
+              const code = (err as NodeJS.ErrnoException).code;
+              if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+              throw err;
+            }
+          },
+          wouldIndex: (path, folder) => autoIndexer.wouldIndex(path, folder),
+          reindex: async (path) => {
+            const result = await workerClient.reindex(path);
+            return result.status === "indexed" && result.embedded === true;
+          },
         },
+        documentCount: async () => (await workerClient.runtimeInfo()).document_count,
         removeDirectory: (path) => rm(path, { recursive: true }),
         attempts: indexMigrationAttempts,
         report: reportIndexMigration,
@@ -2885,7 +2975,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       index_scan: async (opts: {
         migration?: IndexMigrationStatus;
         /** Told which folder list this scan used (the migration needs to know). */
-        onFolderSet?: (set: { source: FolderSource; count: number }) => void;
+        onFolderSet?: (set: { source: FolderSource; folders: string[] }) => void;
       } = {}) => {
         clearRecentIndexWarnings();
         _surfacedWarningKeys.clear();
@@ -3246,7 +3336,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         // UI에 "Indexed"로 표시된 폴더가 스캔 대상에서 정확히 제외된다.
         const folderSet = await loadPersistedFolderSet();
         const allFolders = folderSet.folders;
-        opts.onFolderSet?.({ source: folderSet.source, count: allFolders.length });
+        opts.onFolderSet?.({ source: folderSet.source, folders: [...allFolders] });
         let stateForScan: Map<string, { docId: string; mtimeMs: number; indexedAt: string }>;
         try {
           const docs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);

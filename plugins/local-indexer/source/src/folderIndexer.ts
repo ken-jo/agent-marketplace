@@ -297,6 +297,7 @@ export class FolderAutoIndexer {
       let indexed = 0;
       let failed = 0;
       let failedTransient = 0;
+      const failures: Array<{ path: string; retryable: boolean }> = [];
       let walked = 0;
       let walkedByFolder: Record<string, number> = {};
       let unreadableFolders: string[] = [];
@@ -413,7 +414,9 @@ export class FolderAutoIndexer {
             }
           } catch (err) {
             failed += 1;
-            if (isTransientIndexFailure(err)) failedTransient += 1;
+            const retryable = isTransientIndexFailure(err);
+            if (retryable) failedTransient += 1;
+            failures.push({ path: filePath, retryable });
             if (counters) counters.failed += 1;
             lastError = (err as Error).message;
             // Capture docId before clearing maps so the callback can remove the DB record too.
@@ -491,6 +494,7 @@ export class FolderAutoIndexer {
           indexed,
           failed,
           failedTransient,
+          failures,
           walked,
           walkedByFolder,
           unreadableFolders,
@@ -694,6 +698,20 @@ export class FolderAutoIndexer {
     this.mtimeByPath.set(filePath, currentMtime);
     this.docIdByPath.set(filePath, docId);
     return true;
+  }
+
+  /**
+   * Whether a scan of `folder` would hand `filePath` to the worker under the
+   * current settings: the walk does not skip a directory on the way to it,
+   * and its type is one the indexer takes (images only with image embedding
+   * on). Says nothing about whether the file exists.
+   */
+  wouldIndex(filePath: string, folder: string): boolean {
+    const rel = relative(resolve(folder), resolve(filePath));
+    if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return false;
+    const dirs = rel.split(sep).slice(0, -1);
+    if (dirs.some((name) => SKIP_DIR_NAMES.has(name))) return false;
+    return this.isSupportedFile(resolve(filePath));
   }
 
   private isSupportedFile(filePath: string): boolean {

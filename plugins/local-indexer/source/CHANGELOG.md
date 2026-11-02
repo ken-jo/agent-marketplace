@@ -35,29 +35,44 @@ rebuilds the index once (see below).
   into the state directory, so the first start rebuilds it with a full scan
   of the registered folders. The scan shows its progress and an
   `index-migration` warning, and `index_scan_status` reports
-  `indexMigration`. The old directory is deleted only after a scan where:
-  - the folders came from the saved folder list (an explicit empty list
-    counts), not the default set used when that list is missing or corrupt;
-  - every directory could be listed, so an unmounted volume or a folder the
-    OS refuses keeps the old index;
-  - registered folders held at least one file, and no folder that the
-    plugin's index state says held documents now shows none (an unmounted
-    volume's empty mountpoint lists cleanly). The rebuild walks every
-    registered folder, including ones whose summary reads empty;
-  - nothing was cancelled, and no file failed for a reason that may pass: a
-    lost worker, a cancelled request, a path outside the roots the worker
-    held at that moment, or a caption call that was rate limited, timed out,
-    hit a 5xx, lost its connection or was refused egress (the worker marks
-    such a failed result `retryable`). A file the worker itself rejects (too
-    large, encrypted, missing caption config) fails the same way every time
-    and counts as done;
-  - every document the scan indexed is in the worker.
+  `indexMigration`. The old directory is deleted only when the new index
+  covers what the old one held:
+  - Before the scan the plugin reads a manifest of the old index: each
+    document it held as indexed (its path, the mtime it was read at, and
+    whether any of its chunks had an embedding). The worker reads a copy of
+    `fts5.sqlite` with its `-wal` in the workspace (the new
+    `legacy_index_manifest` request), and the plugin keeps the manifest in
+    `index-migration-manifest.json` beside the old directory until it is gone.
+  - An old document is excluded when its file is gone, when it is no longer
+    under a registered folder (the user removed that folder), when the
+    current settings no longer index its type, or when the file is unchanged
+    since the old index read it and the new parser rejects it as unreadable
+    (the completion message names these).
+  - Every other old document must be in the new index. If it had vectors and
+    embedding is configured now, it must have vectors there too. Documents
+    embedded without vectors during the rebuild are re-embedded before the
+    check, and the pass stops after 3 in a row stay without vectors.
+  - A document under a folder the scan could not list (an unmounted volume,
+    a folder the OS refuses), or under a folder that held old documents and
+    now lists no files at all (an unmounted volume's empty mountpoint), keeps
+    the old index. So does a scan that used the default folders because the
+    saved folder list was missing or corrupt. The rebuild walks every
+    registered folder, including ones whose summary reads empty.
 
-  Otherwise the old directory is kept and the next start tries again. After
-  5 attempts the automatic rebuild stops, the old directory stays, and the
-  status says why. A cancelled scan does not count as an attempt. A full
-  scan the user starts resets the count and, if retries had stopped, runs
-  the rebuild once more.
+  Whether a failure may pass (a lost worker, a rate-limited or failed
+  provider call, the worker's `retryable` flag) only shapes the status text.
+  When the old index is kept, the status lists how many documents and how
+  many documents' vectors the new index lacks, and the next start tries
+  again. After 5 attempts the automatic rebuild stops, the old directory
+  stays, and the status says why. A cancelled scan does not count as an
+  attempt. A full scan the user starts resets the count and, if retries had
+  stopped, runs the rebuild once more.
+- The start-up heal re-embeds documents held without vectors
+  (`content_state = 'embed_failed'`) as well as the drifted ones, up to 50
+  per start, when an embedding key is available. A scan skips a file it
+  already holds at that mtime, so nothing else re-embeds them.
+- A file the parser cannot read (a corrupt PDF or DOCX) is a failed result
+  that is not `retryable`, instead of an unexpected worker error.
 - `documents_list` is paged (`limit` up to 1000, keyset cursor `after`), and
   each page also stops before three quarters of the negotiated frame limit,
   so long multi-byte paths cannot overflow a frame. `runtime_info` counts

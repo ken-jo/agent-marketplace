@@ -24,7 +24,13 @@ const setAllowedRootsMock = vi.fn(async (roots: string[]) => ({ roots, count: ro
 // rebuild set a legacy directory here.
 let mockScanTotalIndexed = 5;
 let mockUnreadableFolders: string[] = [];
-let mockIndexedEntries: Array<{ filePath: string; docId: string; mtimeMs: number }> | null = null;
+// Files the mocked walk saw per folder; null = 2 in every scanned folder.
+let mockWalkedByFolder: Record<string, number> | null = null;
+// What the mocked worker reads from the copy of a pre-0.8.0 index.
+let mockLegacyManifest: Array<{
+  docId: string; path: string; mtimeMs: number; contentState: string | null; contentHash: string | null; hadVectors: boolean;
+}> = [];
+const legacyIndexManifestMock = vi.fn(async (_sqlitePath: string) => mockLegacyManifest);
 let mockIndexLocation: {
   indexRoot: string;
   documentCount: number;
@@ -168,14 +174,18 @@ vi.mock("../src/folderIndexer.js", () => {
 
     prePopulateCache(_docs) {}
 
+    wouldIndex(_path, _folder) {
+      return true;
+    }
+
     getIndexedEntries() {
-      if (mockIndexedEntries) return mockIndexedEntries;
       return [
         { filePath: join(this.folders[0] ?? "/tmp", "a.pdf"), docId: "fallback-1", mtimeMs: 1710000000000 },
       ];
     }
 
-    async scanOnce() {
+    async scanOnce(foldersOverride) {
+      const scanned = foldersOverride ?? this.folders;
       const firstPath = join(this.folders[0] ?? "/tmp", "a.md");
       const secondPath = join(this.folders[0] ?? "/tmp", "b.md");
       this.emitProgress({
@@ -209,6 +219,8 @@ vi.mock("../src/folderIndexer.js", () => {
         failed: 0,
         failedTransient: 0,
         walked: 2,
+        walkedByFolder: mockWalkedByFolder ?? Object.fromEntries(scanned.map((folder) => [folder, 2])),
+        failures: [],
         unreadableFolders: mockUnreadableFolders,
         totalIndexed: mockScanTotalIndexed,
         folders: this.folders,
@@ -242,6 +254,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
         runtimeInfo: async () => ({ index_root: mockIndexLocation?.indexRoot ?? "", document_count: mockDocuments.length }),
         reconcile: reconcileMock,
         reindex: reindexMock,
+        legacyIndexManifest: legacyIndexManifestMock,
         captionImage: async () => ({
           filePath: "",
           caption: "",
@@ -382,7 +395,9 @@ describe("hostPlugin createPlugin", () => {
     mockIndexLocation = null;
     mockScanTotalIndexed = 5;
     mockUnreadableFolders = [];
-    mockIndexedEntries = null;
+    mockWalkedByFolder = null;
+    mockLegacyManifest = [];
+    legacyIndexManifestMock.mockClear();
     reconcileMock.mockClear();
     reconcileMock.mockResolvedValue({
       checked: true,
@@ -823,11 +838,33 @@ describe("hostPlugin createPlugin", () => {
       return docs;
     }
 
-    function indexedAsWorkerHolds(docs: string) {
-      mockIndexedEntries = mockDocuments.map((d) => ({ filePath: join(docs, d.doc_name), docId: d.doc_id, mtimeMs: 1 }));
+    /**
+     * Files on disk under `docs` that the old index held, and that the
+     * mocked new index holds too (with vectors).
+     */
+    async function oldIndexHolds(docs: string, names = ["a.pdf", "b.md"], inNewIndex = names) {
+      mockLegacyManifest = [];
+      for (const name of names) {
+        const path = join(docs, name);
+        await writeFile(path, `# ${name}`);
+        mockLegacyManifest.push({
+          docId: `old-${name}`,
+          path,
+          mtimeMs: Math.floor((await stat(path)).mtimeMs),
+          contentState: "ok",
+          contentHash: null,
+          hadVectors: true,
+        });
+      }
+      mockDocuments = inNewIndex.map((name, i) => ({
+        id: `d${i}`, doc_id: `d${i}`, doc_name: name, doc_type: "md", type: "md",
+        path: join(docs, name), status: "indexed", content_state: "ok",
+      })) as typeof mockDocuments;
     }
 
     const ledgerPath = () => join(hostRoot, "index-migration-attempts.json");
+    const manifestPath = () => join(hostRoot, "index-migration-manifest.json");
+    const manifestCopyDir = () => join(hostRoot, ".local-indexer-workspace", ".legacy-index-manifest");
 
     async function settledMigration(plugin: any) {
       let status: any;
@@ -844,10 +881,18 @@ describe("hostPlugin createPlugin", () => {
         .map(([, payload]: [string, any]) => payload.message);
     }
 
-    it("rebuilds visibly and deletes the old index once every indexed document is in the worker", async () => {
+    it("rebuilds visibly and deletes the old index once the new one covers it", async () => {
       const legacy = await legacyIndexFixture();
-      indexedAsWorkerHolds(await savedFolders());
+      await writeFile(join(legacy, "fts5.sqlite-wal"), "un-checkpointed rows");
+      await oldIndexHolds(await savedFolders());
       await writeFile(ledgerPath(), JSON.stringify({ attempts: 2, lastReason: "earlier" }));
+      // The worker reads a copy in its workspace, WAL included.
+      legacyIndexManifestMock.mockImplementationOnce(async (sqlitePath: string) => {
+        expect(sqlitePath).toBe(join(manifestCopyDir(), "fts5.sqlite"));
+        expect(await readFile(sqlitePath, "utf-8")).toBe("pre-0.8.0 index");
+        expect(await readFile(`${sqlitePath}-wal`, "utf-8")).toBe("un-checkpointed rows");
+        return mockLegacyManifest;
+      });
       const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
@@ -858,10 +903,15 @@ describe("hostPlugin createPlugin", () => {
         legacyIndexDir: legacy,
         attempt: 3,
         documentsAfter: mockDocuments.length,
+        legacyDocuments: 2,
         scan: { folderSource: "saved", registeredFolders: 1, unreadableFolders: [], failedTransient: 0 },
+        coverage: { required: 2, covered: 2, missingDocuments: 0 },
       });
+      expect(legacyIndexManifestMock).toHaveBeenCalledTimes(1);
       await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
       await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(manifestPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       const notices = migrationNotices(events);
       expect(notices).toHaveLength(2);
       expect(notices[0]).toMatch(/전체 재인덱싱/);
@@ -870,28 +920,42 @@ describe("hostPlugin createPlugin", () => {
         .map(([, event]: [string, string]) => event)
         .filter((event: string) => event.startsWith("local_indexer.index_migration."));
       expect(migrationEvents).toEqual([
+        "local_indexer.index_migration.manifest",
         "local_indexer.index_migration.rebuilding",
         "local_indexer.index_migration.completed",
       ]);
       await plugin.stop();
     });
 
-    it("keeps the old index, and counts the attempt, when an indexed document is missing from the worker", async () => {
+    it("keeps the old index, counts the attempt, and keeps the manifest, when an old document is missing", async () => {
       const legacy = await legacyIndexFixture();
       const docs = await savedFolders();
-      indexedAsWorkerHolds(docs);
-      mockIndexedEntries!.push({ filePath: join(docs, "lost.md"), docId: "lost", mtimeMs: 1 });
+      await oldIndexHolds(docs, ["a.pdf", "b.md", "lost.md"], ["a.pdf", "b.md"]);
       const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
-      expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
-      expect(status.reason).toMatch(/1 document\(s\) the scan indexed are missing/);
+      expect(status).toMatchObject({ phase: "kept-old", attempt: 1, coverage: { required: 3, missingDocuments: 1 } });
+      expect(status.reason).toMatch(/the new index lacks 1 document\(s\) and the vectors of 0 document\(s\)/);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       expect(JSON.parse(await readFile(ledgerPath(), "utf-8"))).toMatchObject({ attempts: 1 });
       expect(migrationNotices(events).at(-1)).toMatch(/이전 인덱스를 보존.*다음 시작 때 다시 시도합니다 \(1\/5\)/);
+      // The manifest stays beside the old index for the next attempt.
+      const saved = JSON.parse(await readFile(manifestPath(), "utf-8"));
+      expect(saved).toMatchObject({ version: 1 });
+      expect(saved.documents.map((d: any) => d.path)).toEqual(mockLegacyManifest.map((d) => d.path));
+      await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       await plugin.stop();
+
+      // The next start measures against the saved manifest, without reading the old index again.
+      legacyIndexManifestMock.mockClear();
+      const again = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin2 = await createPlugin(again.ctx);
+      await plugin2.onPublished?.();
+      expect(await settledMigration(plugin2)).toMatchObject({ phase: "kept-old", attempt: 2 });
+      expect(legacyIndexManifestMock).not.toHaveBeenCalled();
+      await plugin2.stop();
     });
 
     it("keeps the old index when the scan used the default folders (no saved folder list)", async () => {
@@ -908,17 +972,18 @@ describe("hostPlugin createPlugin", () => {
       await plugin.stop();
     });
 
-    it("keeps the old index when a registered folder could not be read", async () => {
+    it("keeps the old index when a registered folder with old documents could not be read", async () => {
       const legacy = await legacyIndexFixture();
-      indexedAsWorkerHolds(await savedFolders());
-      mockUnreadableFolders = ["/Volumes/Unmounted"];
+      const docs = await savedFolders();
+      await oldIndexHolds(docs);
+      mockUnreadableFolders = [docs];
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
       expect(status.phase).toBe("kept-old");
-      expect(status.reason).toMatch(/could not be read: \/Volumes\/Unmounted/);
+      expect(status.reason).toMatch(/1 folder\(s\) could not be read: .*docs/);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
     });
@@ -939,31 +1004,80 @@ describe("hostPlugin createPlugin", () => {
       await plugin.stop();
     });
 
-    it("keeps the old index when a folder the index state says held documents now shows no files", async () => {
+    it("keeps the old index when a folder that held old documents now shows no files", async () => {
       const legacy = await legacyIndexFixture();
       const docs = await savedFolders();
-      indexedAsWorkerHolds(docs);
-      // index-state.json (beside the old index) recorded documents under the
-      // folder; the mocked walk reports no files for it (an empty mountpoint).
-      const entries = Object.fromEntries(
-        ["x.md", "y.md"].map((name) => [join(docs, name), { docId: name, mtimeMs: 1, chunkHash: "", indexedAt: "2026-01-01T00:00:00Z" }]),
-      );
-      await writeFile(join(hostRoot, "index-state.json"), JSON.stringify({ version: 1, entries }));
+      await oldIndexHolds(docs, ["x.md", "y.md"], []);
+      await rm(join(docs, "x.md"));
+      await rm(join(docs, "y.md"));
+      mockWalkedByFolder = { [docs]: 0 }; // the walk lists it cleanly and finds nothing
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
       expect(status.phase).toBe("kept-old");
-      expect(status.reason).toMatch(/held indexed documents now show no files .*docs had 2/);
+      expect(status.reason).toMatch(/held indexed documents now show no files .*docs/);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("keeps the old index, and its vectors, when the rebuild could not embed (an outage)", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(join(legacy, "vectors.lance"), "old vectors");
+      const docs = await savedFolders();
+      await oldIndexHolds(docs);
+      for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: { apiKeySource: "host", hostApiVendor: "openai", embeddingProvider: "openai" },
+      });
+      ctx.hostApi.getSecret = vi.fn((key: string) => (key === "llm.apiKey.openai" ? "sk-key" : null));
+      // The provider is down: a re-embed indexes the file but gets no vectors.
+      reindexMock.mockImplementation(async (filePath: string) => ({
+        doc_id: `doc:${filePath}`, doc_name: filePath, doc_type: "md", chunk_count: 1, status: "indexed", embedded: false,
+      }) as any);
+      try {
+        const plugin = await createPlugin(ctx);
+        await plugin.onPublished?.();
+        const status = await settledMigration(plugin);
+        expect(status).toMatchObject({
+          phase: "kept-old",
+          coverage: { required: 2, missingVectors: 2, backfill: { attempted: 2, embedded: 0 } },
+        });
+        expect(status.reason).toMatch(/lacks 0 document\(s\) and the vectors of 2 document\(s\)/);
+        // The backfill went to the worker for exactly the documents without vectors.
+        const backfilled = reindexMock.mock.calls.map((c) => c[0]).filter((p) => p.startsWith(docs));
+        expect(new Set(backfilled)).toEqual(new Set(mockDocuments.map((d) => d.path)));
+        expect(await readFile(join(legacy, "vectors.lance"), "utf-8")).toBe("old vectors");
+        await plugin.stop();
+      } finally {
+        reindexMock.mockReset();
+        reindexMock.mockImplementation(async (filePath: string) => ({
+          doc_id: `doc:${filePath}`, doc_name: filePath, doc_type: "md", chunk_count: 1, status: "indexed",
+        }));
+      }
+    });
+
+    it("keeps the old index when the old index cannot be read", async () => {
+      const legacy = await legacyIndexFixture();
+      await savedFolders();
+      legacyIndexManifestMock.mockRejectedValueOnce(new Error("database disk image is malformed"));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
+      expect(status.reason).toMatch(/old index could not be read: database disk image is malformed/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       await plugin.stop();
     });
 
     it("the rebuild scan walks every registered folder, even ones whose summary reads empty", async () => {
       await legacyIndexFixture();
       const docs = await savedFolders();
-      indexedAsWorkerHolds(docs);
       // A mixed set: docs/ holds a file (pending), mount/ is empty (summary
       // "empty"). A normal scan walks only the pending folder.
       await writeFile(join(docs, "note.md"), "# note");
@@ -986,7 +1100,7 @@ describe("hostPlugin createPlugin", () => {
 
     it("a manual full scan resets the attempt bound and, once retries had stopped, rebuilds again", async () => {
       const legacy = await legacyIndexFixture();
-      indexedAsWorkerHolds(await savedFolders());
+      await oldIndexHolds(await savedFolders());
       await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "1 folder(s) could not be read: /x" }));
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
@@ -2792,6 +2906,77 @@ describe("hostPlugin createPlugin", () => {
       // Only the bounded prefix of drifted-doc paths was healed.
       const healedPaths = reindexMock.mock.calls.map((c) => c[0]);
       expect(healedPaths).toEqual(drifted.slice(0, 50).map((d) => d.path));
+    });
+
+    it("heal re-embeds documents indexed without vectors, with the drifted ones, within the cap", async () => {
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: {
+          apiKeySource: "host",
+          hostApiVendor: "openai",
+          embeddingProvider: "openai",
+        },
+      });
+      ctx.hostApi.getSecret = vi.fn((key: string) =>
+        key === "llm.apiKey.openai" ? "sk-heal-key" : null,
+      );
+      // Embedded during an outage: indexed, but without vectors. A scan skips
+      // them (same mtime), so only the heal re-embeds them.
+      mockDocuments = [
+        ...Array.from({ length: 55 }, (_, i) => ({
+          id: `e${i}`, doc_id: `e${i}`, doc_name: `e${i}.md`, doc_type: "md", type: "md",
+          path: `/tmp/embed-failed-${i}.md`, status: "indexed", content_state: "embed_failed",
+        })),
+        { id: "ok", doc_id: "ok", doc_name: "ok.md", doc_type: "md", type: "md",
+          path: "/tmp/ok.md", status: "indexed", content_state: "ok" },
+        { id: "f", doc_id: "f", doc_name: "f.md", doc_type: "md", type: "md",
+          path: "/tmp/failed.md", status: "failed", content_state: "embed_failed" },
+      ] as typeof mockDocuments;
+      reconcileMock.mockResolvedValue({
+        checked: true,
+        // One drifted document is also embed_failed: healed once.
+        drifted_docs: [{ doc_id: "d1", path: "/tmp/drift-1.md" }, { doc_id: "e0", path: "/tmp/embed-failed-0.md" }],
+        drifted_doc_count: 2,
+        orphan_vectors_deleted: 0,
+      });
+      const plugin = await createPlugin(ctx);
+      reindexMock.mockClear();
+      await plugin.handlers.index_scan();
+
+      await vi.waitFor(() => expect(reindexMock).toHaveBeenCalledTimes(50), { timeout: 3000 });
+      const healed = reindexMock.mock.calls.map((c) => c[0]);
+      expect(healed.slice(0, 3)).toEqual(["/tmp/drift-1.md", "/tmp/embed-failed-0.md", "/tmp/embed-failed-1.md"]);
+      expect(new Set(healed).size).toBe(50);
+      expect(healed).not.toContain("/tmp/ok.md");
+      expect(healed).not.toContain("/tmp/failed.md");
+      const done = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([, event]: [string, string]) => event === "local_indexer.reconcile_healed",
+      );
+      // 1 drifted + 55 embed_failed (one shared) = 56; 50 healed, 6 next cycle.
+      expect(done?.[2]).toMatchObject({ healed: 50, remaining: 6 });
+    });
+
+    it("documents without vectors wait for a key: no re-embed without one", async () => {
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: { apiKeySource: "plugin", embeddingProvider: "openai" },
+      });
+      ctx.hostApi.getSecret = vi.fn(() => null);
+      mockDocuments = [
+        { id: "e", doc_id: "e", doc_name: "e.md", doc_type: "md", type: "md",
+          path: "/tmp/embed-failed.md", status: "indexed", content_state: "embed_failed" },
+      ] as typeof mockDocuments;
+      const plugin = await createPlugin(ctx);
+      reindexMock.mockClear();
+      try { await plugin.handlers.index_scan(); } catch { /* expected: no key */ }
+      await vi.waitFor(() => expect(reconcileMock).toHaveBeenCalled(), { timeout: 3000 });
+      await vi.waitFor(() => {
+        const deferred = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([, event]: [string, string]) => event === "local_indexer.reconcile_heal_deferred",
+        );
+        expect(deferred?.[2]).toMatchObject({ drifted: 0, embedFailed: 1 });
+      });
+      expect(reindexMock).not.toHaveBeenCalled();
     });
 
     it("heal deferred when no embedding key — detect runs key-free, no reindex", async () => {

@@ -1,51 +1,102 @@
 /**
  * The visible rebuild out of `<pluginDataDir>/index`: the old directory is
- * removed only after a verified rebuild, and kept for every lesser outcome.
+ * removed only once the new index covers what the old one held, and kept for
+ * every lesser outcome.
  *
  * The scans here are real `FolderAutoIndexer` scans over real directories,
- * against a fake worker that keys documents by absolute path the way the
- * worker's `documents.path UNIQUE` column does. A premature delete, a folder
- * that could not be read, or a lost document all show up on disk.
+ * through the real `WorkerClient`, against a scripted stdio worker that keys
+ * documents by absolute path the way the worker's `documents.path UNIQUE`
+ * column does. The old index is a manifest of the documents it held. A
+ * premature delete, a folder that could not be read, or a lost document or
+ * vector all show up on disk.
  */
 import { describe, expect, it, vi } from "vitest";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { WorkerControlError } from "@ave/plugin-contract";
 import { FolderAutoIndexer } from "../src/folderIndexer";
 import {
+  BACKFILL_STOP_AFTER,
   INDEX_MIGRATION_MAX_ATTEMPTS,
   migrateLegacyIndex,
   type FolderSource,
   type IndexMigrationDeps,
   type IndexMigrationStatus,
+  type LegacyManifestDocument,
   type MigrationAttempts,
 } from "../src/indexMigration";
-import { WORKER_PATH_NOT_ALLOWED, WorkerCallError, WorkerClient, WorkerIndexFailure } from "../src/workerClient";
-import { FakeStdioWorker } from "./support/fakeStdioWorker";
+import { WORKER_PATH_NOT_ALLOWED, WorkerClient } from "../src/workerClient";
+import { FakeStdioWorker, workerRefusal } from "./support/fakeStdioWorker";
 
-/** The worker's documents table: one row per absolute path. */
-class FakeWorkerIndex {
-  readonly rows = new Map<string, string>();
+interface Row {
+  doc_id: string;
+  path: string;
+  doc_name: string;
+  doc_type: string;
+  status: string;
+  content_state: string;
+}
+
+/**
+ * The new index, behind a scripted stdio worker. Embedding is "up" or "down";
+ * a document indexed while it is down is held without vectors
+ * (content_state embed_failed), as the worker does.
+ */
+class FakeWorker {
+  readonly rows = new Map<string, Row>();
+  embedding: "up" | "down" = "up";
+  /** Paths whose indexing is scripted: a result to return, or an error to throw. */
+  readonly scripted = new Map<string, () => unknown>();
   private next = 0;
-  /** Paths whose indexing fails, and how. */
-  readonly failures = new Map<string, () => Error>();
-
-  readonly client = {
-    indexDocument: vi.fn(async (filePath: string) => {
-      const failure = this.failures.get(resolve(filePath));
-      if (failure) throw failure();
-      const key = resolve(filePath);
-      const existing = this.rows.get(key);
-      if (existing) return existing;
-      const docId = `doc-${++this.next}`;
-      this.rows.set(key, docId);
-      return docId;
-    }),
-    removeDocument: vi.fn(async (docId: string) => {
-      for (const [path, id] of this.rows) if (id === docId) this.rows.delete(path);
-    }),
+  readonly handle = new FakeStdioWorker({
+    indexer_reindex: (params) => this.reindex((params as { file_path: string }).file_path),
+    documents_list: (params) => {
+      const { after } = (params ?? {}) as { after?: string };
+      const rows = [...this.rows.values()].sort((a, b) => a.doc_id.localeCompare(b.doc_id));
+      const page = rows.filter((row) => after === undefined || row.doc_id > after);
+      return { documents: page, next_after: null };
+    },
+    documents_delete: (params) => {
+      const { doc_id } = params as { doc_id: string };
+      for (const [path, row] of this.rows) if (row.doc_id === doc_id) this.rows.delete(path);
+      return { removed: true, doc_id };
+    },
+    runtime_info: () => ({ document_count: this.rows.size }),
+  });
+  readonly client = new WorkerClient();
+  /** What FolderAutoIndexer calls: the real client's methods. */
+  readonly indexerClient = {
+    indexDocument: (filePath: string, mode?: string) => this.client.indexDocument(filePath, mode),
+    removeDocument: (docId: string) => this.client.removeDocument(docId),
   };
+
+  constructor() {
+    this.client.attach(this.handle);
+  }
+
+  reindexCalls(): string[] {
+    return this.handle.callsOf("indexer_reindex").map((r) => resolve((r.params as { file_path: string }).file_path));
+  }
+
+  private reindex(filePath: string): unknown {
+    const key = resolve(filePath);
+    const script = this.scripted.get(key);
+    if (script) return script();
+    const existing = this.rows.get(key);
+    const doc_id = existing?.doc_id ?? `doc-${String(++this.next).padStart(4, "0")}`;
+    const embedded = this.embedding === "up";
+    this.rows.set(key, {
+      doc_id,
+      path: key,
+      doc_name: key.split(/[\\/]/).pop()!,
+      doc_type: "md",
+      status: "indexed",
+      content_state: embedded ? "ok" : "embed_failed",
+    });
+    return { doc_id, doc_name: "x", doc_type: "md", chunk_count: 1, status: "indexed", embedded };
+  }
 }
 
 interface Fixture {
@@ -58,8 +109,9 @@ async function withLegacy<T>(run: (fx: Fixture) => Promise<T>): Promise<T> {
   const root = await mkdtemp(join(tmpdir(), "ave-li-migrate-"));
   const pluginDataDir = join(root, "data");
   const legacy = join(pluginDataDir, "index");
-  await mkdir(legacy, { recursive: true });
+  await mkdir(join(legacy, "vectors.lance"), { recursive: true });
   await writeFile(join(legacy, "fts5.sqlite"), "old index");
+  await writeFile(join(legacy, "vectors.lance", "data.lance"), "old vectors");
   try {
     return await run({ root, legacy, pluginDataDir });
   } finally {
@@ -77,23 +129,40 @@ function memoryAttempts(initial: MigrationAttempts = { attempts: 0 }) {
   };
 }
 
+/** What the old index held for `paths`, read at the files' current mtimes. */
+async function oldIndexOf(paths: string[], hadVectors = true): Promise<LegacyManifestDocument[]> {
+  const docs: LegacyManifestDocument[] = [];
+  for (const path of paths) {
+    let mtimeMs = 1_600_000_000_000;
+    try {
+      mtimeMs = Math.floor((await stat(path)).mtimeMs);
+    } catch {
+      // A file that is gone now: any mtime will do.
+    }
+    docs.push({ path: resolve(path), mtimeMs, hadVectors });
+  }
+  return docs;
+}
+
 /** Migration deps driven by a real folder scan over `folders`. */
 function scanDeps(
   fx: Fixture,
-  worker: FakeWorkerIndex,
+  worker: FakeWorker,
   folders: string[],
+  manifest: LegacyManifestDocument[],
   opts: {
     folderSource?: FolderSource;
     attempts?: ReturnType<typeof memoryAttempts>;
-    previouslyIndexedByFolder?: Record<string, number>;
+    embeddingConfigured?: boolean;
   } = {},
 ) {
   const reports: IndexMigrationStatus[] = [];
   const removeDirectory = vi.fn(async (path: string) => {
     await rm(path, { recursive: true, force: true });
   });
-  const indexer = new FolderAutoIndexer({ client: worker.client, folders, extensions: [".md"] });
+  const indexer = new FolderAutoIndexer({ client: worker.indexerClient, folders, extensions: [".md"] });
   const attempts = opts.attempts ?? memoryAttempts();
+  const discardManifest = vi.fn(async () => {});
   const deps: IndexMigrationDeps = {
     location: {
       indexRoot: join(fx.root, "state", "index"),
@@ -102,237 +171,323 @@ function scanDeps(
       legacyIndexDir: fx.legacy,
     },
     workspace: join(fx.pluginDataDir, ".local-indexer-workspace"),
+    loadManifest: async () => manifest,
+    discardManifest,
     runFullScan: async () => ({
       result: await indexer.scanOnce(),
       folderSource: opts.folderSource ?? "saved",
-      registeredFolders: folders.length,
-      ...(opts.previouslyIndexedByFolder ? { previouslyIndexedByFolder: opts.previouslyIndexedByFolder } : {}),
+      folders,
     }),
-    verifyIndexed: async () => {
-      const held = new Set(worker.rows.values());
-      const missing = indexer.getIndexedEntries().filter((entry) => !held.has(entry.docId)).length;
-      return { documentCount: worker.rows.size, missing };
+    coverage: {
+      listNewDocuments: async () =>
+        (await worker.client.listDocuments()).map((doc) => ({
+          path: doc.path,
+          status: doc.status,
+          contentState: doc.contentState,
+        })),
+      embeddingConfigured: async () => opts.embeddingConfigured ?? true,
+      fileMtime: async (path) => {
+        try {
+          return (await stat(path)).mtimeMs;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+          throw err;
+        }
+      },
+      wouldIndex: (path, folder) => indexer.wouldIndex(path, folder),
+      reindex: async (path) => {
+        const result = await worker.client.reindex(path);
+        return result.status === "indexed" && result.embedded === true;
+      },
     },
+    documentCount: async () => (await worker.client.runtimeInfo()).document_count,
     removeDirectory,
     attempts,
     report: (s) => reports.push(structuredClone(s)),
   };
-  return { deps, reports, removeDirectory, indexer, attempts };
+  return { deps, reports, removeDirectory, indexer, attempts, discardManifest };
 }
 
-async function writeDocs(dir: string, names: string[]): Promise<void> {
+async function writeDocs(dir: string, names: string[]): Promise<string[]> {
   await mkdir(dir, { recursive: true });
   for (const name of names) await writeFile(join(dir, name), `# ${name}`);
+  return names.map((name) => resolve(dir, name));
 }
 
 function expectKept(result: IndexMigrationStatus | null, fx: Fixture, reason: RegExp): void {
   expect(result?.phase).toBe("kept-old");
   expect(result?.reason).toMatch(reason);
+  // The old index and its vectors are still there.
   expect(existsSync(join(fx.legacy, "fts5.sqlite"))).toBe(true);
+  expect(existsSync(join(fx.legacy, "vectors.lance", "data.lance"))).toBe(true);
 }
 
-describe("migrateLegacyIndex — verified rebuild", () => {
+const corrupt = { doc_id: "bad", doc_name: "bad.md", doc_type: "md", chunk_count: 0, status: "failed",
+  errors: ["Layer A parse failed: not a PDF"], retryable: false };
+
+describe("migrateLegacyIndex — completes when the new index covers the old one", () => {
   it("does nothing when there is no old index", async () => {
     await withLegacy(async (fx) => {
-      const { deps, reports } = scanDeps(fx, new FakeWorkerIndex(), []);
+      const { deps, reports } = scanDeps(fx, new FakeWorker(), [], []);
       const result = await migrateLegacyIndex({ ...deps, location: { ...deps.location, legacyIndexDir: null } });
       expect(result).toBeNull();
       expect(reports).toEqual([]);
     });
   });
 
-  it("deletes the old directory after a verified rebuild, and clears the attempt ledger", async () => {
+  it("deletes the old directory, the ledger and the manifest once every old document is back with its vectors", async () => {
     await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md", "b.md", "c.md"]);
-      const worker = new FakeWorkerIndex();
-      const { deps, reports, attempts } = scanDeps(fx, worker, [docs], { attempts: memoryAttempts({ attempts: 2 }) });
+      const paths = await writeDocs(join(fx.root, "docs"), ["a.md", "b.md", "c.md"]);
+      const worker = new FakeWorker();
+      const { deps, reports, attempts, discardManifest } = scanDeps(
+        fx, worker, [join(fx.root, "docs")], await oldIndexOf(paths),
+        { attempts: memoryAttempts({ attempts: 2 }) },
+      );
       const result = await migrateLegacyIndex(deps);
-      expect(result).toMatchObject({ phase: "completed", attempt: 3, documentsAfter: 3 });
-      expect(result?.scan).toMatchObject({ walked: 3, scanned: 3, failed: 0, unreadableFolders: [] });
+      expect(result).toMatchObject({
+        phase: "completed",
+        attempt: 3,
+        documentsAfter: 3,
+        legacyDocuments: 3,
+        coverage: { required: 3, covered: 3, missingDocuments: 0, missingVectors: 0 },
+      });
       expect(reports.map((r) => r.phase)).toEqual(["rebuilding", "completed"]);
       expect(existsSync(fx.legacy)).toBe(false);
       expect(existsSync(fx.pluginDataDir)).toBe(true);
       expect(attempts.state).toBeNull();
+      expect(discardManifest).toHaveBeenCalledTimes(1);
     });
   });
 
   it("keeps the old index while the rebuild runs", async () => {
     await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md"]);
-      const worker = new FakeWorkerIndex();
-      worker.client.indexDocument.mockImplementationOnce(async () => {
+      const paths = await writeDocs(join(fx.root, "docs"), ["a.md"]);
+      const worker = new FakeWorker();
+      worker.scripted.set(paths[0]!, () => {
         expect(existsSync(join(fx.legacy, "fts5.sqlite"))).toBe(true);
-        return "doc-x";
+        worker.scripted.delete(paths[0]!);
+        return (worker as unknown as { reindex: (p: string) => unknown }).reindex(paths[0]!);
       });
-      worker.rows.set(resolve(docs, "a.md"), "doc-x");
-      const { deps } = scanDeps(fx, worker, [docs]);
+      const { deps } = scanDeps(fx, worker, [join(fx.root, "docs")], await oldIndexOf(paths));
       expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
     });
   });
 
-  it("an explicit empty folder list deletes: the user has no folders to rebuild", async () => {
+  it("a key-less user whose old index had no vectors completes without vectors", async () => {
     await withLegacy(async (fx) => {
-      const { deps } = scanDeps(fx, new FakeWorkerIndex(), [], { folderSource: "saved" });
+      const paths = await writeDocs(join(fx.root, "docs"), ["a.md", "b.md"]);
+      const worker = new FakeWorker();
+      worker.embedding = "down"; // no key: every document is held without vectors
+      const { deps } = scanDeps(fx, worker, [join(fx.root, "docs")], await oldIndexOf(paths, false), {
+        embeddingConfigured: false,
+      });
       const result = await migrateLegacyIndex(deps);
-      expect(result).toMatchObject({ phase: "completed", scan: { registeredFolders: 0, walked: 0 } });
+      expect(result).toMatchObject({ phase: "completed", coverage: { required: 2, covered: 2, missingVectors: 0 } });
       expect(existsSync(fx.legacy)).toBe(false);
     });
   });
 
-  it("a file the worker judges unindexable counts as done", async () => {
+  it("vectors are only required where the old index had them and embedding is configured now", async () => {
+    // Configured now, but the old documents had none: nothing to lose.
     await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["ok.md", "encrypted.md"]);
-      const worker = new FakeWorkerIndex();
-      worker.failures.set(
-        resolve(docs, "encrypted.md"),
-        () => new WorkerIndexFailure("indexDocument: 인덱싱 실패: encrypted", resolve(docs, "encrypted.md")),
-      );
-      const { deps } = scanDeps(fx, worker, [docs]);
-      const result = await migrateLegacyIndex(deps);
-      expect(result).toMatchObject({ phase: "completed", scan: { failed: 1, failedTransient: 0 } });
-      expect(existsSync(fx.legacy)).toBe(false);
+      const paths = await writeDocs(join(fx.root, "docs"), ["a.md"]);
+      const worker = new FakeWorker();
+      worker.embedding = "down";
+      const { deps } = scanDeps(fx, worker, [join(fx.root, "docs")], await oldIndexOf(paths, false));
+      expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
     });
-  });
-
-  it("a worker refusal of the file itself (invalid params, not found) counts as done", async () => {
+    // The old documents had vectors, but no key is configured now: they cannot be rebuilt.
     await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["ok.md", "badmode.md", "gone.md"]);
-      const worker = new FakeWorkerIndex();
-      worker.failures.set(
-        resolve(docs, "badmode.md"),
-        () => new WorkerCallError("mode: String should match pattern", "worker-request-failed", -32602),
-      );
-      worker.failures.set(
-        resolve(docs, "gone.md"),
-        () => new WorkerCallError("File not found", "worker-request-failed", -32004),
-      );
-      const { deps } = scanDeps(fx, worker, [docs]);
+      const paths = await writeDocs(join(fx.root, "docs"), ["a.md"]);
+      const worker = new FakeWorker();
+      worker.embedding = "down";
+      const { deps } = scanDeps(fx, worker, [join(fx.root, "docs")], await oldIndexOf(paths, true), {
+        embeddingConfigured: false,
+      });
       expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
     });
   });
 
-  it("two registered paths to the same files (a symlinked folder) still verify", async () => {
+  it("a deleted file and a removed folder are excluded, and the rebuild completes", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md", "b.md"]);
+      const kept = await writeDocs(docs, ["a.md", "deleted.md"]);
+      const removedRoot = await writeDocs(join(fx.root, "old-project"), ["x.md", "y.md"]);
+      const manifest = await oldIndexOf([...kept, ...removedRoot]);
+      await rm(kept[1]!);
+      // old-project is no longer registered; its files still exist.
+      const worker = new FakeWorker();
+      const { deps } = scanDeps(fx, worker, [docs], manifest);
+      const result = await migrateLegacyIndex(deps);
+      expect(result).toMatchObject({
+        phase: "completed",
+        coverage: { required: 1, covered: 1, excludedGone: 1, excludedRootRemoved: 2 },
+      });
+      expect(existsSync(fx.legacy)).toBe(false);
+    });
+  });
+
+  it("an explicit empty folder list excludes every old document: the user removed all folders", async () => {
+    await withLegacy(async (fx) => {
+      const paths = await writeDocs(join(fx.root, "docs"), ["a.md"]);
+      const { deps } = scanDeps(fx, new FakeWorker(), [], await oldIndexOf(paths), { folderSource: "saved" });
+      const result = await migrateLegacyIndex(deps);
+      expect(result).toMatchObject({ phase: "completed", coverage: { required: 0, excludedRootRemoved: 1 } });
+      expect(existsSync(fx.legacy)).toBe(false);
+    });
+  });
+
+  it("an old document of a type the current settings do not index is excluded", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const md = await writeDocs(docs, ["a.md"]);
+      const images = await writeDocs(docs, ["photo.png"]); // the old index captioned it
+      const skipped = await writeDocs(join(docs, "node_modules"), ["dep.md"]);
+      const { deps } = scanDeps(fx, new FakeWorker(), [docs], await oldIndexOf([...md, ...images, ...skipped]));
+      const result = await migrateLegacyIndex(deps);
+      expect(result).toMatchObject({ phase: "completed", coverage: { required: 1, excludedUnsupported: 2 } });
+    });
+  });
+
+  it("an unchanged file the new parser rejects as unreadable is excluded with a note", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const [good, bad] = await writeDocs(docs, ["a.md", "bad.md"]);
+      const worker = new FakeWorker();
+      worker.scripted.set(bad!, () => corrupt);
+      const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf([good!, bad!]));
+      const result = await migrateLegacyIndex(deps);
+      expect(result).toMatchObject({ phase: "completed", coverage: { required: 1, excludedCorrupt: [bad] } });
+      expect(result?.notes?.[0]).toMatch(/1 document\(s\) from the old index could not be read by the new parser .*bad\.md/);
+      expect(existsSync(fx.legacy)).toBe(false);
+    });
+  });
+
+  it("two registered paths to the same files (a symlinked folder) still cover", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const paths = await writeDocs(docs, ["a.md", "b.md"]);
       const alias = join(fx.root, "docs-alias");
       await symlink(docs, alias, "dir");
-      const worker = new FakeWorkerIndex();
-      const { deps } = scanDeps(fx, worker, [docs, alias]);
+      const worker = new FakeWorker();
+      const { deps } = scanDeps(fx, worker, [docs, alias], await oldIndexOf(paths));
       const result = await migrateLegacyIndex(deps);
-      // The worker keys by absolute path, so each spelling is its own row,
-      // and the scan holds the same documents the worker does.
-      expect(result).toMatchObject({ phase: "completed", documentsAfter: 4, scan: { walked: 4 } });
-      expect(worker.rows.size).toBe(4);
+      // The worker keys by absolute path, so each spelling is its own row.
+      expect(result).toMatchObject({ phase: "completed", documentsAfter: 4, coverage: { required: 2, covered: 2 } });
     });
   });
 });
 
 describe("migrateLegacyIndex — keeps the old index", () => {
-  /** A scan whose files go through the real WorkerClient against a scripted worker answer. */
-  function clientBacked(answer: (filePath: string) => unknown) {
-    const handle = new FakeStdioWorker({
-      indexer_reindex: (params) => answer((params as { file_path: string }).file_path),
-    });
-    const client = new WorkerClient();
-    client.attach(handle);
-    const worker = new FakeWorkerIndex();
-    worker.client.indexDocument.mockImplementation(async (filePath: string) => {
-      const docId = await client.indexDocument(filePath);
-      worker.rows.set(resolve(filePath), docId);
-      return docId;
-    });
-    return worker;
-  }
-
-  it("when a caption was rate limited (429): the worker marks the failed result retryable", async () => {
+  it("when embedding fails during the rebuild: the old vectors stay, and a later attempt fills them", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md", "chart.md"]);
-      const worker = clientBacked((filePath) =>
-        filePath.endsWith("chart.md")
-          ? { doc_id: "c", doc_name: "chart.md", doc_type: "image", chunk_count: 0, status: "failed",
-              errors: ["OpenAI Vision 호출 실패: Error code: 429"], retryable: true }
-          : { doc_id: `d-${filePath}`, doc_name: "a.md", doc_type: "md", chunk_count: 1, status: "indexed" },
-      );
-      const { deps, removeDirectory } = scanDeps(fx, worker, [docs]);
+      const paths = await writeDocs(docs, ["a.md", "b.md", "c.md", "d.md", "e.md"]);
+      const worker = new FakeWorker();
+      worker.embedding = "down"; // the provider is out for the whole attempt
+      const attempts = memoryAttempts();
+      const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf(paths), { attempts });
+      const first = await migrateLegacyIndex(deps);
+      expectKept(first, fx, /lacks 0 document\(s\) and the vectors of 5 document\(s\)/);
+      // The re-embed pass stopped once the provider kept failing.
+      expect(first?.coverage?.backfill).toEqual({ attempted: BACKFILL_STOP_AFTER, embedded: 0 });
+      expect(attempts.state).toMatchObject({ attempts: 1 });
+
+      // The provider is back. The scan skips every file (same mtime, already
+      // held), so only the re-embed pass can give them vectors.
+      worker.embedding = "up";
+      const before = worker.reindexCalls().length;
+      const second = await migrateLegacyIndex(deps);
+      expect(second).toMatchObject({
+        phase: "completed",
+        attempt: 2,
+        coverage: { covered: 5, missingVectors: 0, backfill: { attempted: 5, embedded: 5 } },
+      });
+      expect(second?.scan?.scanned).toBe(0);
+      expect(worker.reindexCalls().length - before).toBe(5);
+      expect(existsSync(fx.legacy)).toBe(false);
+    });
+  });
+
+  it("when a changed file now fails to parse, or an unchanged one fails for a reason that may pass", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const [bad] = await writeDocs(docs, ["bad.md"]);
+      const manifest = await oldIndexOf([bad!]);
+      // Edited since the old index read it: the old copy is the only good one.
+      const later = new Date(manifest[0]!.mtimeMs + 60_000);
+      await utimes(bad!, later, later);
+      const worker = new FakeWorker();
+      worker.scripted.set(bad!, () => corrupt);
+      const { deps } = scanDeps(fx, worker, [docs], manifest);
       const result = await migrateLegacyIndex(deps);
-      expectKept(result, fx, /1 file\(s\) failed for a reason that may pass/);
+      expectKept(result, fx, /lacks 1 document\(s\)/);
+      expect(result?.coverage?.excludedCorrupt).toEqual([]);
+    });
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const [chart] = await writeDocs(docs, ["chart.md"]);
+      const worker = new FakeWorker();
+      worker.scripted.set(chart!, () => ({ ...corrupt, errors: ["OpenAI Vision 호출 실패: Error code: 429"], retryable: true }));
+      const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf([chart!]));
+      const result = await migrateLegacyIndex(deps);
+      expectKept(result, fx, /lacks 1 document\(s\) \(1 failed for a reason that may pass\)/);
       expect(result?.scan).toMatchObject({ failed: 1, failedTransient: 1 });
+    });
+  });
+
+  it("when a file failed because the worker was lost, refused the roots, or hit an unexpected error", async () => {
+    for (const make of [
+      () => new WorkerControlError("worker-incarnation-ended", "the worker stopped"),
+      () => workerRefusal("file_path: outside allowed roots", WORKER_PATH_NOT_ALLOWED),
+      () => workerRefusal("disk I/O error", -32000),
+    ]) {
+      await withLegacy(async (fx) => {
+        const docs = join(fx.root, "docs");
+        const paths = await writeDocs(docs, ["a.md", "b.md"]);
+        const worker = new FakeWorker();
+        worker.scripted.set(paths[1]!, () => { throw make(); });
+        const { deps, removeDirectory } = scanDeps(fx, worker, [docs], await oldIndexOf(paths));
+        expectKept(await migrateLegacyIndex(deps), fx, /lacks 1 document\(s\) \(1 failed for a reason that may pass\)/);
+        expect(removeDirectory).not.toHaveBeenCalled();
+      });
+    }
+  });
+
+  it("when an old document is simply not in the new index", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const paths = await writeDocs(docs, ["a.md", "b.md"]);
+      const worker = new FakeWorker();
+      const { deps } = scanDeps(fx, worker, [docs], await oldIndexOf(paths));
+      const list = deps.coverage.listNewDocuments;
+      deps.coverage.listNewDocuments = async () => (await list()).filter((doc) => !doc.path.endsWith("a.md"));
+      expectKept(await migrateLegacyIndex(deps), fx, /lacks 1 document\(s\) and the vectors of 0/);
+    });
+  });
+
+  it("when a registered folder with old documents cannot be read (unmounted volume)", async () => {
+    await withLegacy(async (fx) => {
+      const volume = join(fx.root, "Volumes", "Archive");
+      const paths = await writeDocs(volume, ["a.md"]);
+      const manifest = await oldIndexOf(paths);
+      await rm(join(fx.root, "Volumes"), { recursive: true }); // macOS removes the mountpoint on unmount
+      const { deps, removeDirectory } = scanDeps(fx, new FakeWorker(), [volume], manifest);
+      const result = await migrateLegacyIndex(deps);
+      expectKept(result, fx, /1 folder\(s\) could not be read: .*Archive/);
+      // Its files read as gone, but that is not the user deleting them.
+      expect(result?.coverage).toMatchObject({ excludedGone: 0, unavailableFolders: [volume] });
       expect(removeDirectory).not.toHaveBeenCalled();
     });
   });
 
-  it("but a failed result the worker does not mark retryable still counts as done", async () => {
+  it("an unreadable folder that held no old documents does not block the rebuild", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md", "huge.md"]);
-      const worker = clientBacked((filePath) =>
-        filePath.endsWith("huge.md")
-          ? { doc_id: "h", doc_name: "huge.md", doc_type: "md", chunk_count: 0, status: "failed", errors: ["too large"] }
-          : { doc_id: `d-${filePath}`, doc_name: "a.md", doc_type: "md", chunk_count: 1, status: "indexed" },
-      );
-      const { deps } = scanDeps(fx, worker, [docs]);
+      const paths = await writeDocs(docs, ["a.md"]);
+      const { deps } = scanDeps(fx, new FakeWorker(), [docs, join(fx.root, "never-there")], await oldIndexOf(paths));
       expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
-    });
-  });
-
-  it("when a file was outside the roots the worker held at that moment (a roots sync may fix it)", async () => {
-    await withLegacy(async (fx) => {
-      const docs = join(fx.root, "mapped-drive");
-      await writeDocs(docs, ["a.md"]);
-      const worker = new FakeWorkerIndex();
-      worker.failures.set(
-        resolve(docs, "a.md"),
-        () => new WorkerCallError("file_path: file_path outside allowed roots", "worker-request-failed", WORKER_PATH_NOT_ALLOWED),
-      );
-      const { deps } = scanDeps(fx, worker, [docs]);
-      expectKept(await migrateLegacyIndex(deps), fx, /may pass/);
-    });
-  });
-
-  it("when a folder that held indexed documents now shows no files (an empty, unmounted mountpoint)", async () => {
-    await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md"]);
-      const mountpoint = join(fx.root, "Volumes", "Archive");
-      await mkdir(mountpoint, { recursive: true }); // lists cleanly, holds nothing
-      const worker = new FakeWorkerIndex();
-      const { deps } = scanDeps(fx, worker, [docs, mountpoint], {
-        previouslyIndexedByFolder: { [docs]: 1, [mountpoint]: 240 },
-      });
-      const result = await migrateLegacyIndex(deps);
-      expectKept(result, fx, /1 folder\(s\) that held indexed documents now show no files .*Archive had 240/);
-      expect(result?.scan?.unreadableFolders).toEqual([]);
-      expect(worker.rows.size).toBe(1); // the mounted folder was still rebuilt
-    });
-  });
-
-  it("an empty folder that never held documents does not block the rebuild", async () => {
-    await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md"]);
-      const empty = join(fx.root, "new-empty");
-      await mkdir(empty);
-      const { deps } = scanDeps(fx, new FakeWorkerIndex(), [docs, empty], {
-        previouslyIndexedByFolder: { [docs]: 1, [empty]: 0 },
-      });
-      expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
-    });
-  });
-
-  it("when a registered folder cannot be read (unmounted volume, gone)", async () => {
-    await withLegacy(async (fx) => {
-      const gone = join(fx.root, "unmounted-volume");
-      const { deps, removeDirectory } = scanDeps(fx, new FakeWorkerIndex(), [gone]);
-      const result = await migrateLegacyIndex(deps);
-      expectKept(result, fx, /1 folder\(s\) could not be read/);
-      expect(result?.scan?.unreadableFolders).toEqual([gone]);
-      expect(removeDirectory).not.toHaveBeenCalled();
     });
   });
 
@@ -341,17 +496,16 @@ describe("migrateLegacyIndex — keeps the old index", () => {
     async () => {
       await withLegacy(async (fx) => {
         const readable = join(fx.root, "readable");
-        await writeDocs(readable, ["a.md"]);
         const refused = join(fx.root, "refused");
-        await writeDocs(refused, ["secret.md"]);
+        const paths = [...(await writeDocs(readable, ["a.md"])), ...(await writeDocs(refused, ["secret.md"]))];
+        const manifest = await oldIndexOf(paths);
         await chmod(refused, 0o000);
         try {
-          const worker = new FakeWorkerIndex();
-          const { deps } = scanDeps(fx, worker, [readable, refused]);
+          const worker = new FakeWorker();
+          const { deps } = scanDeps(fx, worker, [readable, refused], manifest);
           const result = await migrateLegacyIndex(deps);
           expectKept(result, fx, /could not be read: .*refused/);
-          // The readable folder was still rebuilt.
-          expect(worker.rows.size).toBe(1);
+          expect(worker.rows.size).toBe(1); // the readable folder was still rebuilt
         } finally {
           await chmod(refused, 0o755);
         }
@@ -359,15 +513,14 @@ describe("migrateLegacyIndex — keeps the old index", () => {
     },
   );
 
-  it("when an unreadable subdirectory hides inside a readable folder", async () => {
+  it("when an old document sits in an unreadable subdirectory of a readable folder", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md"]);
-      const worker = new FakeWorkerIndex();
-      const { deps, indexer } = scanDeps(fx, worker, [docs]);
-      // Make the listing of one nested directory fail the way EPERM does.
       const nested = join(docs, "nested");
-      await mkdir(nested);
+      const paths = [...(await writeDocs(docs, ["a.md"])), ...(await writeDocs(nested, ["n.md"]))];
+      const worker = new FakeWorker();
+      const { deps, indexer } = scanDeps(fx, worker, [docs], await oldIndexOf(paths));
+      // Make the listing of the nested directory fail the way EPERM does.
       const original = (indexer as unknown as { walkDir: Function }).walkDir.bind(indexer);
       (indexer as unknown as { walkDir: Function }).walkDir = async (
         dir: string,
@@ -377,86 +530,65 @@ describe("migrateLegacyIndex — keeps the old index", () => {
         if (p === nested) throw Object.assign(new Error("operation not permitted"), { code: "EPERM" });
         return readdir(p, o);
       }, unreadable);
-      expectKept(await migrateLegacyIndex(deps), fx, /could not be read: .*nested/);
+      expectKept(await migrateLegacyIndex(deps), fx, /1 folder\(s\) could not be read: .*docs/);
+    });
+  });
+
+  it("when a folder that held old documents now shows no files (an empty, unmounted mountpoint)", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const mountpoint = join(fx.root, "mnt", "archive");
+      const paths = [...(await writeDocs(docs, ["a.md"])), ...(await writeDocs(mountpoint, ["x.md", "y.md"]))];
+      const manifest = await oldIndexOf(paths);
+      await rm(join(mountpoint, "x.md"));
+      await rm(join(mountpoint, "y.md")); // lists cleanly, holds nothing
+      const worker = new FakeWorker();
+      const { deps } = scanDeps(fx, worker, [docs, mountpoint], manifest);
+      const result = await migrateLegacyIndex(deps);
+      expectKept(result, fx, /1 folder\(s\) that held indexed documents now show no files .*archive/);
+      expect(result?.scan?.unreadableFolders).toEqual([]);
+      expect(worker.rows.size).toBe(1); // the mounted folder was still rebuilt
+    });
+  });
+
+  it("an empty folder that held no old documents does not block the rebuild", async () => {
+    await withLegacy(async (fx) => {
+      const docs = join(fx.root, "docs");
+      const paths = await writeDocs(docs, ["a.md"]);
+      const empty = join(fx.root, "new-empty");
+      await mkdir(empty);
+      const { deps } = scanDeps(fx, new FakeWorker(), [docs, empty], await oldIndexOf(paths));
+      expect((await migrateLegacyIndex(deps))?.phase).toBe("completed");
     });
   });
 
   it("when the scan used the default folders because the saved list was missing or corrupt", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "fixtures");
-      await writeDocs(docs, ["a.md"]);
-      const { deps } = scanDeps(fx, new FakeWorkerIndex(), [docs], { folderSource: "fallback" });
+      const paths = await writeDocs(docs, ["a.md"]);
+      const { deps } = scanDeps(fx, new FakeWorker(), [docs], await oldIndexOf(paths), { folderSource: "fallback" });
       expectKept(await migrateLegacyIndex(deps), fx, /saved folder list was missing or unreadable/);
     });
   });
 
-  it("when the registered folders held no files at all", async () => {
-    await withLegacy(async (fx) => {
-      const empty = join(fx.root, "empty");
-      await mkdir(empty);
-      const { deps } = scanDeps(fx, new FakeWorkerIndex(), [empty]);
-      expectKept(await migrateLegacyIndex(deps), fx, /registered folder\(s\) held no files/);
-    });
-  });
-
-  it("when a file failed for a reason that may pass (the worker was lost)", async () => {
+  it("when the manifest or the scan fails, the count cannot be read, or the removal fails", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md", "b.md"]);
-      const worker = new FakeWorkerIndex();
-      worker.failures.set(
-        resolve(docs, "b.md"),
-        () => new WorkerCallError("indexer_reindex: worker-incarnation-ended", "worker-incarnation-ended"),
-      );
-      const { deps } = scanDeps(fx, worker, [docs]);
-      const result = await migrateLegacyIndex(deps);
-      expectKept(result, fx, /1 file\(s\) failed for a reason that may pass/);
-      expect(result?.scan).toMatchObject({ failed: 1, failedTransient: 1 });
-    });
-  });
-
-  it("when an unexpected worker error (-32000) or an unknown error failed a file", async () => {
-    for (const make of [
-      () => new WorkerCallError("disk I/O error", "worker-request-failed", -32000),
-      () => new Error("something else"),
-    ]) {
-      await withLegacy(async (fx) => {
-        const docs = join(fx.root, "docs");
-        await writeDocs(docs, ["a.md"]);
-        const worker = new FakeWorkerIndex();
-        worker.failures.set(resolve(docs, "a.md"), make);
-        const { deps } = scanDeps(fx, worker, [docs]);
-        expectKept(await migrateLegacyIndex(deps), fx, /may pass/);
-      });
-    }
-  });
-
-  it("when a document the scan indexed is missing from the worker", async () => {
-    await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md", "b.md"]);
-      const worker = new FakeWorkerIndex();
-      const { deps } = scanDeps(fx, worker, [docs]);
-      const verify = deps.verifyIndexed;
-      deps.verifyIndexed = async () => {
-        worker.rows.delete(resolve(docs, "a.md")); // lost after indexing
-        return verify();
-      };
-      expectKept(await migrateLegacyIndex(deps), fx, /1 document\(s\) the scan indexed are missing/);
-    });
-  });
-
-  it("when the scan throws, the count cannot be read, or the removal fails", async () => {
-    await withLegacy(async (fx) => {
-      const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md"]);
-      const a = scanDeps(fx, new FakeWorkerIndex(), [docs]);
+      const paths = await writeDocs(docs, ["a.md"]);
+      const manifest = await oldIndexOf(paths);
+      const m = scanDeps(fx, new FakeWorker(), [docs], manifest);
+      m.deps.loadManifest = async () => { throw new Error("database disk image is malformed"); };
+      expectKept(await migrateLegacyIndex(m.deps), fx, /old index could not be read: database disk image/);
+      const a = scanDeps(fx, new FakeWorker(), [docs], manifest);
       a.deps.runFullScan = async () => { throw new Error("worker gone"); };
       expectKept(await migrateLegacyIndex(a.deps), fx, /rebuild scan failed: worker gone/);
-      const b = scanDeps(fx, new FakeWorkerIndex(), [docs]);
-      b.deps.verifyIndexed = async () => { throw new Error("timeout"); };
+      const l = scanDeps(fx, new FakeWorker(), [docs], manifest);
+      l.deps.coverage.listNewDocuments = async () => { throw new Error("timeout"); };
+      expectKept(await migrateLegacyIndex(l.deps), fx, /new index could not be checked: timeout/);
+      const b = scanDeps(fx, new FakeWorker(), [docs], manifest);
+      b.deps.documentCount = async () => { throw new Error("timeout"); };
       expectKept(await migrateLegacyIndex(b.deps), fx, /did not report its documents: timeout/);
-      const c = scanDeps(fx, new FakeWorkerIndex(), [docs]);
+      const c = scanDeps(fx, new FakeWorker(), [docs], manifest);
       c.deps.removeDirectory = async () => { throw new Error("EACCES"); };
       expectKept(await migrateLegacyIndex(c.deps), fx, /could not be removed: EACCES/);
     });
@@ -465,14 +597,14 @@ describe("migrateLegacyIndex — keeps the old index", () => {
   it("never deletes a directory that holds the new index or the workspace", async () => {
     await withLegacy(async (fx) => {
       const scan = vi.fn();
-      const a = scanDeps(fx, new FakeWorkerIndex(), []);
+      const a = scanDeps(fx, new FakeWorker(), [], []);
       a.deps.runFullScan = scan;
       expectKept(
         await migrateLegacyIndex({ ...a.deps, location: { ...a.deps.location, indexRoot: join(fx.legacy, "nested") } }),
         fx,
         /inside the old index directory/,
       );
-      const b = scanDeps(fx, new FakeWorkerIndex(), []);
+      const b = scanDeps(fx, new FakeWorker(), [], []);
       b.deps.runFullScan = scan;
       expectKept(await migrateLegacyIndex({ ...b.deps, workspace: join(fx.legacy, "ws") }), fx, /inside/);
       expect(scan).not.toHaveBeenCalled();
@@ -483,17 +615,18 @@ describe("migrateLegacyIndex — keeps the old index", () => {
 describe("migrateLegacyIndex — bounded retries", () => {
   it("counts each failed attempt, stops after the bound, and says why", async () => {
     await withLegacy(async (fx) => {
-      const gone = join(fx.root, "unmounted-volume");
+      const volume = join(fx.root, "unmounted-volume");
+      const manifest = await oldIndexOf([join(volume, "a.md")]);
       const attempts = memoryAttempts();
       for (let n = 1; n <= INDEX_MIGRATION_MAX_ATTEMPTS; n += 1) {
-        const { deps } = scanDeps(fx, new FakeWorkerIndex(), [gone], { attempts });
+        const { deps } = scanDeps(fx, new FakeWorker(), [volume], manifest, { attempts });
         const result = await migrateLegacyIndex(deps);
         expect(result).toMatchObject({ phase: "kept-old", attempt: n, maxAttempts: INDEX_MIGRATION_MAX_ATTEMPTS });
         expect(Boolean(result?.retriesExhausted)).toBe(n === INDEX_MIGRATION_MAX_ATTEMPTS);
       }
       expect(attempts.state).toMatchObject({ attempts: INDEX_MIGRATION_MAX_ATTEMPTS, lastReason: expect.stringMatching(/could not be read/) });
 
-      const { deps, reports } = scanDeps(fx, new FakeWorkerIndex(), [gone], { attempts });
+      const { deps, reports } = scanDeps(fx, new FakeWorker(), [volume], manifest, { attempts });
       const scan = vi.spyOn(deps, "runFullScan");
       const stopped = await migrateLegacyIndex(deps);
       expect(scan).not.toHaveBeenCalled();
@@ -510,13 +643,13 @@ describe("migrateLegacyIndex — bounded retries", () => {
   it("a cancelled scan (the app quit mid-rebuild) does not use up an attempt", async () => {
     await withLegacy(async (fx) => {
       const docs = join(fx.root, "docs");
-      await writeDocs(docs, ["a.md"]);
+      const paths = await writeDocs(docs, ["a.md"]);
       const attempts = memoryAttempts({ attempts: 1 });
-      const { deps } = scanDeps(fx, new FakeWorkerIndex(), [docs], { attempts });
+      const { deps } = scanDeps(fx, new FakeWorker(), [docs], await oldIndexOf(paths), { attempts });
       deps.runFullScan = async () => ({
         result: { scanned: 1, indexed: 0, failed: 0, totalIndexed: 0, walked: 1, unreadableFolders: [], canceled: true },
         folderSource: "saved",
-        registeredFolders: 1,
+        folders: [docs],
       });
       const result = await migrateLegacyIndex(deps);
       expectKept(result, fx, /cancelled/);
