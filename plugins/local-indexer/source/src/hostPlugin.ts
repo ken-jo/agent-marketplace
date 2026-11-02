@@ -70,7 +70,12 @@ import {
   RESCAN_LEDGER_FILENAME,
 } from "./rescanSuggestion.js";
 import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
-import { migrateLegacyIndex, type IndexMigrationStatus } from "./indexMigration.js";
+import {
+  migrateLegacyIndex,
+  type FolderSource,
+  type IndexMigrationStatus,
+  type MigrationAttempts,
+} from "./indexMigration.js";
 import { LruCache } from "./lruCache.js";
 import { getIndexModeForPath, isImageFilePath, isIndexableFilePath } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
@@ -1728,6 +1733,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
   // ─── 폴더 영속화 (foldersConfigPath는 createPlugin 첫 부분에서 정의됨) ──
   async function loadPersistedFolders(): Promise<string[]> {
+    return (await loadPersistedFolderSet()).folders;
+  }
+
+  /**
+   * The registered folders, and whether they came from the saved list
+   * (`folders.json`, an explicit empty list included) or from the default set
+   * used when that file is missing or unreadable.
+   */
+  async function loadPersistedFolderSet(): Promise<{ folders: string[]; source: FolderSource }> {
     // Tool handlers are reachable only after publication, but may be invoked
     // before onPublished has finished. Preserve that lazy-start contract while
     // keeping candidate start side-effect free.
@@ -1767,11 +1781,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // 명시적 빈 folders.json 도 그대로 존중 — 사용자가 모든 폴더를
           // 제거했는데 fixtures fallback 으로 자동 복원되면 의도가 깨진다.
           // 파일이 존재해 파싱에 성공했다면 길이와 무관하게 cleaned 를 반환.
-          return cleaned;
+          return { folders: cleaned, source: "saved" };
         }
       }
     } catch { /* 파싱 실패 시 기본값 사용 */ }
-    return scanFolders.length > 0 ? scanFolders : [resolve(context.hostRoot, "fixtures")];
+    return {
+      folders: scanFolders.length > 0 ? scanFolders : [resolve(context.hostRoot, "fixtures")],
+      source: "fallback",
+    };
   }
 
   // Registered-folder count for the nightly-rescan suggestion gate. Unlike
@@ -2522,6 +2539,29 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // index_scan_status.indexMigration), and the old directory is removed only
   // after a clean, verified rebuild (src/indexMigration.ts).
   let indexMigrationStatus: IndexMigrationStatus | null = null;
+  // The attempt ledger lives beside the old index, never inside it.
+  const indexMigrationAttemptsPath = join(pluginDataDir, "index-migration-attempts.json");
+  const indexMigrationAttempts = {
+    read: async (): Promise<MigrationAttempts> => {
+      try {
+        const parsed = JSON.parse(await readFile(indexMigrationAttemptsPath, "utf-8")) as Partial<MigrationAttempts>;
+        const attempts = typeof parsed.attempts === "number" && Number.isInteger(parsed.attempts) && parsed.attempts >= 0
+          ? parsed.attempts
+          : 0;
+        return typeof parsed.lastReason === "string" ? { attempts, lastReason: parsed.lastReason } : { attempts };
+      } catch {
+        return { attempts: 0 };
+      }
+    },
+    write: async (next: MigrationAttempts) => {
+      // A rebuild cut short by stopping the plugin is not a failed attempt.
+      if (teardownPromise) return;
+      await writeFile(indexMigrationAttemptsPath, JSON.stringify(next), "utf-8");
+    },
+    clear: async () => {
+      await rm(indexMigrationAttemptsPath, { force: true });
+    },
+  };
   let indexMigrationPromise: Promise<void> | null = null;
 
   const indexMigrationNotice = (status: IndexMigrationStatus): IndexWarningPayload | null => {
@@ -2541,7 +2581,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           reason: status.reason,
           message:
             "인덱스 재구축이 완료되지 않아 이전 인덱스를 보존합니다 (" + (status.reason ?? "원인 불명") + "). " +
-            "다음 시작 때 다시 시도합니다.",
+            (status.retriesExhausted
+              ? `자동 재시도 ${status.maxAttempts}회를 모두 썼으므로 더 시도하지 않습니다. ` +
+                "원인을 해결한 뒤 이전 인덱스(" + status.legacyIndexDir + ")를 직접 지우십시오."
+              : `다음 시작 때 다시 시도합니다 (${status.attempt}/${status.maxAttempts}).`),
         };
       case "completed":
         return {
@@ -2564,6 +2607,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       {
         legacyIndexDir: status.legacyIndexDir,
         indexRoot: status.indexRoot,
+        attempt: status.attempt,
+        maxAttempts: status.maxAttempts,
+        retriesExhausted: status.retriesExhausted,
         documentsBefore: status.documentsBefore,
         documentsAfter: status.documentsAfter,
         scan: status.scan,
@@ -2592,9 +2638,26 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       await migrateLegacyIndex({
         location,
         workspace,
-        runFullScan: (status) => handlerImpls.index_scan({ migration: status }),
-        countDocuments: async () => (await plugin.listDocuments()).length,
+        runFullScan: async (status) => {
+          let folderSet: { source: FolderSource; count: number } | null = null;
+          const result = await handlerImpls.index_scan({
+            migration: status,
+            onFolderSet: (set) => { folderSet = set; },
+          });
+          if (!folderSet) throw new Error("index_scan did not report its folder list");
+          const used = folderSet as { source: FolderSource; count: number };
+          return { result, folderSource: used.source, registeredFolders: used.count };
+        },
+        verifyIndexed: async () => {
+          const expected = new Set(autoIndexer.getIndexedEntries().map((entry) => entry.docId));
+          const held = new Set((await plugin.listDocuments()).map((doc) => doc.doc_id));
+          let missing = 0;
+          for (const docId of expected) if (!held.has(docId)) missing += 1;
+          const info = await workerClient.runtimeInfo();
+          return { documentCount: info.document_count, missing };
+        },
         removeDirectory: (path) => rm(path, { recursive: true }),
+        attempts: indexMigrationAttempts,
         report: reportIndexMigration,
       });
     })()
@@ -2799,7 +2862,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // index_add_folder, index_add_folders, index_remove_folder) hard-fail —
   // no alias handlers (owner decision A).
   const handlerImpls = {
-      index_scan: async (opts: { migration?: IndexMigrationStatus } = {}) => {
+      index_scan: async (opts: {
+        migration?: IndexMigrationStatus;
+        /** Told which folder list this scan used (the migration needs to know). */
+        onFolderSet?: (set: { source: FolderSource; count: number }) => void;
+      } = {}) => {
         clearRecentIndexWarnings();
         _surfacedWarningKeys.clear();
         if (opts.migration) {
@@ -3157,7 +3224,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         // "Indexed" 상태가 아닌 폴더만 스캔 대상으로 한정.
         // index_folders(UI)와 동일한 소스(DB 우선, 실패 시 IndexState 폴백)를 사용해야
         // UI에 "Indexed"로 표시된 폴더가 스캔 대상에서 정확히 제외된다.
-        const allFolders = await loadPersistedFolders();
+        const folderSet = await loadPersistedFolderSet();
+        const allFolders = folderSet.folders;
+        opts.onFolderSet?.({ source: folderSet.source, count: allFolders.length });
         let stateForScan: Map<string, { docId: string; mtimeMs: number; indexedAt: string }>;
         try {
           const docs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);

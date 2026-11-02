@@ -129,15 +129,22 @@ Workspace (pluginDataDir/.local-indexer-workspace/)
 > **0.8.0 업그레이드**: 이전 버전은 인덱스를 `pluginDataDir/index/` 에 두었습니다.
 > 이 인덱스는 상태 디렉터리로 복사할 수 없으므로 첫 시작 때 등록 폴더 전체를
 > 다시 인덱싱합니다. 진행률과 `index-migration` 경고가 표시되고
-> `index_scan_status.indexMigration` 에 상태가 남습니다. 취소되지 않고, 실패한
-> 파일이 없고, 워커의 문서 수가 스캔 결과와 같을 때에만 이전 디렉터리를 지웁니다.
-> 그렇지 않으면 이전 디렉터리를 남기고 다음 시작 때 다시 시도합니다.
+> `index_scan_status.indexMigration` 에 상태가 남습니다. 이전 디렉터리는 다음이
+> 모두 확인될 때에만 지웁니다: 저장된 폴더 목록으로 스캔했다(명시적인 빈 목록 포함,
+> 목록이 없거나 깨져 기본 폴더를 쓴 경우는 제외), 모든 디렉터리를 읽었다(마운트되지
+> 않은 볼륨이나 권한 거부가 없다), 등록 폴더에 파일이 하나 이상 있었다, 취소되지 않았고
+> 다시 하면 될 수 있는 실패(워커 종료, 요청 취소)가 없었다, 스캔이 인덱싱한 문서가
+> 모두 워커에 있다. 워커가 거부한 파일(용량 초과, 암호화 등)은 다시 해도 같으므로
+> 완료로 칩니다. 그렇지 않으면 이전 디렉터리를 남기고 다음 시작 때 다시 시도하며,
+> 5회 뒤에는 자동 재시도를 멈추고 이유를 상태에 표시합니다. 취소된 스캔은 시도로
+> 세지 않습니다.
 
 ## 내부 API (worker stdio control v1)
 
 익스텐션 프로세스와 Python worker 사이의 내부 계약입니다. 워커의 stdout 에는
 줄 단위 JSON-RPC 2.0 프레임만 흐르고(프레임당 최대 16 MiB, 방향별 동시 요청 64개),
-로그는 stderr 로 갑니다. 워커는 호스트의 `$/ave/hello` 에 먼저 답하고,
+로그는 stderr 로 갑니다. 워커는 호스트의 `$/ave/hello` 에 먼저 답하고(호스트가
+알린 `frameBytesMax` 를 양방향 상한으로 씀),
 `$/ave/cancel` 을 받으면 해당 요청을 -32800 으로 끝내며, stdin EOF 또는
 `$/ave/shutdown` 에 종료합니다. Ave에서 사용하는 공개 도구 계약은 위의
 **Ave Extension Tools** 표이며, 이 메서드들을 외부 통합 API로 쓰지 않습니다.
@@ -151,7 +158,7 @@ Workspace (pluginDataDir/.local-indexer-workspace/)
 | `runtime_allowed_roots` | 인덱싱 허용 루트 갱신 |
 | `indexer_reindex` | 단일 파일 강제 재인덱싱 (단일 ingestion 경로) |
 | `indexer_reconcile` | SQLite↔LanceDB 벡터 drift 감지+정규화 |
-| `documents_list` | 문서 목록 |
+| `documents_list` | 문서 목록, 페이지 단위 (`{limit≤1000, after}` → `{documents, next_after}`) |
 | `document_get` | 단일 문서 메타 |
 | `documents_delete` | 문서 인덱스 항목 삭제 |
 | `document_structure` | TOC 트리 (agentic 루프) |

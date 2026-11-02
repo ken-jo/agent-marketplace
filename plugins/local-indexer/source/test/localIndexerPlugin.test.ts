@@ -89,7 +89,9 @@ describe("LocalIndexerPlugin — lifecycle", () => {
 
   it("starts once, attaches the worker client, and stops in order: worker_shutdown, then handle.stop()", async () => {
     await withTempDir("ave-li-life-", async (dir) => {
-      const worker = readyWorker({ documents_list: () => [{ doc_id: "d1", path: "/a.md", doc_name: "a.md", doc_type: "md" }] });
+      const worker = readyWorker({
+        documents_list: () => ({ documents: [{ doc_id: "d1", path: "/a.md", doc_name: "a.md", doc_type: "md" }], next_after: null }),
+      });
       const { spawnWorker, specs } = spawnSequence(worker);
       const plugin = makePlugin(spawnWorker, { pluginDataDir: dir });
       await Promise.all([plugin.start(), plugin.start()]);

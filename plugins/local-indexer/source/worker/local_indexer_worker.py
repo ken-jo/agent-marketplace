@@ -350,6 +350,16 @@ class SearchRequest(BaseModel):
     topK: int = Field(20, ge=1, le=200)
 
 
+# A page of documents_list must fit one control frame with room to spare:
+# 1000 rows of path + name at the 4 KiB path limit stay well under 16 MiB.
+DOCUMENTS_PAGE_MAX = 1000
+
+
+class DocumentsListRequest(BaseModel):
+    after: Optional[str] = Field(None, max_length=512)
+    limit: int = Field(DOCUMENTS_PAGE_MAX, ge=1, le=DOCUMENTS_PAGE_MAX)
+
+
 class DocIdRequest(BaseModel):
     doc_id: str = Field(..., min_length=1, max_length=512)
 
@@ -481,8 +491,8 @@ def build_handlers(state: AppState, *, egress_relay: Optional[Any] = None) -> Di
 
     async def runtime_info(_params: Any) -> Dict[str, Any]:
         _open()
-        docs = await _blocking(state.indexer.list_documents)
-        return {**state.runtime_info, "document_count": len(docs)}
+        count = await _blocking(state.indexer.count_documents)
+        return {**state.runtime_info, "document_count": count}
 
     async def runtime_allowed_roots(params: Any) -> Dict[str, Any]:
         req = _validated(AllowedRootsRequest, params)
@@ -521,9 +531,15 @@ def build_handlers(state: AppState, *, egress_relay: Optional[Any] = None) -> Di
         _open()
         return await _exclusive(state, state.indexer.reconcile)
 
-    async def documents_list(_params: Any) -> List[Dict[str, Any]]:
+    async def documents_list(params: Any) -> Dict[str, Any]:
+        # Paged: an index of tens of thousands of documents does not fit one
+        # control frame. ``next_after`` is the cursor for the next page, or
+        # null on the last one.
+        req = _validated(DocumentsListRequest, params if params is not None else {})
         _open()
-        return await _blocking(state.indexer.list_documents)
+        rows = await _blocking(state.indexer.list_documents_page, req.after, req.limit)
+        next_after = rows[-1]["doc_id"] if len(rows) == req.limit else None
+        return {"documents": rows, "next_after": next_after}
 
     async def document_get(params: Any) -> Dict[str, Any]:
         req = _validated(DocIdRequest, params)

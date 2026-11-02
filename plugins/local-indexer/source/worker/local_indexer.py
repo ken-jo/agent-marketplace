@@ -602,6 +602,26 @@ class LocalIndexer:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_documents_page(self, after: Optional[str], limit: int) -> List[Dict[str, Any]]:
+        """One page of documents in ``doc_id`` order, after the cursor ``after``.
+
+        Keyset paging, not offset: a document indexed or removed between two
+        pages neither shifts the rest nor repeats one.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT doc_id, path, doc_name, doc_type, page_count, line_count, "
+                "       mtime_ms, indexed_at, status, content_state "
+                "FROM documents WHERE doc_id > ? ORDER BY doc_id LIMIT ?",
+                (after or "", int(limit)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def count_documents(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS n FROM documents").fetchone()
+        return int(row["n"])
+
     def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(

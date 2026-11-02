@@ -20,6 +20,7 @@ import {
   TEMP_FILE_PREFIXES,
 } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
+import { isTransientIndexFailure } from "./workerClient.js";
 
 /** Simple ReDoS heuristic: detect nested quantifiers like (...+)+ or (...*)*. */
 const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*]/;
@@ -295,6 +296,9 @@ export class FolderAutoIndexer {
       let processed = 0;
       let indexed = 0;
       let failed = 0;
+      let failedTransient = 0;
+      let walked = 0;
+      let unreadableFolders: string[] = [];
       let lastError: string | undefined;
       let canceled = false;
 
@@ -324,7 +328,10 @@ export class FolderAutoIndexer {
 
       try {
         const { readdir } = await import("node:fs/promises");
-        const allFiles = await this.collectSupportedFiles(readdir, foldersOverride);
+        const collected = await this.collectSupportedFiles(readdir, foldersOverride);
+        const allFiles = collected.files;
+        walked = collected.walked;
+        unreadableFolders = collected.unreadable;
 
         // Pre-filter: 이미 캐시에 있고 mtime이 동일한(up-to-date) 파일은 제외.
         // total이 실제로 처리해야 할 파일 수만 반영되도록 한다.
@@ -404,6 +411,7 @@ export class FolderAutoIndexer {
             }
           } catch (err) {
             failed += 1;
+            if (isTransientIndexFailure(err)) failedTransient += 1;
             if (counters) counters.failed += 1;
             lastError = (err as Error).message;
             // Capture docId before clearing maps so the callback can remove the DB record too.
@@ -480,6 +488,9 @@ export class FolderAutoIndexer {
           scanned: files.length,
           indexed,
           failed,
+          failedTransient,
+          walked,
+          unreadableFolders,
           totalIndexed: this.docIdByPath.size,
           canceled,
         } satisfies FolderAutoIndexerResult;
@@ -691,18 +702,31 @@ export class FolderAutoIndexer {
     return isIndexableFilePath(filePath, { includeImages: this.imageEmbeddingEnabled });
   }
 
+  /**
+   * Walk the folders. `walked` counts every file seen before the supported-type
+   * filter; `unreadable` lists each directory whose listing failed, so a scan
+   * over an unmounted volume or a folder the OS refuses is not mistaken for an
+   * empty one.
+   */
   private async collectSupportedFiles(
     readdir: typeof import("node:fs/promises").readdir,
     foldersOverride?: string[],
-  ): Promise<string[]> {
+  ): Promise<{ files: string[]; walked: number; unreadable: string[] }> {
     const folders = foldersOverride ?? this.folders;
-    const allFiles = await Promise.all(folders.map((folder) => this.walkDir(folder, readdir)));
-    return allFiles.flat().filter((filePath) => this.isSupportedFile(filePath));
+    const unreadable: string[] = [];
+    const allFiles = await Promise.all(folders.map((folder) => this.walkDir(folder, readdir, unreadable)));
+    const walkedFiles = [...new Set(allFiles.flat())];
+    return {
+      files: walkedFiles.filter((filePath) => this.isSupportedFile(filePath)),
+      walked: walkedFiles.length,
+      unreadable,
+    };
   }
 
   private async walkDir(
     dirPath: string,
     readdir: typeof import("node:fs/promises").readdir,
+    unreadable: string[],
   ): Promise<string[]> {
     try {
       const entries = await readdir(dirPath, { withFileTypes: true });
@@ -713,7 +737,7 @@ export class FolderAutoIndexer {
         }
         const fullPath = resolve(dirPath, entry.name);
         if (entry.isDirectory()) {
-          files.push(...(await this.walkDir(fullPath, readdir)));
+          files.push(...(await this.walkDir(fullPath, readdir, unreadable)));
         } else if (entry.isFile()) {
           files.push(fullPath);
         }
@@ -721,6 +745,7 @@ export class FolderAutoIndexer {
       return files;
     } catch (err) {
       console.warn(`[FolderAutoIndexer] walkDir: readdir failed for ${dirPath}:`, err);
+      unreadable.push(dirPath);
       return [];
     }
   }

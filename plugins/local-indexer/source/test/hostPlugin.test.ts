@@ -23,6 +23,8 @@ const setAllowedRootsMock = vi.fn(async (roots: string[]) => ({ roots, count: ro
 // Where the mocked worker says its index lives. Tests of the 0.8.0 index
 // rebuild set a legacy directory here.
 let mockScanTotalIndexed = 5;
+let mockUnreadableFolders: string[] = [];
+let mockIndexedEntries: Array<{ filePath: string; docId: string; mtimeMs: number }> | null = null;
 let mockIndexLocation: {
   indexRoot: string;
   documentCount: number;
@@ -167,6 +169,7 @@ vi.mock("../src/folderIndexer.js", () => {
     prePopulateCache(_docs) {}
 
     getIndexedEntries() {
+      if (mockIndexedEntries) return mockIndexedEntries;
       return [
         { filePath: join(this.folders[0] ?? "/tmp", "a.pdf"), docId: "fallback-1", mtimeMs: 1710000000000 },
       ];
@@ -204,6 +207,9 @@ vi.mock("../src/folderIndexer.js", () => {
         scanned: 2,
         indexed: 2,
         failed: 0,
+        failedTransient: 0,
+        walked: 2,
+        unreadableFolders: mockUnreadableFolders,
         totalIndexed: mockScanTotalIndexed,
         folders: this.folders,
       };
@@ -233,6 +239,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
         setImageCaptioning: setImageCaptioningMock,
         setEmbeddingEgress: setEmbeddingEgressMock,
         setAllowedRoots: setAllowedRootsMock,
+        runtimeInfo: async () => ({ index_root: mockIndexLocation?.indexRoot ?? "", document_count: mockDocuments.length }),
         reconcile: reconcileMock,
         reindex: reindexMock,
         captionImage: async () => ({
@@ -374,6 +381,8 @@ describe("hostPlugin createPlugin", () => {
     setAllowedRootsMock.mockClear();
     mockIndexLocation = null;
     mockScanTotalIndexed = 5;
+    mockUnreadableFolders = [];
+    mockIndexedEntries = null;
     reconcileMock.mockClear();
     reconcileMock.mockResolvedValue({
       checked: true,
@@ -804,6 +813,22 @@ describe("hostPlugin createPlugin", () => {
       return legacy;
     }
 
+    /** A saved folder list, so the scan does not use the default folders. */
+    async function savedFolders(): Promise<string> {
+      const docs = join(hostRoot, "docs");
+      await mkdir(docs, { recursive: true });
+      const workspaceDir = join(hostRoot, ".local-indexer-workspace");
+      await mkdir(workspaceDir, { recursive: true });
+      await writeFile(join(workspaceDir, "folders.json"), JSON.stringify({ folders: [docs] }));
+      return docs;
+    }
+
+    function indexedAsWorkerHolds(docs: string) {
+      mockIndexedEntries = mockDocuments.map((d) => ({ filePath: join(docs, d.doc_name), docId: d.doc_id, mtimeMs: 1 }));
+    }
+
+    const ledgerPath = () => join(hostRoot, "index-migration-attempts.json");
+
     async function settledMigration(plugin: any) {
       let status: any;
       await vi.waitFor(async () => {
@@ -813,9 +838,16 @@ describe("hostPlugin createPlugin", () => {
       return status;
     }
 
-    it("rebuilds visibly and deletes the old index only after the worker count matches", async () => {
+    function migrationNotices(events: any[]): string[] {
+      return events
+        .filter(([name, payload]: [string, any]) => name === "index.warning" && payload.kind === "index-migration")
+        .map(([, payload]: [string, any]) => payload.message);
+    }
+
+    it("rebuilds visibly and deletes the old index once every indexed document is in the worker", async () => {
       const legacy = await legacyIndexFixture();
-      mockScanTotalIndexed = mockDocuments.length;
+      indexedAsWorkerHolds(await savedFolders());
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 2, lastReason: "earlier" }));
       const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
@@ -824,13 +856,13 @@ describe("hostPlugin createPlugin", () => {
       expect(status).toMatchObject({
         phase: "completed",
         legacyIndexDir: legacy,
+        attempt: 3,
         documentsAfter: mockDocuments.length,
-        scan: { totalIndexed: mockDocuments.length, failed: 0 },
+        scan: { folderSource: "saved", registeredFolders: 1, unreadableFolders: [], failedTransient: 0 },
       });
       await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
-      const notices = events
-        .filter(([name, payload]: [string, any]) => name === "index.warning" && payload.kind === "index-migration")
-        .map(([, payload]: [string, any]) => payload.message);
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      const notices = migrationNotices(events);
       expect(notices).toHaveLength(2);
       expect(notices[0]).toMatch(/전체 재인덱싱/);
       expect(notices[1]).toMatch(/재구축 완료/);
@@ -844,21 +876,66 @@ describe("hostPlugin createPlugin", () => {
       await plugin.stop();
     });
 
-    it("keeps the old index when the rebuilt count does not match the scan", async () => {
+    it("keeps the old index, and counts the attempt, when an indexed document is missing from the worker", async () => {
       const legacy = await legacyIndexFixture();
-      mockScanTotalIndexed = mockDocuments.length + 3;
+      const docs = await savedFolders();
+      indexedAsWorkerHolds(docs);
+      mockIndexedEntries!.push({ filePath: join(docs, "lost.md"), docId: "lost", mtimeMs: 1 });
       const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
-      expect(status.phase).toBe("kept-old");
-      expect(status.reason).toMatch(/holds 2 document\(s\) but the scan indexed 5/);
+      expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
+      expect(status.reason).toMatch(/1 document\(s\) the scan indexed are missing/);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
-      expect(events).toContainEqual([
-        "index.warning",
-        expect.objectContaining({ kind: "index-migration", message: expect.stringMatching(/이전 인덱스를 보존/) }),
-      ]);
+      expect(JSON.parse(await readFile(ledgerPath(), "utf-8"))).toMatchObject({ attempts: 1 });
+      expect(migrationNotices(events).at(-1)).toMatch(/이전 인덱스를 보존.*다음 시작 때 다시 시도합니다 \(1\/5\)/);
+      await plugin.stop();
+    });
+
+    it("keeps the old index when the scan used the default folders (no saved folder list)", async () => {
+      const legacy = await legacyIndexFixture();
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.scan.folderSource).toBe("fallback");
+      expect(status.reason).toMatch(/saved folder list was missing or unreadable/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("keeps the old index when a registered folder could not be read", async () => {
+      const legacy = await legacyIndexFixture();
+      indexedAsWorkerHolds(await savedFolders());
+      mockUnreadableFolders = ["/Volumes/Unmounted"];
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/could not be read: \/Volumes\/Unmounted/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("stops retrying after the bound and says so in the banner, without scanning", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "1 folder(s) could not be read: /x" }));
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", retriesExhausted: true });
+      expect(status.scan).toBeUndefined();
+      expect(status.reason).toMatch(/stopped after 5 attempt\(s\); last reason: 1 folder\(s\) could not be read/);
+      expect(migrationNotices(events).at(-1)).toMatch(/자동 재시도 5회를 모두 썼으므로/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
     });
 

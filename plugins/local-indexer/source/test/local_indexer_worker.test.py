@@ -40,6 +40,13 @@ class FakeIndexer:
     def list_documents(self) -> List[Dict[str, Any]]:
         return list(self.docs)
 
+    def list_documents_page(self, after: Any, limit: int) -> List[Dict[str, Any]]:
+        rows = sorted(self.docs, key=lambda d: d["doc_id"])
+        return [d for d in rows if d["doc_id"] > (after or "")][:limit]
+
+    def count_documents(self) -> int:
+        return len(self.docs)
+
     def get_document(self, doc_id: str) -> Any:
         return next((d for d in self.docs if d["doc_id"] == doc_id), None)
 
@@ -103,6 +110,68 @@ def test_runtime_info_reports_the_document_count(handlers: Dict[str, Any]) -> No
     info = _call(handlers, "runtime_info")
     assert info["index_root"] == "/r"
     assert info["document_count"] == 1
+
+
+def test_documents_list_pages_by_cursor_and_validates_its_params(handlers: Dict[str, Any]) -> None:
+    assert _call(handlers, "documents_list") == {"documents": [{"doc_id": "d1", "path": "/x"}], "next_after": None}
+    with pytest.raises(sc.RequestError) as excinfo:
+        _call(handlers, "documents_list", {"limit": w.DOCUMENTS_PAGE_MAX + 1})
+    assert excinfo.value.code == sc.INVALID_PARAMS
+    with pytest.raises(sc.RequestError):
+        _call(handlers, "documents_list", {"limit": 0})
+
+
+def test_documents_list_pages_a_large_index_in_frames_that_fit(tmp_path: Path) -> None:
+    """40k documents with long paths do not fit one frame; every page does."""
+    import sqlite3
+
+    from worker.local_indexer import LocalIndexer
+
+    class _Embed:
+        def embed_corpus(self, texts: Any) -> Any:  # pragma: no cover - never indexed here
+            return []
+
+    class _Store:
+        def delete(self, *_a: Any, **_k: Any) -> None:  # pragma: no cover
+            pass
+
+    indexer = LocalIndexer(
+        workspace=str(tmp_path / "workspace"),
+        sqlite_path=str(tmp_path / "fts5.sqlite"),
+        lance_path=str(tmp_path / "vectors.lance"),
+        openai_api_key=None,
+        embedding_client=_Embed(),
+        vector_store=_Store(),
+    )
+    total = 40_000
+    long_dir = "/Users/someone/Documents/" + "deeply-nested-folder/" * 18
+    with sqlite3.connect(indexer.sqlite_path) as conn:
+        conn.executemany(
+            "INSERT INTO documents (doc_id, path, doc_name, doc_type, mtime_ms, indexed_at, status) "
+            "VALUES (?, ?, ?, 'md', 1, ?, 'indexed')",
+            [(f"doc-{i:06d}", f"{long_dir}file-{i:06d}.md", f"file-{i:06d}.md", i) for i in range(total)],
+        )
+    everything = indexer.list_documents()
+    with pytest.raises(sc.FrameTooLarge):
+        sc.encode_frame({"id": 1, "result": everything})
+
+    state = w.AppState(indexer=indexer, search=FakeSearch(), runtime_info={})
+    paged = w.build_handlers(state)
+    assert _call(paged, "runtime_info")["document_count"] == total
+    seen: List[str] = []
+    after = None
+    pages = 0
+    while True:
+        params = {"limit": w.DOCUMENTS_PAGE_MAX} if after is None else {"after": after, "limit": w.DOCUMENTS_PAGE_MAX}
+        page = _call(paged, "documents_list", params)
+        sc.encode_frame({"id": 1, "result": page})  # each page fits one frame
+        seen.extend(d["doc_id"] for d in page["documents"])
+        pages += 1
+        if page["next_after"] is None:
+            break
+        after = page["next_after"]
+    assert pages == total // w.DOCUMENTS_PAGE_MAX + 1
+    assert len(seen) == total and len(set(seen)) == total
 
 
 def test_closed_stores_refuse_further_work(handlers: Dict[str, Any]) -> None:

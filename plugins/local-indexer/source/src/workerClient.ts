@@ -53,6 +53,47 @@ export class WorkerCallError extends Error {
   }
 }
 
+/**
+ * The worker indexed the file and reported `status: "failed"` for it (too
+ * large, encrypted, unparseable, …). Retrying the same bytes fails the same
+ * way, so a scan counts it as done.
+ */
+export class WorkerIndexFailure extends Error {
+  readonly filePath: string;
+  constructor(message: string, filePath: string) {
+    super(message);
+    this.name = "WorkerIndexFailure";
+    this.filePath = filePath;
+  }
+}
+
+/**
+ * Worker refusals that are a verdict on the request itself: invalid params
+ * (a path outside the allowed roots, a bad mode) and a file that is not there.
+ * Anything else the worker raises (-32000) is an unexpected failure.
+ */
+const PERMANENT_WORKER_CODES = new Set([-32602, -32004]);
+
+/**
+ * Whether an indexing failure may go away on a retry. The worker's own
+ * verdicts — a `failed` result, or a refusal in PERMANENT_WORKER_CODES — do
+ * not. A lost worker, a cancelled or backed-up request, an unexpected worker
+ * error and any error this client does not recognise may.
+ */
+export function isTransientIndexFailure(err: unknown): boolean {
+  if (err instanceof WorkerIndexFailure) return false;
+  if (err instanceof WorkerCallError) {
+    if (err.code === "worker-request-failed") {
+      return err.workerCode === undefined || !PERMANENT_WORKER_CODES.has(err.workerCode);
+    }
+    // payload-too-large is the same request failing the same way; every other
+    // control code (worker-incarnation-ended, worker-request-cancelled,
+    // worker-backpressure, worker-not-running, …) says nothing about the file.
+    return err.code !== "payload-too-large";
+  }
+  return true;
+}
+
 /** Duck-typed: the control error may be the host's own class instance. */
 function asWorkerCallError(method: string, err: unknown): Error {
   if (typeof err === "object" && err !== null && "code" in err && typeof (err as { code: unknown }).code === "string") {
@@ -102,6 +143,25 @@ interface RawDocumentRow {
   indexed_at?: string;
   status?: string;
   content_state?: string;
+}
+
+/** One documents_list page; `next_after` is null on the last page. */
+interface DocumentsPage {
+  documents: RawDocumentRow[];
+  next_after: string | null;
+}
+
+/** Rows per documents_list page; the worker caps it at the same number. */
+export const DOCUMENTS_PAGE_SIZE = 1000;
+
+function indexedAtKey(row: RawDocumentRow): number {
+  const value = row.indexed_at as unknown;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
 }
 
 interface DocumentListing {
@@ -221,8 +281,27 @@ export class WorkerClient implements WorkerSearchClient, KnowledgeWorkerClient {
 
   // ─── KnowledgeWorkerClient 구현 ──────────────────
 
+  /**
+   * Every document, newest first. documents_list is paged (one control frame
+   * cannot carry a large index), so this follows its cursor to the end.
+   */
   async listDocuments(): Promise<DocumentListing[]> {
-    const rows = await this.call<RawDocumentRow[]>(WORKER_METHODS.listDocuments);
+    const rows: RawDocumentRow[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const page: DocumentsPage = await this.call<DocumentsPage>(
+        WORKER_METHODS.listDocuments,
+        after === null ? { limit: DOCUMENTS_PAGE_SIZE } : { after, limit: DOCUMENTS_PAGE_SIZE },
+      );
+      rows.push(...page.documents);
+      if (page.next_after === null) break;
+      if (after !== null && page.next_after <= after) {
+        throw new WorkerCallError(`${WORKER_METHODS.listDocuments}: cursor did not advance`, "worker-contract");
+      }
+      after = page.next_after;
+    }
+    // The pages come in doc_id order; callers have always seen newest first.
+    rows.sort((a, b) => indexedAtKey(b) - indexedAtKey(a));
     return rows.map((row) => this.toDocumentListing(row));
   }
 
@@ -273,7 +352,7 @@ export class WorkerClient implements WorkerSearchClient, KnowledgeWorkerClient {
     const result = await this.reindex(filePath, mode);
     if (result.status === "failed") {
       const detail = result.errors?.length ? `: ${result.errors.join(", ")}` : "";
-      throw new Error(`indexDocument: 인덱싱 실패 (${filePath})${detail}`);
+      throw new WorkerIndexFailure(`indexDocument: 인덱싱 실패 (${filePath})${detail}`, filePath);
     }
     if (!result?.doc_id) {
       throw new Error(`indexDocument: worker reindex 응답에 doc_id 없음 (${filePath})`);

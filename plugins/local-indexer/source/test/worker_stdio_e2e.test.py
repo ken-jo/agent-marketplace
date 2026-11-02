@@ -162,7 +162,8 @@ def test_the_real_worker_speaks_stdio_control_v1(worker: WorkerProcess, tmp_path
         assert "authorization" not in {k.lower() for k in frame["params"]["headers"]}
 
     docs_listed = worker.call("documents_list")
-    assert [Path(d["path"]).name for d in docs_listed] == ["budget.md"]
+    assert docs_listed["next_after"] is None
+    assert [Path(d["path"]).name for d in docs_listed["documents"]] == ["budget.md"]
     hits = worker.call("search_bm25", {"query": "예산", "topK": 5})
     assert hits and hits[0]["doc_name"] == "budget.md"
 

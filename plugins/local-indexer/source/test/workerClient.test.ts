@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { WorkerControlError } from "@ave/plugin-contract";
-import { WORKER_METHODS, WorkerCallError, WorkerClient } from "../src/workerClient";
+import {
+  DOCUMENTS_PAGE_SIZE,
+  WORKER_METHODS,
+  WorkerCallError,
+  WorkerClient,
+  WorkerIndexFailure,
+  isTransientIndexFailure,
+} from "../src/workerClient";
 import { FakeStdioWorker, workerRefusal } from "./support/fakeStdioWorker";
 
 function attached(responders: Record<string, (params: unknown) => unknown> = {}): {
@@ -40,7 +47,7 @@ describe("WorkerClient request mapping", () => {
       search_bm25: [],
       search_vector: [],
       search_hybrid: [],
-      documents_list: [],
+      documents_list: { documents: [], next_after: null },
       document_structure: { nodes: [] },
       page_content: [],
       document_get: { doc_id: "d 1" },
@@ -81,7 +88,7 @@ describe("WorkerClient request mapping", () => {
       ["search_bm25", { query: "q", topK: 3 }],
       ["search_vector", { query: "q", topK: 4 }],
       ["search_hybrid", { query: "q", topK: 5 }],
-      ["documents_list", undefined],
+      ["documents_list", { limit: DOCUMENTS_PAGE_SIZE }],
       ["document_structure", { doc_id: "d 1" }],
       ["page_content", { doc_id: "d 1", pages: "1-3" }],
       ["document_get", { doc_id: "d 1" }],
@@ -136,17 +143,22 @@ describe("WorkerClient request mapping", () => {
 
   it("listDocuments preserves DB-backed metadata and compatibility aliases", async () => {
     const { client } = attached({
-      documents_list: () => [
-        { doc_id: "d1", path: "/docs/a.md", doc_name: "a.md", doc_type: "md", line_count: 12, indexed_at: "2026-04-01T00:00:00Z", status: "ready" },
-        { doc_id: "d2", path: "/docs/b.pdf", doc_name: "b.pdf", doc_type: "pdf", page_count: 10, indexed_at: "2026-04-02T00:00:00Z" },
-      ],
+      documents_list: () => ({
+        documents: [
+          { doc_id: "d1", path: "/docs/a.md", doc_name: "a.md", doc_type: "md", line_count: 12, indexed_at: "2026-04-01T00:00:00Z", status: "ready" },
+          { doc_id: "d2", path: "/docs/b.pdf", doc_name: "b.pdf", doc_type: "pdf", page_count: 10, indexed_at: "2026-04-02T00:00:00Z" },
+        ],
+        next_after: null,
+      }),
     });
     const docs = await client.listDocuments();
-    expect(docs[0]).toMatchObject({
+    // Newest first, whatever order the pages came in.
+    expect(docs.map((d) => d.docId)).toEqual(["d2", "d1"]);
+    expect(docs[1]).toMatchObject({
       docId: "d1", docName: "a.md", type: "md", path: "/docs/a.md", lineCount: 12,
       indexedAt: "2026-04-01T00:00:00Z", updatedAt: "2026-04-01T00:00:00Z", status: "ready",
     });
-    expect(docs[1]).toMatchObject({ docId: "d2", pageCount: 10, updatedAt: "2026-04-02T00:00:00Z" });
+    expect(docs[0]).toMatchObject({ docId: "d2", pageCount: 10, updatedAt: "2026-04-02T00:00:00Z" });
   });
 
   it("indexDocument returns the doc id and throws the worker's errors for a failed file", async () => {
@@ -165,6 +177,68 @@ describe("WorkerClient request mapping", () => {
     const signal = AbortSignal.timeout(1000);
     await client.runtimeInfo({ signal });
     expect(worker.requests[0]?.options?.signal).toBe(signal);
+  });
+});
+
+describe("WorkerClient.listDocuments paging", () => {
+  it("follows the cursor through a large index, one bounded page per request", async () => {
+    const total = 45_000;
+    const all = Array.from({ length: total }, (_v, i) => ({
+      doc_id: `doc-${String(i).padStart(6, "0")}`,
+      path: `/docs/${i}.md`,
+      doc_name: `${i}.md`,
+      doc_type: "md",
+      indexed_at: i,
+    }));
+    const { client, worker } = attached({
+      documents_list: (params) => {
+        const { after, limit } = params as { after?: string; limit: number };
+        expect(limit).toBe(DOCUMENTS_PAGE_SIZE);
+        const start = after ? all.findIndex((d) => d.doc_id === after) + 1 : 0;
+        const page = all.slice(start, start + limit);
+        return { documents: page, next_after: page.length === limit ? page.at(-1)!.doc_id : null };
+      },
+    });
+    const docs = await client.listDocuments();
+    expect(docs).toHaveLength(total);
+    expect(new Set(docs.map((d) => d.docId)).size).toBe(total);
+    expect(docs[0]!.docId).toBe("doc-044999"); // newest first
+    const calls = worker.callsOf("documents_list");
+    // A full last page cannot know it is last; one empty page ends the walk.
+    expect(calls).toHaveLength(Math.floor(total / DOCUMENTS_PAGE_SIZE) + 1);
+    expect(calls[0]!.params).toEqual({ limit: DOCUMENTS_PAGE_SIZE });
+    expect(calls[1]!.params).toEqual({ after: "doc-000999", limit: DOCUMENTS_PAGE_SIZE });
+  });
+
+  it("fails clearly, instead of looping, when the cursor does not advance", async () => {
+    const { client } = attached({
+      documents_list: () => ({ documents: [{ doc_id: "a", path: "/a", doc_name: "a", doc_type: "md" }], next_after: "a" }),
+    });
+    await expect(client.listDocuments()).rejects.toThrow(/cursor did not advance/);
+  });
+});
+
+describe("isTransientIndexFailure", () => {
+  it("separates the worker's verdict on a file from failures that may pass", () => {
+    expect(isTransientIndexFailure(new WorkerIndexFailure("failed", "/a"))).toBe(false);
+    expect(isTransientIndexFailure(new WorkerCallError("bad path", "worker-request-failed", -32602))).toBe(false);
+    expect(isTransientIndexFailure(new WorkerCallError("not found", "worker-request-failed", -32004))).toBe(false);
+    expect(isTransientIndexFailure(new WorkerCallError("too big", "payload-too-large"))).toBe(false);
+    expect(isTransientIndexFailure(new WorkerCallError("io", "worker-request-failed", -32000))).toBe(true);
+    expect(isTransientIndexFailure(new WorkerCallError("x", "worker-request-failed"))).toBe(true);
+    for (const code of ["worker-incarnation-ended", "worker-request-cancelled", "worker-backpressure", "worker-not-running"]) {
+      expect(isTransientIndexFailure(new WorkerCallError(code, code)), code).toBe(true);
+    }
+    expect(isTransientIndexFailure(new Error("unknown"))).toBe(true);
+  });
+
+  it("indexDocument reports a failed result as the worker's verdict", async () => {
+    const { client } = attached({
+      indexer_reindex: () => ({ doc_id: "d", doc_name: "e.pdf", doc_type: "pdf", chunk_count: 0, status: "failed", errors: ["encrypted"] }),
+    });
+    const err = await client.indexDocument("/e.pdf").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WorkerIndexFailure);
+    expect(isTransientIndexFailure(err)).toBe(false);
   });
 });
 

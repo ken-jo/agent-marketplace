@@ -35,10 +35,32 @@ rebuilds the index once (see below).
   into the state directory, so the first start rebuilds it with a full scan
   of the registered folders. The scan shows its progress and an
   `index-migration` warning, and `index_scan_status` reports
-  `indexMigration`. The old directory is deleted only after a scan that was
-  not cancelled, failed no file, and left the worker holding exactly as many
-  documents as the scan indexed. Otherwise the old directory is kept, and
-  the next start tries again.
+  `indexMigration`. The old directory is deleted only after a scan where:
+  - the folders came from the saved folder list (an explicit empty list
+    counts), not the default set used when that list is missing or corrupt;
+  - every directory could be listed, so an unmounted volume or a folder the
+    OS refuses keeps the old index;
+  - registered folders held at least one file;
+  - nothing was cancelled, and no file failed for a reason that may pass (a
+    lost worker, a cancelled request). A file the worker itself rejects (too
+    large, encrypted) fails the same way every time and counts as done;
+  - every document the scan indexed is in the worker.
+
+  Otherwise the old directory is kept and the next start tries again. After
+  5 attempts the automatic rebuild stops, the old directory stays, and the
+  status says why. A cancelled scan does not count as an attempt.
+- `documents_list` is paged (`limit` up to 1000, keyset cursor `after`), so
+  a large index no longer exceeds the 16 MiB frame. `runtime_info` counts
+  documents in SQL.
+
+### Fixed
+
+- The Azure OpenAI Responses caption errors were saved in a broken encoding
+  and read as mojibake. They now read as the other caption errors do.
+- The worker keeps to the frame limit the host announces in its hello, and
+  refuses a frame one byte over it. A worker request with no timeout waits
+  for a free request slot, and a timeout covers the slot wait and the answer
+  together.
 
 ### Changed — caption image cap
 

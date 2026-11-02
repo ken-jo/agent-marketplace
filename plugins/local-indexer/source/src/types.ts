@@ -197,7 +197,18 @@ export interface FolderAutoIndexerResult {
   totalIndexed: number;
   scanned: number;
   indexed: number;
+  /** Files that failed this scan, of either kind. */
   failed: number;
+  /**
+   * Of `failed`, those that may succeed on a retry (worker lost, request
+   * cancelled or backed up, unrecognised error). The rest are the worker's
+   * own verdict on the file and fail again the same way.
+   */
+  failedTransient?: number;
+  /** Files the walk saw, before the supported-type filter. */
+  walked?: number;
+  /** Directories whose listing failed (unmounted, permission denied, gone). */
+  unreadableFolders?: string[];
   canceled?: boolean;
 }
 
