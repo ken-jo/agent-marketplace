@@ -339,3 +339,185 @@ def test_method_names_follow_the_contract() -> None:
         with pytest.raises(ValueError):
             peer.register(bad, lambda _p: None)  # type: ignore[arg-type,return-value]
     peer.register("search_bm25", lambda _p: None)  # type: ignore[arg-type,return-value]
+
+
+# ── round 2: slot wait, one deadline, frame limits, stdout order ──────────
+def _fill_slots(peer: sc.StdioPeer, pool: concurrent.futures.ThreadPoolExecutor) -> list:
+    loop = asyncio.get_running_loop()
+    return [
+        loop.run_in_executor(pool, peer.request_blocking, "egress_embedding", {"n": i}, 10.0)
+        for i in range(sc.REQUESTS_IN_FLIGHT_MAX)
+    ]
+
+
+def test_a_request_without_a_timeout_waits_for_a_free_slot() -> None:
+    async def scenario(peer: sc.StdioPeer, host: Host) -> None:
+        await hello(host)
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=sc.REQUESTS_IN_FLIGHT_MAX + 1)
+        loop = asyncio.get_running_loop()
+        held = _fill_slots(peer, pool)
+        seen = [await asyncio.to_thread(host.recv) for _ in range(sc.REQUESTS_IN_FLIGHT_MAX)]
+        waiting = loop.run_in_executor(pool, peer.request_blocking, "egress_caption", {}, None)
+        # Neither refused at once nor sent: it waits for a slot.
+        assert await asyncio.to_thread(host.nothing_for, 0.4)
+        assert not waiting.done()
+        host.send({"jsonrpc": "2.0", "id": seen[0]["id"], "result": {"status": 200}})
+        sent = await asyncio.to_thread(host.recv)
+        assert sent["method"] == "egress_caption"
+        host.send({"jsonrpc": "2.0", "id": sent["id"], "result": {"status": 201}})
+        assert await waiting == {"status": 201}
+        for frame in seen[1:]:
+            host.send({"jsonrpc": "2.0", "id": frame["id"], "result": {"status": 200}})
+        await asyncio.gather(*held)
+        pool.shutdown()
+
+    run(scenario)
+
+
+def test_one_deadline_covers_the_slot_wait_and_the_answer() -> None:
+    async def scenario(peer: sc.StdioPeer, host: Host) -> None:
+        await hello(host)
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=sc.REQUESTS_IN_FLIGHT_MAX + 1)
+        loop = asyncio.get_running_loop()
+        held = _fill_slots(peer, pool)
+        seen = [await asyncio.to_thread(host.recv) for _ in range(sc.REQUESTS_IN_FLIGHT_MAX)]
+        started = loop.time()
+        waiting = loop.run_in_executor(pool, peer.request_blocking, "egress_caption", {}, 1.0)
+        await asyncio.sleep(0.6)
+        host.send({"jsonrpc": "2.0", "id": seen[0]["id"], "result": {"status": 200}})
+        sent = await asyncio.to_thread(host.recv)
+        assert sent["method"] == "egress_caption"
+        # Never answered: the call ends when the one-second deadline passes,
+        # not a full second after it finally got its slot.
+        with pytest.raises(TimeoutError):
+            await waiting
+        elapsed = loop.time() - started
+        assert 0.9 <= elapsed < 1.4, elapsed
+        cancel = await asyncio.to_thread(host.recv)
+        assert cancel == {"jsonrpc": "2.0", "method": "$/ave/cancel", "params": {"id": sent["id"]}}
+        for frame in seen[1:] + [sent]:
+            host.send({"jsonrpc": "2.0", "id": frame["id"], "result": {"status": 200}})
+        await asyncio.gather(*held)
+        pool.shutdown()
+
+    run(scenario)
+
+
+def test_a_finite_slot_wait_times_out_without_sending() -> None:
+    async def scenario(peer: sc.StdioPeer, host: Host) -> None:
+        await hello(host)
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=sc.REQUESTS_IN_FLIGHT_MAX + 1)
+        loop = asyncio.get_running_loop()
+        held = _fill_slots(peer, pool)
+        seen = [await asyncio.to_thread(host.recv) for _ in range(sc.REQUESTS_IN_FLIGHT_MAX)]
+        with pytest.raises(TimeoutError, match="no free worker request slot"):
+            await loop.run_in_executor(pool, peer.request_blocking, "egress_caption", {}, 0.3)
+        assert await asyncio.to_thread(host.nothing_for, 0.2)
+        for frame in seen:
+            host.send({"jsonrpc": "2.0", "id": frame["id"], "result": {"status": 200}})
+        await asyncio.gather(*held)
+        pool.shutdown()
+
+    run(scenario)
+
+
+def _hello_with(frame_bytes_max: Any) -> Dict[str, Any]:
+    return {**HELLO, "params": {**HELLO["params"], "frameBytesMax": frame_bytes_max}}
+
+
+@pytest.mark.parametrize("announced", [sc.FRAME_BYTES_MAX + 1, 0, -1, True, "16777216", None])
+def test_a_hello_with_an_unusable_frame_limit_is_refused(announced: Any) -> None:
+    async def scenario(peer: sc.StdioPeer, host: Host) -> None:
+        params = dict(HELLO["params"])
+        if announced is None:
+            params.pop("frameBytesMax")
+        else:
+            params["frameBytesMax"] = announced
+        host.send({**HELLO, "params": params})
+        assert await peer.wait_closed() == "hello-unsupported"
+        assert await asyncio.to_thread(host.nothing_for, 0.2)
+
+    run(scenario)
+
+
+def _frame_of_exactly(size: int) -> bytes:
+    """A request frame (method ``ping``, id 7) of exactly ``size`` bytes, newline excluded."""
+    head = b'{"jsonrpc":"2.0","id":7,"method":"ping","params":{"p":"'
+    tail = b'"}}'
+    data = head + b"x" * (size - len(head) - len(tail)) + tail
+    assert len(data) == size
+    json.loads(data)
+    return data
+
+
+def _send_bytes(host: Host, data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        view = view[os.write(host._in_w, view):]
+
+
+async def _ping_answered(host: Host) -> Dict[str, Any]:
+    return await asyncio.to_thread(host.recv, 10.0)
+
+
+def test_the_announced_frame_limit_is_kept_in_both_directions() -> None:
+    limit = 1024
+
+    async def ping(params: Any) -> Any:
+        return {"len": len(params["p"])}
+
+    async def big(_params: Any) -> Any:
+        return "y" * limit
+
+    async def scenario(peer: sc.StdioPeer, host: Host) -> None:
+        host.send(_hello_with(limit))
+        await asyncio.to_thread(host.recv)
+        assert peer.frame_bytes_max == limit
+        # A frame of exactly the limit is accepted ...
+        await asyncio.to_thread(_send_bytes, host, _frame_of_exactly(limit) + b"\n")
+        answer = await _ping_answered(host)
+        assert answer["id"] == 7 and "result" in answer
+        # ... an answer over it becomes an error answer, never an oversized frame ...
+        host.send({"jsonrpc": "2.0", "id": 8, "method": "big"})
+        refused = await asyncio.to_thread(host.recv)
+        assert refused["id"] == 8 and refused["error"]["code"] == sc.INTERNAL_ERROR
+        # ... and one byte more from the host ends the channel.
+        await asyncio.to_thread(_send_bytes, host, _frame_of_exactly(limit + 1) + b"\n")
+        assert await peer.wait_closed() == "oversized-frame"
+
+    run(scenario, handlers={"ping": ping, "big": big})
+
+
+@pytest.mark.parametrize("extra, accepted", [(0, True), (1, False)])
+def test_the_read_cap_accepts_the_protocol_maximum_and_refuses_one_byte_more(extra: int, accepted: bool) -> None:
+    async def ping(_params: Any) -> Any:
+        return "pong"
+
+    async def scenario(peer: sc.StdioPeer, host: Host) -> None:
+        await hello(host)
+        await asyncio.to_thread(_send_bytes, host, _frame_of_exactly(sc.FRAME_BYTES_MAX + extra) + b"\n")
+        if accepted:
+            answer = await _ping_answered(host)
+            assert answer == {"jsonrpc": "2.0", "id": 7, "result": "pong"}
+            assert not peer._stopping.is_set()
+        else:
+            assert await peer.wait_closed() == "oversized-frame"
+            assert await asyncio.to_thread(host.nothing_for, 0.2)
+
+    run(scenario, handlers={"ping": ping})
+
+
+def test_claim_stdout_sends_output_buffered_before_the_claim_to_stderr() -> None:
+    script = (
+        "import os, sys\n"
+        f"sys.path.insert(0, {str(_WORKER_DIR)!r})\n"
+        # Written by an import before the claim, still in the stdout buffer
+        # (stdout is a pipe here, so it is block-buffered and not yet flushed).
+        "sys.stdout.write('import-time noise')\n"
+        "import stdio_control as sc\n"
+        "fd = sc.claim_stdout_for_frames()\n"
+        "os.write(fd, b'{\"frame\":1}\\n')\n"
+    )
+    proc = subprocess.run([sys.executable, "-c", script], capture_output=True, timeout=30, check=True)
+    assert proc.stdout == b'{"frame":1}\n'
+    assert b"import-time noise" in proc.stderr

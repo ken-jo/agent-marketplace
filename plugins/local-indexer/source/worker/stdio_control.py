@@ -39,6 +39,7 @@ import queue
 import re
 import sys
 import threading
+import time
 from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
 
 PROTOCOL = "ave-worker-stdio-control"
@@ -104,7 +105,7 @@ def _log(event: str, **fields: Any) -> None:
         pass
 
 
-def encode_frame(frame: Mapping[str, Any]) -> bytes:
+def encode_frame(frame: Mapping[str, Any], limit: int = FRAME_BYTES_MAX) -> bytes:
     """Serialize one frame, newline included, or raise ``FrameTooLarge``."""
     data = json.dumps(
         {"jsonrpc": "2.0", **frame},
@@ -112,9 +113,9 @@ def encode_frame(frame: Mapping[str, Any]) -> bytes:
         separators=(",", ":"),
         allow_nan=False,
     ).encode("utf-8")
-    if len(data) > FRAME_BYTES_MAX:
+    if len(data) > limit:
         raise FrameTooLarge(
-            f"frame of {len(data)} bytes exceeds the {FRAME_BYTES_MAX}-byte worker control limit"
+            f"frame of {len(data)} bytes exceeds the {limit}-byte worker control limit"
         )
     return data + b"\n"
 
@@ -148,6 +149,9 @@ class StdioPeer:
         self._slots = threading.BoundedSemaphore(REQUESTS_IN_FLIGHT_MAX)
         self._ids = itertools.count(1)
         self._stopping = threading.Event()
+        # The frame limit the host announced in its hello (never above
+        # FRAME_BYTES_MAX); until then, the protocol's upper bound.
+        self._frame_bytes_max = FRAME_BYTES_MAX
 
     # ── lifecycle ─────────────────────────────────────────────────────
     def register(self, method: str, handler: Handler) -> None:
@@ -225,9 +229,13 @@ class StdioPeer:
                 self._writer_broken = True
                 done.set_exception(PeerClosed(f"worker stdout write failed: {exc}"))
 
+    @property
+    def frame_bytes_max(self) -> int:
+        return self._frame_bytes_max
+
     def send(self, frame: Mapping[str, Any]) -> concurrent.futures.Future:
         """Queue one frame. Raises ``FrameTooLarge`` before anything is queued."""
-        data = encode_frame(frame)
+        data = encode_frame(frame, self._frame_bytes_max)
         if not self._hello_answered.is_set():
             # The hello answer must be the first frame the worker writes.
             raise RuntimeError("worker control: no frame may precede the hello answer")
@@ -262,8 +270,11 @@ class StdioPeer:
 
         Raises ``PluginRequestFailed`` for an error answer, ``PeerClosed``
         when the channel ends first, ``FrameTooLarge`` when the request cannot
-        be sent, and ``TimeoutError`` when ``timeout`` passes (the request is
-        then withdrawn with ``$/ave/cancel``).
+        be sent, and ``TimeoutError`` when ``timeout`` passes. ``timeout`` is
+        one deadline for the whole call: waiting for a free request slot and
+        waiting for the answer both spend it. ``None`` waits as long as the
+        channel lives. A request already sent when the deadline passes is
+        withdrawn with ``$/ave/cancel``.
         """
         if threading.get_ident() == self._loop_thread:
             raise RuntimeError("request_blocking would block the event loop; call it from a worker thread")
@@ -277,9 +288,19 @@ class StdioPeer:
         request_id = f"w-{next(self._ids)}"
         frame["id"] = request_id
         # Encode before taking a slot, so an oversized request costs nothing.
-        encode_frame(frame)
-        if not self._slots.acquire(timeout=timeout if timeout is not None else -1):
-            raise TimeoutError(f"no free worker request slot for {method}")
+        encode_frame(frame, self._frame_bytes_max)
+        deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
+
+        def remaining() -> Optional[float]:
+            return None if deadline is None else max(0.0, deadline - time.monotonic())
+
+        # ``acquire(timeout=None)`` blocks until a slot frees; a finite value
+        # waits at most that long. (``timeout=-1`` would also block, but only
+        # as a sentinel; say what is meant.)
+        wait = remaining()
+        got_slot = self._slots.acquire() if wait is None else self._slots.acquire(timeout=wait)
+        if not got_slot:
+            raise TimeoutError(f"no free worker request slot for {method} within {timeout} s")
         future: concurrent.futures.Future = concurrent.futures.Future()
         with self._pending_lock:
             if self._stopping.is_set():
@@ -294,7 +315,7 @@ class StdioPeer:
                     self._slots.release()
             raise
         try:
-            return future.result(timeout)
+            return future.result(remaining())
         except concurrent.futures.TimeoutError:
             try:
                 self.send({"method": CANCEL_METHOD, "params": {"id": request_id}})
@@ -330,10 +351,13 @@ class StdioPeer:
         reason = "stdin-eof"
         try:
             while True:
-                line = reader.readline(FRAME_BYTES_MAX + 2)
+                # At most the largest frame plus its newline. A line that comes
+                # back longer than the limit without a newline is too large;
+                # one at exactly the limit with its newline is not.
+                line = reader.readline(FRAME_BYTES_MAX + 1)
                 if not line:
                     break
-                if not line.endswith(b"\n") and len(line) > FRAME_BYTES_MAX:
+                if len(line.rstrip(b"\n")) > FRAME_BYTES_MAX:
                     _log("worker.control.oversized_frame", bytes=len(line))
                     reason = "oversized-frame"
                     break
@@ -352,6 +376,11 @@ class StdioPeer:
             pass
 
     def _on_line(self, line: bytes) -> None:
+        if len(line.rstrip(b"\n")) > self._frame_bytes_max:
+            # Over the limit the host announced, though under the protocol's.
+            _log("worker.control.oversized_frame", bytes=len(line), limit=self._frame_bytes_max)
+            self.close("oversized-frame")
+            return
         text = line.strip()
         if not text:
             return
@@ -399,7 +428,20 @@ class StdioPeer:
             _log("worker.control.hello_unsupported", protocol=params.get("protocol"), versions=versions)
             self.close("hello-unsupported")
             return
-        data = encode_frame({"id": 0, "result": {"protocol": PROTOCOL, "version": VERSION}})
+        # The host names its frame limit; both sides keep to it. It must be a
+        # positive integer no larger than the protocol's 16 MiB bound.
+        announced = params.get("frameBytesMax")
+        if (
+            not isinstance(announced, int)
+            or isinstance(announced, bool)
+            or announced < 1
+            or announced > FRAME_BYTES_MAX
+        ):
+            _log("worker.control.hello_unsupported", frameBytesMax=announced)
+            self.close("hello-unsupported")
+            return
+        self._frame_bytes_max = announced
+        data = encode_frame({"id": 0, "result": {"protocol": PROTOCOL, "version": VERSION}}, announced)
         self._send_queue.put((data, concurrent.futures.Future()))
         self._hello_answered.set()
 
@@ -430,11 +472,14 @@ def claim_stdout_for_frames() -> int:
     the frame stream, and ``sys.stdout`` follows it.
     """
     frames_fd = os.dup(1)
+    # Point descriptor 1 at stderr first, then flush: anything an import
+    # printed into the stdout buffer lands in the log, not in front of the
+    # hello answer.
+    os.dup2(2, 1)
     try:
         sys.stdout.flush()
     except Exception:
         pass
-    os.dup2(2, 1)
     sys.stdout = sys.stderr
     if os.name == "nt":  # pragma: no cover - Windows only
         import msvcrt
