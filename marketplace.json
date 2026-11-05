@@ -6415,8 +6415,14 @@
       "path": "languages/korean",
       "displayName": "한국어 (Korean)",
       "description": "Korean interface translation for Ave 0.14.2 and later.",
-      "latest": "1.0.6",
+      "latest": "1.0.7",
       "versions": [
+        {
+          "version": "1.0.7",
+          "commit": "e7cef1fe92d4d344efb4a0c63a02a2ed8570c116",
+          "minAppVersion": "0.14.2",
+          "publishedAt": "2026-11-05T15:45:59Z"
+        },
         {
           "version": "1.0.6",
           "commit": "be58a781d96f87259b6346596d9e6ae7784a943d",
