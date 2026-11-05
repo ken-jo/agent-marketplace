@@ -1,7 +1,7 @@
 {
-  "comment": "Development pin: Ave commit 04712827f5caf7ed8a4dcc9683124d587e8bc38e, copied from a checkout. Publication refuses a commit pin; release prep re-syncs from a release tag with `node tools/vendor.mjs sync --ref <tag>`. Never edit a copy.",
+  "comment": "Development pin: Ave commit 9ced780b4bdb8f48519b2a9e5b14a574e901a49f, copied from a checkout. Publication refuses a commit pin; release prep re-syncs from a release tag with `node tools/vendor.mjs sync --ref <tag>`. Never edit a copy.",
   "repository": "ken-jo/ave",
-  "ref": "04712827f5caf7ed8a4dcc9683124d587e8bc38e",
+  "ref": "9ced780b4bdb8f48519b2a9e5b14a574e901a49f",
   "bundle": null,
   "files": {
     "agent-plugin-components.js": {
@@ -10,7 +10,7 @@
         "bun": "1.3.14",
         "logger": "stub-app-logger"
       },
-      "sha256": "0f63409a529f40862b26fb3db8de07fdbf589172350c1ce0c40757c69bfe2efb"
+      "sha256": "50124b53eddc2e91c683b7b347898dea81e2df485270ceae3c91d781391de663"
     },
     "marketplace-check.js": {
       "build": {
@@ -18,7 +18,7 @@
         "bun": "1.3.14",
         "logger": "stub-app-logger"
       },
-      "sha256": "aadcf2470d1c1078dbf85a54ec2a3f8d2631f105adc7d047b5146b4f6f2e9902"
+      "sha256": "6491a1f120b5e1a3588e12ad2e1b8107775bfeb2d8418da30645b9d50931497d"
     }
   }
 }

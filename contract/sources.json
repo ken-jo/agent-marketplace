@@ -1,7 +1,7 @@
 {
-  "comment": "Development pin: Ave commit 04712827f5caf7ed8a4dcc9683124d587e8bc38e, copied from a checkout. Publication refuses a commit pin; release prep re-syncs from a release tag with `node tools/vendor.mjs sync --ref <tag>`. Never edit a copy.",
+  "comment": "Development pin: Ave commit 9ced780b4bdb8f48519b2a9e5b14a574e901a49f, copied from a checkout. Publication refuses a commit pin; release prep re-syncs from a release tag with `node tools/vendor.mjs sync --ref <tag>`. Never edit a copy.",
   "repository": "ken-jo/ave",
-  "ref": "04712827f5caf7ed8a4dcc9683124d587e8bc38e",
+  "ref": "9ced780b4bdb8f48519b2a9e5b14a574e901a49f",
   "bundle": null,
   "files": {
     "public-contract.ts": {
