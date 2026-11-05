@@ -233,6 +233,9 @@ def test_a_timed_out_worker_request_is_cancelled_and_keeps_its_slot_until_answer
 
 
 def test_at_most_64_worker_requests_are_outstanding() -> None:
+    # Protocol section 3.3.2 fixes this wire limit independently of our constant.
+    assert sc.REQUESTS_IN_FLIGHT_MAX == 64
+
     async def scenario(peer: sc.StdioPeer, host: Host) -> None:
         await hello(host)
         # One thread per caller: the default executor has fewer threads than this.
