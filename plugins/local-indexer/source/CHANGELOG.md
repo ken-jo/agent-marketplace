@@ -2,6 +2,8 @@
 
 ## [0.8.0] - Unreleased
 
+The version, host protocol, minimum Ave version, and authority in the [marketplace descriptor](../ave-package.json) match this source release. Its `payload.artifact.release` still names the protocol-3 ZIP; release preparation must replace that pin with the published protocol-5 ZIP and its verified SHA-256 before catalog publication.
+
 Requires Ave 0.14.2 and host protocol 5 (`requires.hostProtocol: "5"`).
 Apps that serve protocol 3 keep 0.7.2. The first start after the upgrade
 rebuilds the index once (see below).

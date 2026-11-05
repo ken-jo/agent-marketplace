@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "meeting",
-  "version": "0.10.2",
-  "minAppVersion": "0.14.0",
-  "hostProtocol": "3",
+  "version": "0.11.0",
+  "minAppVersion": "0.14.2",
+  "hostProtocol": "5",
   "displayName": "Ave Meeting",
   "description": "회의 녹음·음성 전사(STT)·요약 생성 익스텐션. 녹음 시작/중지, 실시간 오디오 청크 전사(OpenAI Whisper), AI 요약·하이라이트·액션 아이템 자동 추출. 액션 아이템은 meeting.summary.created 이벤트의 actionItems 페이로드로 broadcast 되며, 요약은 로컬 SessionStore(JSON)에 영속화. MS Teams·Zoom 등 회의 후처리 지원.",
   "payload": {
@@ -44,8 +44,8 @@
         ]
       },
       "requires": {
-        "minAppVersion": "0.14.0",
-        "hostProtocol": "3"
+        "minAppVersion": "0.14.2",
+        "hostProtocol": "5"
       }
     },
     "artifact": {

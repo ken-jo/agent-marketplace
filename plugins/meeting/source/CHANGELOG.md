@@ -2,6 +2,8 @@
 
 ## [0.11.0] - Unreleased
 
+The version, host protocol, minimum Ave version, and authority in the [marketplace descriptor](../ave-package.json) match this source release. Its `payload.artifact.release` still names the protocol-3 ZIP; release preparation must replace that pin with the published protocol-5 ZIP and its verified SHA-256 before catalog publication.
+
 Requires Ave 0.14.2 and host protocol 5. Ave 0.14.2 serves protocol 5 only
 and refuses a protocol-3 extension before activation.
 
