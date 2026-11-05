@@ -2,17 +2,17 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "hello-world",
-  "version": "0.4.0",
-  "minAppVersion": "0.14.2",
-  "hostProtocol": "5",
+  "version": "0.3.2",
+  "minAppVersion": "0.14.0",
+  "hostProtocol": "3",
   "displayName": "Hello World",
   "description": "Hello World demo extension for checking marketplace install and dynamic UI load.",
   "payload": {
     "authority": {
       "capabilities": [],
       "requires": {
-        "hostProtocol": "5",
-        "minAppVersion": "0.14.2"
+        "hostProtocol": "3",
+        "minAppVersion": "0.14.0"
       }
     },
     "artifact": {
