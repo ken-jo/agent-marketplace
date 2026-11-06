@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev:test": "vitest",
-    "validate:hostapi": "node scripts/validate-hostapi.mjs"
+    "validate:manifest": "node scripts/validate-manifest.mjs"
   },
   "devDependencies": {
     "@ave/plugin-build": "file:../../tools/plugin-build",
@@ -29,6 +29,7 @@
     "@types/node": "^26.1.0",
     "tsup": "^8.0.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "ajv": "^8.20.0"
   }
 }

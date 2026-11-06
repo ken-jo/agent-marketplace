@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,7 @@ const pin = (id) => JSON.parse(readFileSync(join(server(id), "runtime.json"), "u
 const secretFor = (p, marker = "synthetic-private-token") => p.secret.fields
   ? JSON.stringify(Object.fromEntries(Object.keys(p.secret.fields).map((k) => [k, marker]))) : marker;
 const temporary = (fn) => {
-  const dir = mkdtempSync(join(tmpdir(), "ave-connector-test-"));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ave-connector-test-")));
   try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
 };
 

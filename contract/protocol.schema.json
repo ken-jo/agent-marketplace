@@ -1,55 +1,44 @@
 {
   "$defs": {
     "capabilities": {
-      "description": "Every ave/host method a host with every optional member bound advertises in construct.",
+      "description": "Every ai.agent-connector.ave/host method a host with every optional member bound advertises in construct.",
       "items": {
         "enum": [
-          "ave/host/agentApproval/request",
-          "ave/host/agentApproval/respond",
-          "ave/host/attachFloatingPanel",
-          "ave/host/authRedirect/close",
-          "ave/host/authRedirect/open",
-          "ave/host/authRedirect/wait",
-          "ave/host/callLlm",
-          "ave/host/clearAuthPartition",
-          "ave/host/config/onChange",
-          "ave/host/config/set",
-          "ave/host/emitEvent",
-          "ave/host/getAuthPartitionCookies",
-          "ave/host/getSecret",
-          "ave/host/hasRoutineBySource",
-          "ave/host/hostFetch",
-          "ave/host/listAudioInputDevices",
-          "ave/host/logEvent",
-          "ave/host/onEvent",
-          "ave/host/onPluginsChanged",
-          "ave/host/onShutdown",
-          "ave/host/openAuthPartitionViewer",
-          "ave/host/openAuthWindow",
-          "ave/host/openExternalUrl",
-          "ave/host/pickFolders",
-          "ave/host/probePrivateHost",
-          "ave/host/proposeWork",
-          "ave/host/raiseAlert",
-          "ave/host/resizeFloatingPanel",
-          "ave/host/resolveApiKey",
-          "ave/host/resolveMappedDriveRoot",
-          "ave/host/spawnWorker",
-          "ave/host/startAudioCapture",
-          "ave/host/storage/exists",
-          "ave/host/storage/list",
-          "ave/host/storage/mkdir",
-          "ave/host/storage/read",
-          "ave/host/storage/readEncrypted",
-          "ave/host/storage/readJson",
-          "ave/host/storage/readText",
-          "ave/host/storage/rm",
-          "ave/host/storage/write",
-          "ave/host/storage/writeEncrypted",
-          "ave/host/storage/writeJson",
-          "ave/host/triggerConversation",
-          "ave/host/withdrawAlert",
-          "ave/host/withdrawWorkProposal"
+          "ai.agent-connector.ave/host/attachFloatingPanel",
+          "ai.agent-connector.ave/host/authRedirect/close",
+          "ai.agent-connector.ave/host/authRedirect/open",
+          "ai.agent-connector.ave/host/authRedirect/wait",
+          "ai.agent-connector.ave/host/callLlm",
+          "ai.agent-connector.ave/host/clearAuthPartition",
+          "ai.agent-connector.ave/host/config/onChange",
+          "ai.agent-connector.ave/host/config/set",
+          "ai.agent-connector.ave/host/getAuthPartitionCookies",
+          "ai.agent-connector.ave/host/getSecret",
+          "ai.agent-connector.ave/host/hasRoutineBySource",
+          "ai.agent-connector.ave/host/hostFetch",
+          "ai.agent-connector.ave/host/listAudioInputDevices",
+          "ai.agent-connector.ave/host/openAuthPartitionViewer",
+          "ai.agent-connector.ave/host/openAuthWindow",
+          "ai.agent-connector.ave/host/openExternalUrl",
+          "ai.agent-connector.ave/host/pickFolders",
+          "ai.agent-connector.ave/host/probePrivateHost",
+          "ai.agent-connector.ave/host/raiseAlert",
+          "ai.agent-connector.ave/host/resolveApiKey",
+          "ai.agent-connector.ave/host/resolveMappedDriveRoot",
+          "ai.agent-connector.ave/host/spawnWorker",
+          "ai.agent-connector.ave/host/startAudioCapture",
+          "ai.agent-connector.ave/host/storage/exists",
+          "ai.agent-connector.ave/host/storage/list",
+          "ai.agent-connector.ave/host/storage/mkdir",
+          "ai.agent-connector.ave/host/storage/read",
+          "ai.agent-connector.ave/host/storage/readEncrypted",
+          "ai.agent-connector.ave/host/storage/readJson",
+          "ai.agent-connector.ave/host/storage/readText",
+          "ai.agent-connector.ave/host/storage/rm",
+          "ai.agent-connector.ave/host/storage/write",
+          "ai.agent-connector.ave/host/storage/writeEncrypted",
+          "ai.agent-connector.ave/host/storage/writeJson",
+          "ai.agent-connector.ave/host/triggerConversation"
         ]
       },
       "type": "array",
@@ -108,6 +97,8 @@
                 "lease-unavailable",
                 "lease-audience-denied",
                 "credential-conflict",
+                "worker-transport-unsupported",
+                "worker-control-failed",
                 "host-internal"
               ]
             },
@@ -160,257 +151,13 @@
         "lease-unavailable",
         "lease-audience-denied",
         "credential-conflict",
+        "worker-transport-unsupported",
+        "worker-control-failed",
         "host-internal"
       ]
     },
     "methods": {
-      "ave/host/agentApproval/request": {
-        "description": "Request an approval via the §8 ApprovalGate on behalf of this plugin.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "input": {
-              "properties": {
-                "args": {},
-                "reason": {
-                  "type": "string"
-                },
-                "scope": {
-                  "type": "string"
-                },
-                "toolName": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "toolName",
-                "args",
-                "reason",
-                "scope"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "input"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "enum": [
-            "allow-once",
-            "allow-session",
-            "allow-always",
-            "deny-once",
-            "deny-always"
-          ],
-          "type": "string"
-        }
-      },
-      "ave/host/agentApproval/respond": {
-        "description": "Resolve a pending ApprovalGate entry from the main process.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "choice": {
-              "enum": [
-                "allow-once",
-                "allow-session",
-                "allow-always",
-                "deny-once",
-                "deny-always"
-              ],
-              "type": "string"
-            },
-            "hmac": {
-              "type": "string"
-            },
-            "nonce": {
-              "type": "string"
-            },
-            "requestId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "requestId",
-            "choice"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "null"
-        }
-      },
-      "ave/host/attachFloatingPanel": {
+      "ai.agent-connector.ave/host/attachFloatingPanel": {
         "description": "Attach one of this plugin's declared `floating` surfaces to the host's floating dock — the single always-on-top window the host owns.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -465,6 +212,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -540,7 +289,7 @@
           "$ref": "#/$defs/types/WireFloatingPanelHandle"
         }
       },
-      "ave/host/authRedirect/close": {
+      "ai.agent-connector.ave/host/authRedirect/close": {
         "description": "Release the listener. Idempotent.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -595,6 +344,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -650,8 +401,8 @@
           "type": "null"
         }
       },
-      "ave/host/authRedirect/open": {
-        "description": "Bind the listener. Rejects when this plugin already has one open.",
+      "ai.agent-connector.ave/host/authRedirect/open": {
+        "description": "Bind the listener and mint state. Rejects when this plugin already has one open.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
           "properties": {
@@ -705,6 +456,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -748,17 +501,21 @@
             },
             "redirectUri": {
               "type": "string"
+            },
+            "state": {
+              "type": "string"
             }
           },
           "required": [
             "handle",
-            "redirectUri"
+            "redirectUri",
+            "state"
           ],
           "type": "object"
         }
       },
-      "ave/host/authRedirect/wait": {
-        "description": "Resolve with the redirect's query parameters, or reject on timeout or close. Resolves immediately when the redirect has already arrived.",
+      "ai.agent-connector.ave/host/authRedirect/wait": {
+        "description": "Resolve only with an exact-path callback carrying the host-issued state. A provider refusal is returned in `error` / `error_description`; check it before exchanging a code. Invalid state does not consume the waiter. Rejects on timeout or close; caches the first validated callback.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
           "properties": {
@@ -812,6 +569,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -873,7 +632,7 @@
           "type": "object"
         }
       },
-      "ave/host/callLlm": {
+      "ai.agent-connector.ave/host/callLlm": {
         "description": "호스트 LLM 프로바이더를 통한 텍스트 생성. 플러그인이 직접 LLM 키를 관리하지 않고도 인텔리전트 기능 구현 가능. LLM이 준비되지 않은 경우 에러를 던진다.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -928,6 +687,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -978,7 +739,7 @@
           "type": "string"
         }
       },
-      "ave/host/clearAuthPartition": {
+      "ai.agent-connector.ave/host/clearAuthPartition": {
         "description": "Wipe all credential state (cookies, storage, cache, HTTP-auth, NTLM/ Kerberos credentials) from a `persist:plugin-auth:<pluginId>[:<sub>]` partition. Use after a user-triggered sign-out so subsequent `openAuthWindow` calls against the same partition cannot silently SSO via residual IdP cookies — without this, plugin \"sign out\" only clears the plugin's in-memory + on-disk shadow state while the host Chromium keeps the federated session alive.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -1033,6 +794,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1080,7 +843,7 @@
           "type": "null"
         }
       },
-      "ave/host/config/onChange": {
+      "ai.agent-connector.ave/host/config/onChange": {
         "description": "Subscribe to changes for a single key. Returns an `unsubscribe()` disposer. The subscription is scoped to the caller's pluginId — a change in plugin A cannot fire plugin B's listener.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -1135,6 +898,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1220,10 +985,10 @@
           "$ref": "#/$defs/types/HostApiHandle"
         }
       },
-      "ave/host/config/set": {
-        "description": "Persist a config key. Triggers a plugin reload so the new value is visible to the plugin on next handler invocation.",
+      "ai.agent-connector.ave/host/config/set": {
+        "description": "Persist a config key. Reloads the plugin unless a lifecycle mutation or an existing restart must finish first.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
           "properties": {
             "code": {
               "type": "integer"
@@ -1275,6 +1040,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1326,109 +1093,7 @@
           "type": "null"
         }
       },
-      "ave/host/emitEvent": {
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "data": {},
-            "eventType": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "eventType"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "null"
-        }
-      },
-      "ave/host/getAuthPartitionCookies": {
+      "ai.agent-connector.ave/host/getAuthPartitionCookies": {
         "description": "Read the session cookies the host holds for this plugin in its auth partition, scoped to the given request URLs. The counterpart to `networkAccess.authCookiePartition` for flows that `hostFetch` cannot cover — chiefly a browser/page-automation flow that must inject the session into a separate browser context.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -1483,6 +1148,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1563,7 +1230,7 @@
           "type": "array"
         }
       },
-      "ave/host/getSecret": {
+      "ai.agent-connector.ave/host/getSecret": {
         "description": "Read an allow-listed secret.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -1618,6 +1285,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1668,7 +1337,7 @@
           ]
         }
       },
-      "ave/host/hasRoutineBySource": {
+      "ai.agent-connector.ave/host/hasRoutineBySource": {
         "description": "Idempotency SOT query for suggestion-derived routines. Resolves `true` iff a persisted routine carries an exactly-matching {@link RoutineRecord.source} marker.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -1723,6 +1392,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1770,7 +1441,7 @@
           "type": "boolean"
         }
       },
-      "ave/host/hostFetch": {
+      "ai.agent-connector.ave/host/hostFetch": {
         "description": "Host-mediated outbound HTTPS through Electron's `net` (Chromium network stack). Unlike a plugin's own Node `fetch`/undici, this honors the OS proxy resolution INCLUDING PAC/WPAD auto-config and the OS trust store on every platform — so a plugin whose Node libraries can't be configured for the corporate proxy/CA (e.g. MSAL) can still reach the network on a TLS-inspecting corporate network. Capability-gated (external-auth-consumer) + SSRF-validated + audited host-side.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, lease-unavailable, lease-audience-denied, credential-conflict.",
@@ -1825,6 +1496,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1875,7 +1548,7 @@
           "$ref": "#/$defs/types/WireHttpResponse"
         }
       },
-      "ave/host/listAudioInputDevices": {
+      "ai.agent-connector.ave/host/listAudioInputDevices": {
         "description": "Microphones the user could pick. Labels are empty until microphone access has been granted at least once — the browser's rule, not this host's, and an empty label means \"not yet permitted\", never \"no device\".",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -1930,6 +1603,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -1973,455 +1648,7 @@
           "type": "array"
         }
       },
-      "ave/host/logEvent": {
-        "description": "Structured log event routed through AuditLogger. Automatically tagged with `plugin:${pluginId}` context (sessionId = \"plugin\").",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "data": {},
-            "level": {
-              "enum": [
-                "info",
-                "warn",
-                "error"
-              ],
-              "type": "string"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "level",
-            "message"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "null"
-        }
-      },
-      "ave/host/onEvent": {
-        "description": "Subscribes to a host event. Returns an `unsubscribe()` disposer so callers (and PluginRuntime.onDisable) can clean up handlers deterministically.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "events": {
-          "description": "One per event of the subscribed type.",
-          "properties": {
-            "data": {}
-          },
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "eventType": {
-              "type": "string"
-            },
-            "handler": {
-              "description": "The subscription id the child allocated. The function stays in the child.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "eventType",
-            "handler"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "$ref": "#/$defs/types/HostApiHandle"
-        }
-      },
-      "ave/host/onPluginsChanged": {
-        "description": "Subscribe to plugin install / uninstall events. Returns an `unsubscribe()` disposer (also cleared automatically on plugin disable).",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "events": {
-          "description": "One per plugin installed, updated, enabled, disabled or removed.",
-          "properties": {
-            "event": {
-              "$ref": "#/$defs/types/PluginLifecycleEvent"
-            }
-          },
-          "required": [
-            "event"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "handler": {
-              "description": "The subscription id the child allocated. The function stays in the child.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "handler"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "$ref": "#/$defs/types/HostApiHandle"
-        }
-      },
-      "ave/host/onShutdown": {
-        "description": "Register a handler fired before app shutdown (Electron `before-quit`). Host enforces a 5s timeout on each handler; slow handlers are logged but do not block quit.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "events": {
-          "description": "Pushes nothing: the host runs the handler with the `ave/instance/shutdown` request.",
-          "not": {}
-        },
-        "params": {
-          "properties": {
-            "handler": {
-              "description": "The subscription id the child allocated. The function stays in the child.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "handler"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "null"
-        }
-      },
-      "ave/host/openAuthPartitionViewer": {
+      "ai.agent-connector.ave/host/openAuthPartitionViewer": {
         "description": "Open a hardened viewer BrowserWindow that loads `url` inside the caller plugin's `persist:plugin-auth:<pluginId>` partition. The existing cookies in that partition (typically deposited by an earlier `openAuthWindow` IdP flow) make the load silent-SSO — no re-login.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -2476,6 +1703,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2534,7 +1763,7 @@
           "type": "null"
         }
       },
-      "ave/host/openAuthWindow": {
+      "ai.agent-connector.ave/host/openAuthWindow": {
         "description": "Electron BrowserWindow로 외부 포털 로그인 페이지를 띄우고, 사용자가 직접 로그인 완료한 시점(`completionUrlPatterns` 매칭)의 쿠키를 수집.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -2589,6 +1818,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2755,7 +1986,7 @@
           ]
         }
       },
-      "ave/host/openExternalUrl": {
+      "ai.agent-connector.ave/host/openExternalUrl": {
         "description": "§B3 — Open an arbitrary external URL routed through the host's webView preference policy (`settings.webView.preferredFlow`): - `\"in-app\"` → host opens a lightweight BrowserWindow (no cookieHosts / completionUrlPatterns enforcement; this is *not* `openAuthWindow`). - `\"system-browser\"` → host shells out to the OS default browser via Electron's `shell.openExternal`.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -2810,6 +2041,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2857,7 +2090,7 @@
           "type": "null"
         }
       },
-      "ave/host/pickFolders": {
+      "ai.agent-connector.ave/host/pickFolders": {
         "description": "Ask the user which folders the plugin should work on.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -2912,6 +2145,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -2967,7 +2202,7 @@
           "type": "object"
         }
       },
-      "ave/host/probePrivateHost": {
+      "ai.agent-connector.ave/host/probePrivateHost": {
         "description": "Probe whether the OS resolver knows a host that only exists on a PRIVATE network (corporate intranet / VPN / lab subnet). Resolves `true` when `dns.lookup(host)` succeeds before the deadline, `false` on `ENOTFOUND` or timeout — on-corp DNS resolves the private host, off-corp DNS returns `ENOTFOUND`, and the async asymmetry is the signal.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -3022,6 +2257,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3077,252 +2314,7 @@
           "type": "boolean"
         }
       },
-      "ave/host/proposeWork": {
-        "description": "Post or refresh this plugin's recommended-work proposal for ONE declared kind. The host persists it beside the Work Board and draws it as a card at the top of that board; the card's start button runs the HOST's own plan → approve → execute sequence over a work item the host composes.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "input": {
-              "properties": {
-                "blockers": {
-                  "items": {
-                    "$ref": "#/$defs/types/WorkProposalBlocker"
-                  },
-                  "type": "array"
-                },
-                "dueAt": {
-                  "type": "string"
-                },
-                "evidence": {
-                  "items": {
-                    "$ref": "#/$defs/types/WorkProposalEvidence"
-                  },
-                  "type": "array"
-                },
-                "key": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "priority": {
-                  "enum": [
-                    "high",
-                    "medium",
-                    "low"
-                  ],
-                  "type": "string"
-                },
-                "state": {
-                  "type": "string"
-                },
-                "summary": {
-                  "type": "string"
-                },
-                "taskBrief": {
-                  "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                },
-                "ttlMs": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "kind",
-                "key",
-                "title",
-                "summary",
-                "state",
-                "taskBrief"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "input"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "anyOf": [
-            {
-              "properties": {
-                "proposal": {
-                  "$ref": "#/$defs/types/WorkProposal"
-                },
-                "status": {
-                  "const": "ok",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "proposal"
-              ],
-              "type": "object"
-            },
-            {
-              "properties": {
-                "kind": {
-                  "type": "string"
-                },
-                "status": {
-                  "const": "kind_not_granted",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "kind"
-              ],
-              "type": "object"
-            },
-            {
-              "properties": {
-                "kind": {
-                  "type": "string"
-                },
-                "status": {
-                  "const": "slot_busy",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "kind"
-              ],
-              "type": "object"
-            },
-            {
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "status": {
-                  "const": "invalid",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status",
-                "field"
-              ],
-              "type": "object"
-            },
-            {
-              "properties": {
-                "status": {
-                  "const": "cap_reached",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status"
-              ],
-              "type": "object"
-            },
-            {
-              "properties": {
-                "status": {
-                  "const": "rate_limited",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "status"
-              ],
-              "type": "object"
-            }
-          ]
-        }
-      },
-      "ave/host/raiseAlert": {
+      "ai.agent-connector.ave/host/raiseAlert": {
         "description": "Raise one alert of a kind declared in this plugin's `alerts` block.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -3377,6 +2369,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3615,113 +2609,7 @@
           ]
         }
       },
-      "ave/host/resizeFloatingPanel": {
-        "description": "Change one of this plugin's dock slots to a new height.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "height": {
-              "type": "number"
-            },
-            "panelId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "panelId",
-            "height"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "number"
-        }
-      },
-      "ave/host/resolveApiKey": {
+      "ai.agent-connector.ave/host/resolveApiKey": {
         "description": "Host-managed LLM key resolver. Optional on older app releases; plugins guard with `typeof hostApi.resolveApiKey === \"function\"` unless their `requires.minAppVersion` guarantees a supporting release.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -3776,6 +2664,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3809,7 +2699,7 @@
           "type": "object"
         },
         "events": {
-          "description": "Pushes nothing: a lease is only ever closed, by `notifications/ave/subscription/closed`.",
+          "description": "Pushes nothing: a lease is only ever closed, by `notifications/ai.agent-connector.ave/subscription/closed`.",
           "not": {}
         },
         "params": {
@@ -3827,7 +2717,7 @@
           "$ref": "#/$defs/types/WireApiKeyLease"
         }
       },
-      "ave/host/resolveMappedDriveRoot": {
+      "ai.agent-connector.ave/host/resolveMappedDriveRoot": {
         "description": "The UNC path behind a Windows mapped drive (`\"Z:\"` → `\"\\\\\\\\server\\\\share\"`), or `null` when the drive has no UNC backing.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises none of its own.",
@@ -3882,6 +2772,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -3932,10 +2824,10 @@
           ]
         }
       },
-      "ave/host/spawnWorker": {
-        "description": "Spawn a long-lived plugin worker, host-mediated and (when the OS-tool ASRT sandbox gate is ON) ASRT-wrapped. macOS/Linux workers use a bind-mounted Unix-domain-socket (UDS) control channel; Windows workers keep TCP control but run under srt-win with a worker-lifetime holder PID ACL grant.",
+      "ai.agent-connector.ave/host/spawnWorker": {
+        "description": "Spawn a plugin worker, host-mediated and (when the OS-tool sandbox gate is ON) confined. The worker talks to the plugin only over its standard streams, as the spec's `control` declares (see {@link PluginWorkerControl}); the host never allocates a socket or a port for it.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, worker-transport-unsupported, worker-control-failed.",
           "properties": {
             "code": {
               "type": "integer"
@@ -3987,6 +2879,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4055,6 +2949,98 @@
             },
             {
               "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "result",
+                  "type": "string"
+                },
+                "result": {}
+              },
+              "required": [
+                "kind",
+                "id",
+                "result"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "error": {
+                  "$ref": "#/$defs/types/WireWorkerError"
+                },
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "error",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "request",
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "params": {}
+              },
+              "required": [
+                "kind",
+                "id",
+                "method"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "notification",
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "params": {}
+              },
+              "required": [
+                "kind",
+                "method"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "kind": {
+                  "const": "cancel",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
                 "code": {
                   "type": [
                     "number",
@@ -4064,6 +3050,9 @@
                 "kind": {
                   "const": "exit",
                   "type": "string"
+                },
+                "reason": {
+                  "$ref": "#/$defs/types/PluginWorkerExitReason"
                 },
                 "signal": {
                   "type": [
@@ -4075,12 +3064,13 @@
               "required": [
                 "kind",
                 "code",
-                "signal"
+                "signal",
+                "reason"
               ],
               "type": "object"
             }
           ],
-          "description": "Output as it is written, then one `exit`."
+          "description": "Output and control traffic as it arrives, then one `exit`."
         },
         "params": {
           "properties": {
@@ -4107,29 +3097,17 @@
                 "command": {
                   "type": "string"
                 },
+                "control": {
+                  "$ref": "#/$defs/types/PluginWorkerControl"
+                },
                 "env": {
                   "additionalProperties": {
                     "type": "string"
                   },
                   "type": "object"
                 },
-                "udsArgName": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "properties": {
-                        "env": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "env"
-                      ],
-                      "type": "object"
-                    }
-                  ]
+                "stateDirectory": {
+                  "type": "boolean"
                 },
                 "workerId": {
                   "type": "string"
@@ -4137,7 +3115,8 @@
               },
               "required": [
                 "workerId",
-                "command"
+                "command",
+                "control"
               ],
               "type": "object"
             }
@@ -4151,7 +3130,7 @@
           "$ref": "#/$defs/types/WireWorkerHandle"
         }
       },
-      "ave/host/startAudioCapture": {
+      "ai.agent-connector.ave/host/startAudioCapture": {
         "description": "Begin capturing audio. The HOST owns the capture — the renderer, the worklet and the loopback wiring are first-party code — and the plugin receives PCM as data.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -4206,6 +3185,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4324,10 +3305,10 @@
           "$ref": "#/$defs/types/WireAudioCaptureHandle"
         }
       },
-      "ave/host/storage/exists": {
+      "ai.agent-connector.ave/host/storage/exists": {
         "description": "Test whether the path exists.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4379,6 +3360,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4426,10 +3409,10 @@
           "type": "boolean"
         }
       },
-      "ave/host/storage/list": {
+      "ai.agent-connector.ave/host/storage/list": {
         "description": "List entries in `relPath` (directories included). Empty for missing dir.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4481,6 +3464,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4528,7 +3513,7 @@
           "type": "array"
         }
       },
-      "ave/host/storage/mkdir": {
+      "ai.agent-connector.ave/host/storage/mkdir": {
         "description": "Ensure a directory exists (recursive mkdir).",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, effect-boundary-denied.",
@@ -4583,6 +3568,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4630,10 +3617,10 @@
           "type": "null"
         }
       },
-      "ave/host/storage/read": {
+      "ai.agent-connector.ave/host/storage/read": {
         "description": "Read raw bytes; throws ENOENT if the file does not exist.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4685,6 +3672,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4732,10 +3721,10 @@
           "$ref": "#/$defs/types/WireBytes"
         }
       },
-      "ave/host/storage/readEncrypted": {
+      "ai.agent-connector.ave/host/storage/readEncrypted": {
         "description": "Read the ciphertext previously written by {@link writeEncrypted} at `relPath` and return the decrypted UTF-8 plaintext. Throws ENOENT if the file does not exist (same contract as {@link readText}); throws {@link PluginStorageEncryptionUnavailableError} if host encryption is unavailable — it never returns raw ciphertext or a plaintext guess.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, plugin-storage-encryption-unavailable.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage, plugin-storage-encryption-unavailable.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4787,6 +3776,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4834,10 +3825,10 @@
           "type": "string"
         }
       },
-      "ave/host/storage/readJson": {
+      "ai.agent-connector.ave/host/storage/readJson": {
         "description": "Read + parse JSON; returns `null` on missing file, throws on bad JSON.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4889,6 +3880,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -4943,10 +3936,10 @@
           ]
         }
       },
-      "ave/host/storage/readText": {
+      "ai.agent-connector.ave/host/storage/readText": {
         "description": "Read text; throws ENOENT if the file does not exist.",
         "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage.",
+          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied, plugin-storage.",
           "properties": {
             "code": {
               "type": "integer"
@@ -4998,6 +3991,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5058,7 +4053,7 @@
           "type": "string"
         }
       },
-      "ave/host/storage/rm": {
+      "ai.agent-connector.ave/host/storage/rm": {
         "description": "Remove a file or directory tree; missing paths are ignored.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, effect-boundary-denied.",
@@ -5113,6 +4108,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5168,7 +4165,7 @@
           "type": "null"
         }
       },
-      "ave/host/storage/write": {
+      "ai.agent-connector.ave/host/storage/write": {
         "description": "Write bytes / text; ensures parent directories exist.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, effect-boundary-denied.",
@@ -5223,6 +4220,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5287,7 +4286,7 @@
           "type": "null"
         }
       },
-      "ave/host/storage/writeEncrypted": {
+      "ai.agent-connector.ave/host/storage/writeEncrypted": {
         "description": "Encrypt `plaintext` with the host's configured encryption provider and write the ciphertext bytes to `relPath`, inside the same sandboxed storage root as every other method — identical absolute-path / lexical `..` / symlink-escape rejection applies. Parent directories are created as needed.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, plugin-storage-encryption-unavailable, effect-boundary-denied.",
@@ -5342,6 +4341,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5393,7 +4394,7 @@
           "type": "null"
         }
       },
-      "ave/host/storage/writeJson": {
+      "ai.agent-connector.ave/host/storage/writeJson": {
         "description": "Stringify + write JSON; ensures parent directories exist.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises plugin-storage, effect-boundary-denied.",
@@ -5448,6 +4449,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5502,7 +4505,7 @@
           "type": "null"
         }
       },
-      "ave/host/triggerConversation": {
+      "ai.agent-connector.ave/host/triggerConversation": {
         "description": "Overlay trigger — ask the host to stage a plugin-authored suggestion in the overlay. The plugin does not start a conversation turn; only a user's overlay confirmation imports the prompt into the normal chat loop.",
         "errors": {
           "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
@@ -5557,6 +4560,8 @@
                     "lease-unavailable",
                     "lease-audience-denied",
                     "credential-conflict",
+                    "worker-transport-unsupported",
+                    "worker-control-failed",
                     "host-internal"
                   ]
                 },
@@ -5677,219 +4682,7 @@
           "type": "object"
         }
       },
-      "ave/host/withdrawAlert": {
-        "description": "Withdraw this plugin's open alert for `(kind, key)` because its condition no longer holds. Scoped to the caller; resolves `false` when no such alert is open.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "key": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "key"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "boolean"
-        }
-      },
-      "ave/host/withdrawWorkProposal": {
-        "description": "Retract this plugin's own proposal because the condition it described no longer holds — the mail was answered, the index was rescanned.",
-        "errors": {
-          "description": "The boundary's own refusals (plugin-inactive, path-unknown, path-not-dispatchable, path-not-implemented, argument-marshalling-rejected, result-marshalling-rejected, payload-too-large, rate-limited, host-internal) can reply to any call; this member's implementation raises effect-boundary-denied.",
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "plugin-inactive",
-                    "path-unknown",
-                    "path-not-dispatchable",
-                    "path-not-implemented",
-                    "argument-marshalling-rejected",
-                    "result-marshalling-rejected",
-                    "payload-too-large",
-                    "subscription-unknown",
-                    "rate-limited",
-                    "effect-boundary-denied",
-                    "manifest-integrity-violation",
-                    "detached-operation",
-                    "plugin-storage",
-                    "plugin-storage-encryption-unavailable",
-                    "lease-unavailable",
-                    "lease-audience-denied",
-                    "credential-conflict",
-                    "host-internal"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message",
-            "data"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "properties": {
-            "key": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "key"
-          ],
-          "type": "object"
-        },
-        "result": {
-          "type": "boolean"
-        }
-      },
-      "ave/instance/construct": {
+      "ai.agent-connector.ave/instance/construct": {
         "errors": {
           "properties": {
             "code": {
@@ -5965,7 +4758,7 @@
           "$ref": "#/$defs/types/PluginConstructResult"
         }
       },
-      "ave/instance/onPublished": {
+      "ai.agent-connector.ave/instance/onPublished": {
         "errors": {
           "properties": {
             "code": {
@@ -6039,81 +4832,7 @@
           "type": "null"
         }
       },
-      "ave/instance/shutdown": {
-        "errors": {
-          "properties": {
-            "code": {
-              "type": "integer"
-            },
-            "data": {
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "code": {
-                        "const": "rate-limited"
-                      }
-                    },
-                    "required": [
-                      "code"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "retryAfterMs": {
-                        "maximum": 5000,
-                        "minimum": 0,
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "retryAfterMs"
-                    ]
-                  }
-                }
-              ],
-              "properties": {
-                "code": {
-                  "enum": [
-                    "payload-too-large"
-                  ]
-                },
-                "detail": {
-                  "type": "object"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "retryAfterMs": {
-                  "maximum": 5000,
-                  "minimum": 0,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "code",
-                "name"
-              ],
-              "type": "object"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "code",
-            "message"
-          ],
-          "type": "object"
-        },
-        "params": {
-          "$ref": "#/$defs/types/PluginShutdownParams"
-        },
-        "result": {
-          "type": "null"
-        }
-      },
-      "ave/instance/start": {
+      "ai.agent-connector.ave/instance/start": {
         "errors": {
           "properties": {
             "code": {
@@ -6187,7 +4906,7 @@
           "type": "null"
         }
       },
-      "ave/instance/stop": {
+      "ai.agent-connector.ave/instance/stop": {
         "errors": {
           "properties": {
             "code": {
@@ -6263,7 +4982,7 @@
       }
     },
     "notifications": {
-      "notifications/ave/config/snapshot": {
+      "notifications/ai.agent-connector.ave/config/snapshot": {
         "description": "host → child: the plugin's resolved config changed.",
         "params": {
           "properties": {
@@ -6285,61 +5004,7 @@
           "type": "object"
         }
       },
-      "notifications/ave/installedPlugins/snapshot": {
-        "description": "host → child: the installed-plugin set changed.",
-        "params": {
-          "properties": {
-            "pluginIds": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "pluginIds"
-          ],
-          "type": "object"
-        }
-      },
-      "notifications/ave/log": {
-        "description": "child → host: `context.log`, which is a host closure in-process (§3.4).",
-        "params": {
-          "properties": {
-            "message": {
-              "type": "string"
-            },
-            "meta": {}
-          },
-          "required": [
-            "message"
-          ],
-          "type": "object"
-        }
-      },
-      "notifications/ave/preferences/snapshot": {
-        "description": "host → child: an allow-listed HOST preference now reads differently.",
-        "params": {
-          "properties": {
-            "keys": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "values": {
-              "additionalProperties": {},
-              "type": "object"
-            }
-          },
-          "required": [
-            "keys",
-            "values"
-          ],
-          "type": "object"
-        }
-      },
-      "notifications/ave/subscription": {
+      "notifications/ai.agent-connector.ave/subscription": {
         "description": "host → child: an event for a subscription the child opened. The payload's shape is the `events` of the method that opened it (`HostApiEventPayloads`).",
         "params": {
           "properties": {
@@ -6355,7 +5020,7 @@
           "type": "object"
         }
       },
-      "notifications/ave/subscription/closed": {
+      "notifications/ai.agent-connector.ave/subscription/closed": {
         "description": "host → child: the host ended a subscription the child still holds.",
         "params": {
           "properties": {
@@ -6374,7 +5039,7 @@
           "type": "object"
         }
       },
-      "notifications/ave/subscription/release": {
+      "notifications/ai.agent-connector.ave/subscription/release": {
         "description": "child → host: the plugin called its disposer; release the host side.",
         "params": {
           "properties": {
@@ -6388,8 +5053,26 @@
           "type": "object"
         }
       },
+      "notifications/ai.agent-connector.ave/subscription/send": {
+        "description": "child → host: traffic for a handle that accepts it, today only a `stdio-control-v1` worker (`WireWorkerSend`). Every `request` and `notification` is answered by one `result` or `error` worker event naming its `id`; a `response` or `cancel` is not. A send for a handle that is gone is dropped: its pending calls were already settled by the `exit` event.",
+        "params": {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/types/WireWorkerSend"
+            },
+            "subscriptionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "subscriptionId",
+            "payload"
+          ],
+          "type": "object"
+        }
+      },
       "notifications/cancelled": {
-        "description": "child → host: cancel an in-flight `ave/host/*` request.",
+        "description": "child → host: cancel an in-flight `ai.agent-connector.ave/host/*` request.",
         "params": {
           "properties": {
             "reason": {
@@ -6774,30 +5457,8 @@
           "description": {
             "type": "string"
           },
-          "emittedEvents": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "entry": {
             "type": "string"
-          },
-          "eventSubscriptions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "items": {
-                  "$ref": "#/$defs/types/EventSubscription"
-                },
-                "type": "array"
-              }
-            ]
           },
           "hooks": {
             "items": {
@@ -6938,23 +5599,6 @@
           },
           "version": {
             "type": "string"
-          },
-          "workProposals": {
-            "properties": {
-              "kinds": {
-                "items": {
-                  "$ref": "#/$defs/types/WorkProposalKind"
-                },
-                "type": "array"
-              },
-              "reasoning": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kinds"
-            ],
-            "type": "object"
           }
         },
         "required": [
@@ -6963,53 +5607,6 @@
           "id",
           "tools",
           "version"
-        ],
-        "type": "object"
-      },
-      "EventSubscription": {
-        "properties": {
-          "hint": {
-            "$ref": "#/$defs/types/EventSubscriptionHint"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "type"
-        ],
-        "type": "object"
-      },
-      "EventSubscriptionHint": {
-        "properties": {
-          "category": {
-            "enum": [
-              "task",
-              "note",
-              "session",
-              "meeting",
-              "email",
-              "calendar",
-              "system"
-            ],
-            "type": "string"
-          },
-          "priority": {
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ],
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "category",
-          "priority",
-          "title"
         ],
         "type": "object"
       },
@@ -7034,7 +5631,7 @@
         "type": "object"
       },
       "HostProtocolVersion": {
-        "const": "3",
+        "const": "5",
         "type": "string"
       },
       "JsonRpcRequestId": {
@@ -7045,12 +5642,6 @@
       },
       "PluginAccessSpec": {
         "properties": {
-          "agentApprovalScopes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "plugins": {
             "items": {
               "$ref": "#/$defs/types/PluginAccessTarget"
@@ -7065,12 +5656,6 @@
       },
       "PluginAccessTarget": {
         "properties": {
-          "events": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "pluginId": {
             "type": "string"
           }
@@ -7109,6 +5694,20 @@
           "label": {
             "type": "string"
           },
+          "locales": {
+            "additionalProperties": {
+              "properties": {
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "type": "object"
+            },
+            "type": "object"
+          },
           "loginTool": {
             "type": "string"
           },
@@ -7133,25 +5732,6 @@
       },
       "PluginChildContext": {
         "properties": {
-          "appPreferences": {
-            "properties": {
-              "keys": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "values": {
-                "additionalProperties": {},
-                "type": "object"
-              }
-            },
-            "required": [
-              "keys",
-              "values"
-            ],
-            "type": "object"
-          },
           "aveHome": {
             "type": "string"
           },
@@ -7161,12 +5741,6 @@
           },
           "hostRoot": {
             "type": "string"
-          },
-          "installedPluginIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
           },
           "pluginDataDir": {
             "type": "string"
@@ -7187,8 +5761,7 @@
           "hostRoot",
           "pluginDataDir",
           "userHome",
-          "aveHome",
-          "installedPluginIds"
+          "aveHome"
         ],
         "type": "object"
       },
@@ -7282,6 +5855,12 @@
             ],
             "type": "object"
           },
+          "locales": {
+            "additionalProperties": {
+              "$ref": "#/$defs/types/PluginConfigSchemaPropertyLocalizedText"
+            },
+            "type": "object"
+          },
           "maxLength": {
             "type": "number"
           },
@@ -7314,6 +5893,17 @@
         "required": [
           "type"
         ],
+        "type": "object"
+      },
+      "PluginConfigSchemaPropertyLocalizedText": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "PluginConstructParams": {
@@ -7457,50 +6047,6 @@
           "actionLabel"
         ],
         "type": "object"
-      },
-      "PluginLifecycleEvent": {
-        "anyOf": [
-          {
-            "properties": {
-              "pluginId": {
-                "type": "string"
-              },
-              "source": {
-                "enum": [
-                  "marketplace",
-                  "local-dev"
-                ],
-                "type": "string"
-              },
-              "type": {
-                "const": "installed",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "pluginId",
-              "source"
-            ],
-            "type": "object"
-          },
-          {
-            "properties": {
-              "pluginId": {
-                "type": "string"
-              },
-              "type": {
-                "const": "uninstalled",
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "pluginId"
-            ],
-            "type": "object"
-          }
-        ]
       },
       "PluginLifecycleHookName": {
         "enum": [
@@ -7742,17 +6288,6 @@
           }
         ]
       },
-      "PluginShutdownParams": {
-        "properties": {
-          "subscriptionId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "subscriptionId"
-        ],
-        "type": "object"
-      },
       "PluginToolOperationPolicy": {
         "properties": {
           "discriminant": {
@@ -7824,34 +6359,26 @@
       },
       "PluginUiExtension": {
         "properties": {
-          "defaults": {
-            "additionalProperties": {},
-            "type": "object"
-          },
           "description": {
             "type": "string"
           },
           "displayName": {
             "type": "string"
           },
-          "entry": {
-            "type": "string"
-          },
-          "exportName": {
-            "type": "string"
-          },
           "id": {
             "type": "string"
           },
           "kind": {
-            "enum": [
-              "embedded-module",
-              "embedded-page",
-              "info-card"
-            ],
+            "const": "mcp-app",
             "type": "string"
           },
-          "page": {
+          "locales": {
+            "additionalProperties": {
+              "$ref": "#/$defs/types/PluginUiExtensionLocalizedText"
+            },
+            "type": "object"
+          },
+          "resourceUri": {
             "type": "string"
           },
           "slot": {
@@ -7869,8 +6396,23 @@
           "id",
           "slot",
           "kind",
-          "title"
+          "title",
+          "resourceUri"
         ],
+        "type": "object"
+      },
+      "PluginUiExtensionLocalizedText": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "PluginUiResourceDecl": {
@@ -7936,6 +6478,22 @@
         ],
         "type": "object"
       },
+      "PluginWorkerControl": {
+        "enum": [
+          "stdio-control-v1",
+          "output-only-v1"
+        ],
+        "type": "string"
+      },
+      "PluginWorkerExitReason": {
+        "enum": [
+          "exited",
+          "stopped",
+          "control-violation",
+          "output-overflow"
+        ],
+        "type": "string"
+      },
       "ProcessPluginManifest": {
         "properties": {
           "alerts": {
@@ -7979,29 +6537,7 @@
           "description": {
             "type": "string"
           },
-          "emittedEvents": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "entry": false,
-          "eventSubscriptions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "items": {
-                  "$ref": "#/$defs/types/EventSubscription"
-                },
-                "type": "array"
-              }
-            ]
-          },
           "hooks": {
             "items": {
               "$ref": "#/$defs/types/PluginContributionDeclaration"
@@ -8143,23 +6679,6 @@
           },
           "version": {
             "type": "string"
-          },
-          "workProposals": {
-            "properties": {
-              "kinds": {
-                "items": {
-                  "$ref": "#/$defs/types/WorkProposalKind"
-                },
-                "type": "array"
-              },
-              "reasoning": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kinds"
-            ],
-            "type": "object"
           }
         },
         "required": [
@@ -8192,10 +6711,10 @@
         "properties": {
           "_meta": {
             "properties": {
-              "ave/operationPolicy": {
+              "ai.agent-connector.ave/operationPolicy": {
                 "$ref": "#/$defs/types/PluginToolOperationPolicy"
               },
-              "ave/pathFields": {
+              "ai.agent-connector.ave/pathFields": {
                 "items": {
                   "type": "string"
                 },
@@ -8593,162 +7112,172 @@
         ],
         "type": "object"
       },
+      "WireWorkerError": {
+        "properties": {
+          "code": {
+            "$ref": "#/$defs/types/WorkerControlErrorCode"
+          },
+          "message": {
+            "type": "string"
+          },
+          "remote": {
+            "$ref": "#/$defs/types/WorkerControlRemoteError"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
       "WireWorkerHandle": {
         "properties": {
+          "control": {
+            "$ref": "#/$defs/types/PluginWorkerControl"
+          },
           "handleId": {
             "type": "string"
           },
           "pid": {
             "type": "number"
-          },
-          "socketPath": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         },
         "required": [
           "handleId",
-          "socketPath"
+          "control"
         ],
         "type": "object"
       },
-      "WorkProposal": {
+      "WireWorkerSend": {
+        "anyOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "request",
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "params": {}
+            },
+            "required": [
+              "kind",
+              "id",
+              "method"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "notification",
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "params": {}
+            },
+            "required": [
+              "kind",
+              "id",
+              "method"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "response",
+                "type": "string"
+              },
+              "result": {}
+            },
+            "required": [
+              "kind",
+              "id",
+              "result"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "error": {
+                "$ref": "#/$defs/types/WorkerControlRemoteError"
+              },
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "response",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "error"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "kind": {
+                "const": "cancel",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkerControlErrorCode": {
+        "enum": [
+          "worker-request-failed",
+          "worker-request-cancelled",
+          "worker-backpressure",
+          "worker-incarnation-ended",
+          "payload-too-large"
+        ],
+        "type": "string"
+      },
+      "WorkerControlRemoteError": {
         "properties": {
-          "acceptedItemId": {
+          "code": {
             "type": "number"
           },
-          "blockers": {
-            "items": {
-              "$ref": "#/$defs/types/WorkProposalBlocker"
-            },
-            "type": "array"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "dismissedAt": {
-            "type": "string"
-          },
-          "dueAt": {
-            "type": "string"
-          },
-          "evidence": {
-            "items": {
-              "$ref": "#/$defs/types/WorkProposalEvidence"
-            },
-            "type": "array"
-          },
-          "expiresAt": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "pluginId": {
-            "type": "string"
-          },
-          "pluginLabel": {
-            "type": "string"
-          },
-          "priority": {
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ],
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "taskBrief": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "updatedAt": {
+          "data": {},
+          "message": {
             "type": "string"
           }
         },
         "required": [
-          "blockers",
-          "createdAt",
-          "evidence",
-          "expiresAt",
-          "id",
-          "key",
-          "kind",
-          "pluginId",
-          "pluginLabel",
-          "priority",
-          "state",
-          "summary",
-          "taskBrief",
-          "title",
-          "updatedAt"
-        ],
-        "type": "object"
-      },
-      "WorkProposalBlocker": {
-        "properties": {
-          "reason": {
-            "type": "string"
-          },
-          "resolution": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "type": "object"
-      },
-      "WorkProposalEvidence": {
-        "properties": {
-          "detail": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "label",
-          "detail"
-        ],
-        "type": "object"
-      },
-      "WorkProposalKind": {
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "label"
+          "code",
+          "message"
         ],
         "type": "object"
       }
     }
   },
-  "$id": "https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/v0.14.0/protocol.schema.json",
+  "$id": "https://ave.agent-connector.ai/schemas/plugin-host-protocol/5/v0.14.2/protocol.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Generated by scripts/generate-plugin-host-protocol-schema.ts from Ave 0.14.0; do not edit. Each method names its params, its result and the errors it may reply with, and a method whose registration or handle outlives the reply names the payload of every notifications/ave/subscription frame for it under events; each notification names its params. docs/design/plugin-hostapi-protocol.md describes the protocol.",
-  "title": "Ave plugin host protocol 3"
+  "description": "Generated by scripts/generate-plugin-host-protocol-schema.ts from Ave 0.14.2; do not edit. Each method names its params, its result and the errors it may reply with, and a method whose registration or handle outlives the reply names the payload of every notifications/ai.agent-connector.ave/subscription frame for it under events; each notification names its params. docs/design/plugin-hostapi-protocol.md describes the protocol.",
+  "title": "Ave plugin host protocol 5"
 }

@@ -1,7 +1,7 @@
 // Canonical bootstrap; tools/connector-pins.mjs copies it into each installable package.
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants, accessSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { constants, accessSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -170,7 +170,7 @@ export async function main(serverDir = dirname(fileURLToPath(import.meta.url))) 
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   main().catch((error) => {
     console.error(error instanceof RuntimeRefusal ? error.message : "Connector startup failed; credential values and raw errors are omitted.");
     process.exitCode = 1;
