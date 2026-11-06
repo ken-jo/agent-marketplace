@@ -510,6 +510,18 @@ describe("repository check", () => {
     assert.doesNotMatch(r.tool("check.mjs").stderr, /hostProtocol/u);
   });
 
+  it("requires protocol 5 from Ave 0.14.2", () => {
+    const { r } = published();
+    const manifestPath = "plugins/alpha/source/plugin.json";
+    const manifest = JSON.parse(readFileSync(join(r.root, manifestPath), "utf8"));
+    manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.14.2", hostProtocol: "3" };
+    r.write(manifestPath, manifest);
+    assert.match(r.tool("check.mjs").stderr, /requires\.hostProtocol must be 5 for minAppVersion 0\.14\.2/u);
+    manifest.extensions["ai.agent-connector.ave"].requires.hostProtocol = "5";
+    r.write(manifestPath, manifest);
+    assert.doesNotMatch(r.tool("check.mjs").stderr, /hostProtocol/u);
+  });
+
   it("fails when the base commit is not in the clone instead of skipping the comparison", () => {
     const { r } = published();
     assert.match(r.tool("check.mjs", "--base", "0123456789abcdef0123456789abcdef01234567").stderr, /the base commit is not in this clone/u);
@@ -931,7 +943,7 @@ describe("plugin alert drift checks", () => {
       const manifest = JSON.parse(readFileSync(join(source, "plugin.json"), "utf8"));
       manifest.extensions["ai.agent-connector.ave"].alerts.kinds = manifest.extensions["ai.agent-connector.ave"].alerts.kinds.filter((kind) => kind.id !== removedKind);
       writeFileSync(join(root, "plugin.json"), JSON.stringify(manifest));
-      const result = spawnSync("node", [join(root, "scripts", "validate-events.mjs")], { cwd: root, encoding: "utf8" });
+      const result = spawnSync("node", [join(root, "scripts", "validate-alerts.mjs")], { cwd: root, encoding: "utf8" });
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, new RegExp(`runtime raises "${removedKind}" without an alerts\\.kinds declaration`, "u"));
     });

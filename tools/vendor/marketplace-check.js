@@ -26125,6 +26125,164 @@ function isPackageName(value) {
 }
 var NULL_OBJECT_ID = "0".repeat(40);
 
+// src/shared/strict-json.ts
+var NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+var WHITESPACE = /[ \t\n\r]*/y;
+function parseStrictJsonText(text, options) {
+  const { fail } = options;
+  const maxNodes = options.maxNodes ?? Number.POSITIVE_INFINITY;
+  const maxMembers = options.maxObjectMembers ?? Number.POSITIVE_INFINITY;
+  const maxItems = options.maxArrayItems ?? Number.POSITIVE_INFINITY;
+  let pos = 0;
+  let nodes = 0;
+  const skip = () => {
+    WHITESPACE.lastIndex = pos;
+    WHITESPACE.exec(text);
+    pos = WHITESPACE.lastIndex;
+  };
+  const readString = () => {
+    const start = pos;
+    pos += 1;
+    while (pos < text.length) {
+      const ch = text.charCodeAt(pos);
+      if (ch === 34) {
+        pos += 1;
+        try {
+          return JSON.parse(text.slice(start, pos));
+        } catch {
+          return fail("invalid string", start);
+        }
+      }
+      if (ch === 92)
+        pos += 2;
+      else if (ch < 32)
+        return fail("control character in string", pos);
+      else
+        pos += 1;
+    }
+    return fail("unterminated string", start);
+  };
+  const readValue = (depth) => {
+    if (depth > options.maxDepth)
+      fail("nesting too deep", pos);
+    skip();
+    nodes += 1;
+    if (nodes > maxNodes)
+      fail("too many values", pos);
+    const ch = text[pos];
+    if (ch === "{") {
+      pos += 1;
+      const out = options.nullPrototypeObjects ? Object.create(null) : {};
+      const seen = new Set;
+      skip();
+      if (text[pos] === "}") {
+        pos += 1;
+        return out;
+      }
+      for (;; ) {
+        skip();
+        if (text[pos] !== '"')
+          fail("expected a key", pos);
+        const keyAt = pos;
+        const key = readString();
+        if (options.forbiddenKeys.has(key))
+          fail(`the key ${key} is not allowed`, keyAt);
+        if (seen.has(key))
+          fail(`duplicate key ${JSON.stringify(key)}`, keyAt);
+        seen.add(key);
+        if (seen.size > maxMembers)
+          fail("too many object members", keyAt);
+        skip();
+        if (text[pos] !== ":")
+          fail("expected ':'", pos);
+        pos += 1;
+        out[key] = readValue(depth + 1);
+        skip();
+        if (text[pos] === ",") {
+          pos += 1;
+          continue;
+        }
+        if (text[pos] === "}") {
+          pos += 1;
+          return out;
+        }
+        fail("expected ',' or '}'", pos);
+      }
+    }
+    if (ch === "[") {
+      pos += 1;
+      const out = [];
+      skip();
+      if (text[pos] === "]") {
+        pos += 1;
+        return out;
+      }
+      for (;; ) {
+        if (out.length >= maxItems)
+          fail("too many array items", pos);
+        out.push(readValue(depth + 1));
+        skip();
+        if (text[pos] === ",") {
+          pos += 1;
+          continue;
+        }
+        if (text[pos] === "]") {
+          pos += 1;
+          return out;
+        }
+        fail("expected ',' or ']'", pos);
+      }
+    }
+    if (ch === '"')
+      return readString();
+    for (const [literal, value2] of [["true", true], ["false", false], ["null", null]]) {
+      if (text.startsWith(literal, pos)) {
+        pos += literal.length;
+        return value2;
+      }
+    }
+    NUMBER.lastIndex = pos;
+    const match = NUMBER.exec(text);
+    if (!match)
+      return fail("unexpected token", pos);
+    const numberAt = pos;
+    pos = NUMBER.lastIndex;
+    const parsed = Number(match[0]);
+    if (options.rejectNonFiniteNumbers && !Number.isFinite(parsed))
+      fail("number out of range", numberAt);
+    return parsed;
+  };
+  const value = readValue(0);
+  skip();
+  if (pos !== text.length)
+    fail("trailing content", pos);
+  return value;
+}
+var DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
+// src/marketplace/catalog/strict-json.ts
+class StrictJsonError extends Error {
+  offset;
+  constructor(message, offset) {
+    super(`${message} at offset ${offset}`);
+    this.offset = offset;
+    this.name = "StrictJsonError";
+  }
+}
+var MARKETPLACE_FORBIDDEN_KEYS = new Set(["__proto__"]);
+var throwLocated = (reason, offset) => {
+  throw new StrictJsonError(reason, offset);
+};
+function parseStrictJson(text) {
+  return parseStrictJsonText(text, {
+    maxDepth: 64,
+    forbiddenKeys: MARKETPLACE_FORBIDDEN_KEYS,
+    nullPrototypeObjects: false,
+    rejectNonFiniteNumbers: false,
+    fail: throwLocated
+  });
+}
+
 // marketplace-check:unused-host-logger
 var silent = () => {};
 var logger = { debug: silent, info: silent, warn: silent, error: silent, trace: silent, fatal: silent, child: () => logger };
@@ -30718,164 +30876,6 @@ function isSemver(value) {
   return value.length <= 128 && SEMVER_RE.test(value);
 }
 
-// src/shared/strict-json.ts
-var NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
-var WHITESPACE = /[ \t\n\r]*/y;
-function parseStrictJsonText(text, options) {
-  const { fail } = options;
-  const maxNodes = options.maxNodes ?? Number.POSITIVE_INFINITY;
-  const maxMembers = options.maxObjectMembers ?? Number.POSITIVE_INFINITY;
-  const maxItems = options.maxArrayItems ?? Number.POSITIVE_INFINITY;
-  let pos = 0;
-  let nodes = 0;
-  const skip = () => {
-    WHITESPACE.lastIndex = pos;
-    WHITESPACE.exec(text);
-    pos = WHITESPACE.lastIndex;
-  };
-  const readString = () => {
-    const start = pos;
-    pos += 1;
-    while (pos < text.length) {
-      const ch = text.charCodeAt(pos);
-      if (ch === 34) {
-        pos += 1;
-        try {
-          return JSON.parse(text.slice(start, pos));
-        } catch {
-          return fail("invalid string", start);
-        }
-      }
-      if (ch === 92)
-        pos += 2;
-      else if (ch < 32)
-        return fail("control character in string", pos);
-      else
-        pos += 1;
-    }
-    return fail("unterminated string", start);
-  };
-  const readValue = (depth) => {
-    if (depth > options.maxDepth)
-      fail("nesting too deep", pos);
-    skip();
-    nodes += 1;
-    if (nodes > maxNodes)
-      fail("too many values", pos);
-    const ch = text[pos];
-    if (ch === "{") {
-      pos += 1;
-      const out = options.nullPrototypeObjects ? Object.create(null) : {};
-      const seen = new Set;
-      skip();
-      if (text[pos] === "}") {
-        pos += 1;
-        return out;
-      }
-      for (;; ) {
-        skip();
-        if (text[pos] !== '"')
-          fail("expected a key", pos);
-        const keyAt = pos;
-        const key = readString();
-        if (options.forbiddenKeys.has(key))
-          fail(`the key ${key} is not allowed`, keyAt);
-        if (seen.has(key))
-          fail(`duplicate key ${JSON.stringify(key)}`, keyAt);
-        seen.add(key);
-        if (seen.size > maxMembers)
-          fail("too many object members", keyAt);
-        skip();
-        if (text[pos] !== ":")
-          fail("expected ':'", pos);
-        pos += 1;
-        out[key] = readValue(depth + 1);
-        skip();
-        if (text[pos] === ",") {
-          pos += 1;
-          continue;
-        }
-        if (text[pos] === "}") {
-          pos += 1;
-          return out;
-        }
-        fail("expected ',' or '}'", pos);
-      }
-    }
-    if (ch === "[") {
-      pos += 1;
-      const out = [];
-      skip();
-      if (text[pos] === "]") {
-        pos += 1;
-        return out;
-      }
-      for (;; ) {
-        if (out.length >= maxItems)
-          fail("too many array items", pos);
-        out.push(readValue(depth + 1));
-        skip();
-        if (text[pos] === ",") {
-          pos += 1;
-          continue;
-        }
-        if (text[pos] === "]") {
-          pos += 1;
-          return out;
-        }
-        fail("expected ',' or ']'", pos);
-      }
-    }
-    if (ch === '"')
-      return readString();
-    for (const [literal, value2] of [["true", true], ["false", false], ["null", null]]) {
-      if (text.startsWith(literal, pos)) {
-        pos += literal.length;
-        return value2;
-      }
-    }
-    NUMBER.lastIndex = pos;
-    const match = NUMBER.exec(text);
-    if (!match)
-      return fail("unexpected token", pos);
-    const numberAt = pos;
-    pos = NUMBER.lastIndex;
-    const parsed = Number(match[0]);
-    if (options.rejectNonFiniteNumbers && !Number.isFinite(parsed))
-      fail("number out of range", numberAt);
-    return parsed;
-  };
-  const value = readValue(0);
-  skip();
-  if (pos !== text.length)
-    fail("trailing content", pos);
-  return value;
-}
-var DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-
-// src/marketplace/catalog/strict-json.ts
-class StrictJsonError extends Error {
-  offset;
-  constructor(message, offset) {
-    super(`${message} at offset ${offset}`);
-    this.offset = offset;
-    this.name = "StrictJsonError";
-  }
-}
-var MARKETPLACE_FORBIDDEN_KEYS = new Set(["__proto__"]);
-var throwLocated = (reason, offset) => {
-  throw new StrictJsonError(reason, offset);
-};
-function parseStrictJson(text) {
-  return parseStrictJsonText(text, {
-    maxDepth: 64,
-    forbiddenKeys: MARKETPLACE_FORBIDDEN_KEYS,
-    nullPrototypeObjects: false,
-    rejectNonFiniteNumbers: false,
-    fail: throwLocated
-  });
-}
-
 // src/marketplace/catalog/version-range.ts
 function parseVersionRange(text) {
   const alternatives = text.split("||").map((part) => part.trim());
@@ -30892,6 +30892,81 @@ function parseVersionRange(text) {
       return { op: match?.[1] ?? "=", version };
     });
   });
+}
+
+// src/plugins/public-contract.ts
+var BUNDLE_EVERYTHING_REGEX = new RegExp(".*");
+var AGENT_PLUGINS_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+var AVE_EXTENSION_NAMESPACE = "ai.agent-connector.ave";
+var PLUGIN_ID_PATTERN = /^(?!.*--)[a-z][a-z0-9-]*[a-z0-9]$/u;
+var PLUGIN_ID_MIN_LENGTH = 3;
+var PLUGIN_ID_MAX_LENGTH = 64;
+function isValidPluginId(value) {
+  return typeof value === "string" && value.length >= PLUGIN_ID_MIN_LENGTH && value.length <= PLUGIN_ID_MAX_LENGTH && PLUGIN_ID_PATTERN.test(value);
+}
+var AGENT_PLUGINS_TOP_LEVEL_FIELDS = [
+  "$schema",
+  "name",
+  "version",
+  "description",
+  "author",
+  "homepage",
+  "repository",
+  "license",
+  "keywords",
+  "extensions"
+];
+function foreignManifestTopLevelFields(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    return [];
+  }
+  return Object.keys(document).filter((key) => !AGENT_PLUGINS_TOP_LEVEL_FIELDS.includes(key));
+}
+function flattenAgentPluginsManifest(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    return document;
+  }
+  const top = document;
+  const extensions = top.extensions;
+  const namespaced = extensions && typeof extensions === "object" && !Array.isArray(extensions) ? extensions[AVE_EXTENSION_NAMESPACE] : undefined;
+  const hostBlock = namespaced && typeof namespaced === "object" && !Array.isArray(namespaced) ? namespaced : {};
+  const { displayName, ...hostFields } = hostBlock;
+  const flat = {
+    ...hostFields,
+    id: top.name,
+    version: top.version,
+    description: top.description
+  };
+  if (displayName !== undefined)
+    flat.name = displayName;
+  return flat;
+}
+var WORKER_CONTROL_FRAME_BYTES_MAX = 16 * 1024 * 1024;
+
+// src/plugins/isolation/host-api-wire.ts
+var HOST_PROTOCOL_VERSION = "5";
+var WIRE_BYTES_MAX = 16 * 1024 * 1024;
+var FRAME_ENVELOPE_HEADROOM_BYTES = 1024 * 1024;
+var FRAME_BYTES_MAX = 2 * Math.ceil(WIRE_BYTES_MAX / 3) * 4 + FRAME_ENVELOPE_HEADROOM_BYTES;
+var SECRET_REDACTED_SENTINEL = Symbol.for("ave.config.secret.redacted");
+var NULL_BODY_STATUSES = new Set([204, 205, 304]);
+var WORKER_EXIT_REASONS = new Set([
+  "exited",
+  "stopped",
+  "control-violation",
+  "output-overflow"
+]);
+var WORKER_ERROR_CODES = new Set([
+  "worker-request-failed",
+  "worker-request-cancelled",
+  "worker-backpressure",
+  "worker-incarnation-ended",
+  "payload-too-large"
+]);
+
+// src/marketplace/catalog/host-protocol.ts
+function supportsHostProtocol(kind, hostProtocol) {
+  return kind !== "plugin" || hostProtocol === HOST_PROTOCOL_VERSION;
 }
 
 // src/marketplace/catalog/validate.ts
@@ -30935,8 +31010,29 @@ var INDEX_ID = index_schema_default.$id;
 var PACKAGE_ID = package_schema_default.$id;
 var REVOCATIONS_ID = revocations_schema_default.$id;
 var SNAPSHOT_PIN = { anyOf: [{ $ref: PACKAGE_ID + "#/definitions/commit" }, { type: "string", pattern: "^local-[0-9a-f]{64}$" }] };
+var EXCLUSION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["packageId", "versionIndex", "version", "hostProtocol", "reason", "package"],
+  properties: {
+    packageId: { type: "string" },
+    versionIndex: { type: "integer", minimum: 0, maximum: 499 },
+    version: { anyOf: [{ $ref: PACKAGE_ID + "#/definitions/semver" }, { type: "string", pattern: "^versions\\[[0-9]{1,3}\\]$" }] },
+    hostProtocol: index_schema_default.definitions.indexVersion.properties.hostProtocol,
+    reason: { const: "foreign-host-protocol" },
+    package: {
+      ...index_schema_default.definitions.indexPackage,
+      properties: {
+        ...Object.fromEntries(Object.keys(index_schema_default.definitions.indexPackage.properties).filter((key) => key !== "versions" && key !== "latest").map((key) => [key, { $ref: INDEX_ID + "#/definitions/indexPackage/properties/" + key }])),
+        kind: { const: "plugin" }
+      }
+    }
+  }
+};
 var compiled = null;
 var CATALOG_SCHEMA_VERSION = 2;
+var HOST_PROTOCOL_PATTERN = new RegExp(index_schema_default.definitions.indexVersion.properties.hostProtocol.pattern, "u");
+var SEMVER_PATTERN = new RegExp(package_schema_default.definitions.semver.pattern, "u");
 function unsupportedSchemaVersion(document, file) {
   if (!isRecord(document) || !Object.hasOwn(document, "schemaVersion"))
     return null;
@@ -30967,6 +31063,7 @@ function validators() {
     descriptor: get(PACKAGE_ID),
     revocations: get(REVOCATIONS_ID),
     conditionalRevocations: get(revocations_by_app_schema_default.$id),
+    exclusion: ajv.compile(EXCLUSION_SCHEMA),
     snapshot: ajv.compile({
       type: "object",
       additionalProperties: false,
@@ -31010,7 +31107,8 @@ function validators() {
           additionalProperties: false,
           required: ["subject", "message"],
           properties: { subject: { type: "string" }, message: { type: "string" } }
-        } }
+        } },
+        excluded: { type: "array", items: EXCLUSION_SCHEMA }
       }
     })
   };
@@ -31147,20 +31245,50 @@ function validateIndexText(text, context) {
   }
   const diagnostics = [];
   const candidates = [];
+  const exclusions = new Map;
+  const excludedOnly = new Set;
   const byName = new Map;
   const byPath = new Map;
   const claim = (counts, key) => counts.set(key, (counts.get(key) ?? 0) + 1);
   let retiredCount = 0;
+  let versionsSkipped = 0;
+  let packagesDropped = 0;
   root.packages.forEach((raw, position) => {
     if (isRecord(raw) && raw.kind === "theme") {
       retiredCount += 1;
       return;
     }
-    const entry = raw;
+    const entry = isRecord(raw) ? raw : {};
     const named = typeof entry.kind === "string" && typeof entry.name === "string" && !holdsCredential(entry.name);
     const subject = named ? `${entry.kind}/${entry.name}` : `packages[${position}]`;
     if (typeof entry.kind === "string" && typeof entry.name === "string")
       claim(byName, `${entry.kind}/${entry.name}`);
+    const omitted = [];
+    let foreignOnly = false;
+    if (isRecord(raw) && raw.kind === "plugin" && Array.isArray(raw.versions) && raw.versions.length <= index_schema_default.definitions.indexPackage.properties.versions.maxItems) {
+      const skipped = [];
+      const versions = raw.versions.filter((version2, index) => {
+        if (!isRecord(version2) || typeof version2.hostProtocol !== "string" || !HOST_PROTOCOL_PATTERN.test(version2.hostProtocol) || supportsHostProtocol("plugin", version2.hostProtocol))
+          return true;
+        skipped.push(version2.version);
+        const label = typeof version2.version === "string" && version2.version.length <= package_schema_default.definitions.semver.maxLength && SEMVER_PATTERN.test(version2.version) && !holdsCredential(version2.version) ? version2.version : `versions[${index}]`;
+        omitted.push({ packageId: subject, versionIndex: index, version: label, hostProtocol: version2.hostProtocol, reason: "foreign-host-protocol" });
+        return false;
+      });
+      if (skipped.length > 0) {
+        versionsSkipped += skipped.length;
+        if (versions.length === 0) {
+          packagesDropped += 1;
+          foreignOnly = true;
+          const { versions: _versions, latest: _latest, ...metadata } = raw;
+          raw = metadata;
+        } else {
+          raw = { ...raw, versions };
+          if (isRecord(raw) && skipped.includes(raw.latest))
+            delete raw.latest;
+        }
+      }
+    }
     if (!indexPackage(raw)) {
       diagnostics.push({ subject, message: describeErrors(indexPackage.errors) });
       return;
@@ -31176,12 +31304,20 @@ function validateIndexText(text, context) {
       diagnostics.push({ subject, message: rule });
       return;
     }
-    claim(byPath, raw.path);
-    candidates.push(raw);
+    claim(byPath, listed.path);
+    candidates.push(listed);
+    if (foreignOnly)
+      excludedOnly.add(listed);
+    if (omitted.length > 0) {
+      const { versions: _versions, latest: _latest, ...metadata } = listed;
+      exclusions.set(listed, omitted.map((item) => ({ ...item, package: metadata })));
+    }
   });
   if (retiredCount > 0)
     log2.info({ entriesSkipped: retiredCount }, "Retired catalog entries skipped");
-  const packages = candidates.filter((entry) => {
+  if (versionsSkipped > 0)
+    log2.info({ versionsSkipped, packagesDropped }, "Catalog foreign-host-protocol versions skipped");
+  const admitted = candidates.filter((entry) => {
     const subject = `${entry.kind}/${entry.name}`;
     if ((byName.get(subject) ?? 0) > 1) {
       diagnostics.push({ subject, message: "the index lists this package more than once" });
@@ -31193,7 +31329,9 @@ function validateIndexText(text, context) {
     }
     return true;
   });
-  return { ok: true, value: { index: { ...root, packages }, diagnostics } };
+  const packages = admitted.filter((entry) => !excludedOnly.has(entry));
+  const excluded = admitted.flatMap((entry) => exclusions.get(entry) ?? []);
+  return { ok: true, value: { index: { ...root, packages }, diagnostics, excluded } };
 }
 function validateDescriptorText(text, context) {
   const parsed = parse(text);
@@ -35191,55 +35329,6 @@ function projectPortableMcp(parsed, auth = {}) {
   }
   return projected;
 }
-
-// src/plugins/public-contract.ts
-var BUNDLE_EVERYTHING_REGEX = new RegExp(".*");
-var AGENT_PLUGINS_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-var AVE_EXTENSION_NAMESPACE = "ai.agent-connector.ave";
-var PLUGIN_ID_PATTERN = /^(?!.*--)[a-z][a-z0-9-]*[a-z0-9]$/u;
-var PLUGIN_ID_MIN_LENGTH = 3;
-var PLUGIN_ID_MAX_LENGTH = 64;
-function isValidPluginId(value) {
-  return typeof value === "string" && value.length >= PLUGIN_ID_MIN_LENGTH && value.length <= PLUGIN_ID_MAX_LENGTH && PLUGIN_ID_PATTERN.test(value);
-}
-var AGENT_PLUGINS_TOP_LEVEL_FIELDS = [
-  "$schema",
-  "name",
-  "version",
-  "description",
-  "author",
-  "homepage",
-  "repository",
-  "license",
-  "keywords",
-  "extensions"
-];
-function foreignManifestTopLevelFields(document) {
-  if (!document || typeof document !== "object" || Array.isArray(document)) {
-    return [];
-  }
-  return Object.keys(document).filter((key) => !AGENT_PLUGINS_TOP_LEVEL_FIELDS.includes(key));
-}
-function flattenAgentPluginsManifest(document) {
-  if (!document || typeof document !== "object" || Array.isArray(document)) {
-    return document;
-  }
-  const top = document;
-  const extensions = top.extensions;
-  const namespaced = extensions && typeof extensions === "object" && !Array.isArray(extensions) ? extensions[AVE_EXTENSION_NAMESPACE] : undefined;
-  const hostBlock = namespaced && typeof namespaced === "object" && !Array.isArray(namespaced) ? namespaced : {};
-  const { displayName, ...hostFields } = hostBlock;
-  const flat = {
-    ...hostFields,
-    id: top.name,
-    version: top.version,
-    description: top.description
-  };
-  if (displayName !== undefined)
-    flat.name = displayName;
-  return flat;
-}
-var WORKER_CONTROL_FRAME_BYTES_MAX = 16 * 1024 * 1024;
 
 // src/plugins/agent-plugin-manifest.ts
 var log5 = createLogger("agent-plugin-manifest");
@@ -42130,7 +42219,7 @@ function checkRetiredNotificationDeclaration(document, minAppVersion, alertsRele
     report(`notificationEvents is retired for minAppVersion ${minAppVersion} at or above the alerts release ${alertsReleaseVersion}; declare alerts kinds instead`);
   }
 }
-function checkReleasedManifests(entry, released, alertsReleaseVersion, report) {
+function checkReleasedManifests(entry, released, alertsReleaseVersion, report, excluded = []) {
   const prefix = `${entry.name}@`;
   const versions = new Map((entry.versions ?? []).map((version) => [version.version, version]));
   for (const [key, document] of released) {
@@ -42138,6 +42227,8 @@ function checkReleasedManifests(entry, released, alertsReleaseVersion, report) {
       continue;
     const version = versions.get(key.slice(prefix.length));
     if (!version) {
+      if (excluded.some((item) => item.packageId === `plugin/${entry.name}` && key === `${entry.name}@${item.version}`))
+        continue;
       report(`a released plugin.json was supplied for ${key}, which the index does not list`);
       continue;
     }
@@ -42157,9 +42248,9 @@ function checkReleasedManifests(entry, released, alertsReleaseVersion, report) {
     checkRetiredNotificationDeclaration(held, version.minAppVersion, alertsReleaseVersion, (message) => report(`the released plugin.json of ${version.version}: ${message}`));
   }
 }
-function checkPlugin(tree, entry, descriptor, options, report) {
+function checkPlugin(tree, entry, descriptor, options, report, excluded) {
   if (options.releasedManifests)
-    checkReleasedManifests(entry, options.releasedManifests, options.alertsReleaseVersion, report);
+    checkReleasedManifests(entry, options.releasedManifests, options.alertsReleaseVersion, report, excluded);
   const manifestPath = repoPath(entry.path, "plugin.json");
   const manifest = tree.read(manifestPath);
   const artifact = descriptor.payload.artifact;
@@ -42233,13 +42324,25 @@ function checkContent(tree, entry, descriptor, options) {
     unknownMessageKeys: "refuse"
   });
 }
-function checkPackage(tree, entry, options, problems) {
+function checkPackage(tree, entry, options, problems, excluded) {
   const subject = `${entry.kind}/${entry.name}`;
   const report = (text2) => problems.push({ subject, message: text2 });
   const path = repoPath(entry.path, MARKETPLACE_DESCRIPTOR_FILE);
   const bytes = tree.read(path);
   if (!bytes) {
     report(`${path} is missing`);
+    return;
+  }
+  let document;
+  try {
+    document = parseStrictJson(bytes.toString("utf8"));
+  } catch (error) {
+    report(`${path}: ${errorMessage(error)}`);
+    return;
+  }
+  if (!entry.versions && isRecord(document) && document.kind === entry.kind && document.name === entry.name && excluded.some((item) => item.packageId === subject && item.version === document.version && item.hostProtocol === document.hostProtocol)) {
+    if (options.releasedManifests)
+      checkReleasedManifests(entry, options.releasedManifests, options.alertsReleaseVersion, report, excluded);
     return;
   }
   const checked = validateDescriptorText(bytes.toString("utf8"), { expected: { kind: entry.kind, name: entry.name }, direct: false });
@@ -42258,7 +42361,7 @@ function checkPackage(tree, entry, options, problems) {
   }
   try {
     if (descriptor.kind === "plugin")
-      checkPlugin(tree, entry, descriptor, options, report);
+      checkPlugin(tree, entry, descriptor, options, report, excluded);
     else if (descriptor.kind === "mcp")
       checkMcp(tree, entry, descriptor, report);
     else
@@ -42283,15 +42386,20 @@ function checkMarketplaceRepository(tree, options) {
     return [{ subject: MARKETPLACE_INDEX_FILE, message: index.error }];
   for (const diagnostic of index.value.diagnostics)
     problems.push(diagnostic);
-  for (const entry of index.value.index.packages)
-    checkPackage(tree, entry, options, problems);
-  const plugins = new Set(index.value.index.packages.filter((entry) => entry.kind === "plugin").map((entry) => entry.name));
+  const listedEntries = new Map(index.value.index.packages.map((entry) => [`${entry.kind}/${entry.name}`, entry]));
+  for (const item of index.value.excluded) {
+    if (!listedEntries.has(item.packageId))
+      listedEntries.set(item.packageId, item.package);
+  }
+  for (const entry of listedEntries.values())
+    checkPackage(tree, entry, options, problems, index.value.excluded);
+  const plugins = new Set([...listedEntries.values()].filter((entry) => entry.kind === "plugin").map((entry) => entry.name));
   for (const key of options.releasedManifests?.keys() ?? []) {
     if (!plugins.has(key.slice(0, key.lastIndexOf("@")))) {
       problems.push({ subject: key, message: "a released plugin.json was supplied for a plugin the index does not list" });
     }
   }
-  const listed = new Set(index.value.index.packages.map((entry) => entry.path));
+  const listed = new Set([...listedEntries.values()].map((entry) => entry.path));
   for (const dir of unlisted(tree, listed)) {
     problems.push({ subject: repoPath(dir, MARKETPLACE_DESCRIPTOR_FILE), message: "no index entry points at this package" });
   }

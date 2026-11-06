@@ -1,48 +1,7 @@
-/*
- * Ave Meeting Plugin — Sidebar UI Controller
- *
- * Design constraints (CLAUDE.md §4, managed deployment policy):
- *   - Zero external runtime dependencies (no CDN fonts, no remote icons).
- *   - No `innerHTML` with interpolated values. Static templates parsed via
- *     DOMParser; all dynamic text is set through `textContent`.
- *
- * Layout — single sidebar slot, internal view router:
- *   Top-level views: "pre-meeting" | "instant" | "sessions" | "session-detail"
- *   Top-level nav (2 tabs): [📅 예정 회의] [≡ 회의록]
- *   instant is a nested sub-view reachable from 예정 회의's empty-state CTA;
- *   the 예정 회의 pill stays lit while inside it for navigation continuity.
- *   session-detail sub-tabs: "summary" | "intermediate" | "transcript"
- *   The detail view consumes meeting_session_detail in a single call so the
- *   three sub-tabs render from one snapshot of the SessionStore record.
- *
- * Visual: shadcn-aligned via host --ave-* tokens (single SOT) — the surface
- *   palette, radius scale, focus ring, and motion timing all derive from the
- *   host plugin-ui-tokens contract so the plugin reads as part of Ave's
- *   visual system rather than a standalone widget.
- *
- * Streaming STT (batch-only):
- *   - Client windows raw mic PCM into 3s frames with 0.5s overlap and a VAD
- *     gate, pushes each window to the host, and polls `meeting_transcript`.
- *   - The UI accumulates text into a sentence-boundary aware buffer
- *     (SOFT=100 / HARD=200 chars) and flushes along Korean sentence breaks.
- *
- * Theme:
- *   - The vendored ./prime-theme.js (copied from plugin-sdk v6.1.0 —
- *     SDK v7.0.0 removed its UI surface) owns host.theme.changed subscribe +
- *     getTheme() pull + validated token paint to the .ave-meeting-ui
- *     scope div. Floating recorder windows receive the same host theme
- *     through the plugin host service loop; the sidebar no longer exposes
- *     or calls internal theme relay tools. The previous applyHostTheme /
- *     applyOsThemeFallback / localStorage persistence dance is gone —
- *     primeTheme's getTheme() pull races the cold-boot broadcast and the
- *     first valid payload wins idempotently.
- *   - Build: bundled by tsup (browser target) — see tsup.config.ts ui
- *     entry. SDK fallback module side-effect-injects :root --ave-*
- *     defaults so cold-start before the first IPC push still has a
- *     sensible palette.
- */
 
-import { primeTheme } from "./prime-theme.js";
+
+import { connectView, applyHostContext, watchChanges } from "./mcp-app.mjs";
+import { shouldRefreshView, createErrorConsumer, createPendingChanges, endedSessionToOpen, endedSessionToNotify, deferCompletionNavigation } from "./viewUpdates.ts";
 import {
   CUSTOM_PROMPT_MAX_BYTES,
   buildFinalSystem,
@@ -81,57 +40,40 @@ const ICONS = {
 // glassmorphism surface — the previous design felt like a different app.
 const STYLES = `
 .ave-meeting-ui {
-  /* Tokens flow from Ave's host.theme.changed broadcast (applied to
-     scope.style as --ave-* CSS variables). Fallback values are the static
-     light palette used when the host hasn't broadcast yet (cold start) or
-     when running outside Ave (e.g. dev iframe). The accent-bg /
-     danger-bg / accent-bg-hover tints use color-mix so they track the
-     primary/danger hue automatically as the chat-theme overlay changes
-     (purple → orange → blue → lg-red). color-mix is supported in
-     Chromium 111+ which Ave's Electron 41 ships. */
-  /* Plugin-internal computed vars — only kept where no host token equivalent exists.
-     All other styling uses --ave-* tokens directly (SOT: plugin-ui-tokens.ts).
-     Tinted-surface tokens (accent-bg, danger-bg, success-bg, warning-bg, surface-hover)
-     are now provided by the host as --ave-*-bg-subtle/strong.
-     Remaining --pm-* entries: darker danger variant, toggle-specific shadow/hover
-     (offset+blur box-shadow has no host elevation-token equivalent yet). */
-  --pm-danger-active:      color-mix(in srgb, var(--ave-danger) 80%, black);
-  /* Speaker-avatar chips. Five visually-distinct slots cycled by speaker
-     index (avatarClassFor → a0…a4). Each slot is a soft tint of one host
-     accent hue so the chips track the active theme bundle (light/dark/
-     high-contrast) instead of staying frozen as light-mode pastels. The
-     bg is the accent mixed into the surface, fg is the accent itself for
-     contrast, and the border is a stronger tint of the same hue. */
-  --pm-avatar-0-bg:     color-mix(in srgb, var(--ave-primary)   16%, var(--ave-surface));
-  --pm-avatar-0-fg:     var(--ave-primary);
-  --pm-avatar-0-border: color-mix(in srgb, var(--ave-primary)   38%, var(--ave-surface));
-  --pm-avatar-1-bg:     color-mix(in srgb, var(--ave-success)   16%, var(--ave-surface));
-  --pm-avatar-1-fg:     var(--ave-success);
-  --pm-avatar-1-border: color-mix(in srgb, var(--ave-success)   38%, var(--ave-surface));
-  --pm-avatar-2-bg:     color-mix(in srgb, var(--ave-warning)   16%, var(--ave-surface));
-  --pm-avatar-2-fg:     var(--ave-warning);
-  --pm-avatar-2-border: color-mix(in srgb, var(--ave-warning)   38%, var(--ave-surface));
-  --pm-avatar-3-bg:     color-mix(in srgb, var(--ave-danger)    16%, var(--ave-surface));
-  --pm-avatar-3-fg:     var(--ave-danger);
-  --pm-avatar-3-border: color-mix(in srgb, var(--ave-danger)    38%, var(--ave-surface));
-  --pm-avatar-4-bg:     color-mix(in srgb, var(--ave-ring)      16%, var(--ave-surface));
-  --pm-avatar-4-fg:     var(--ave-ring);
-  --pm-avatar-4-border: color-mix(in srgb, var(--ave-ring)      38%, var(--ave-surface));
-  --pm-toggle-hover-bg:    color-mix(in srgb, var(--ave-primary) 14%, var(--ave-surface));
+
+
+  --pm-danger-active:      color-mix(in srgb, var(--color-background-danger) 80%, black);
+
+  --pm-avatar-0-bg:     color-mix(in srgb, var(--color-background-info)   16%, var(--color-background-secondary));
+  --pm-avatar-0-fg:     var(--color-background-info);
+  --pm-avatar-0-border: color-mix(in srgb, var(--color-background-info)   38%, var(--color-background-secondary));
+  --pm-avatar-1-bg:     color-mix(in srgb, var(--color-background-success)   16%, var(--color-background-secondary));
+  --pm-avatar-1-fg:     var(--color-background-success);
+  --pm-avatar-1-border: color-mix(in srgb, var(--color-background-success)   38%, var(--color-background-secondary));
+  --pm-avatar-2-bg:     color-mix(in srgb, var(--color-background-warning)   16%, var(--color-background-secondary));
+  --pm-avatar-2-fg:     var(--color-background-warning);
+  --pm-avatar-2-border: color-mix(in srgb, var(--color-background-warning)   38%, var(--color-background-secondary));
+  --pm-avatar-3-bg:     color-mix(in srgb, var(--color-background-danger)    16%, var(--color-background-secondary));
+  --pm-avatar-3-fg:     var(--color-background-danger);
+  --pm-avatar-3-border: color-mix(in srgb, var(--color-background-danger)    38%, var(--color-background-secondary));
+  --pm-avatar-4-bg:     color-mix(in srgb, var(--color-ring-info)      16%, var(--color-background-secondary));
+  --pm-avatar-4-fg:     var(--color-ring-info);
+  --pm-avatar-4-border: color-mix(in srgb, var(--color-ring-info)      38%, var(--color-background-secondary));
+  --pm-toggle-hover-bg:    color-mix(in srgb, var(--color-background-info) 14%, var(--color-background-secondary));
   --pm-toggle-hover-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--ave-ring) 34%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--color-ring-info) 34%, transparent),
     0 1px 3px rgba(0, 0, 0, .08);
   --pm-toggle-selected-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--ave-primary-fg) 18%, transparent),
-    0 2px 8px color-mix(in srgb, var(--ave-primary) 28%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--color-text-inverse) 18%, transparent),
+    0 2px 8px color-mix(in srgb, var(--color-background-info) 28%, transparent);
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
 
   position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--ave-bg);
-  color: var(--ave-fg);
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
   font-family: var(--font);
   font-size: 13px;
   line-height: 1.5;
@@ -143,20 +85,7 @@ const STYLES = `
 .ave-meeting-ui *::before,
 .ave-meeting-ui *::after { box-sizing: border-box; }
 
-/* Inner column: fluid, centered, capped at a readable measure. The root stays
-   full-width (its background fills the panel); this column is centered via
-   align-self.
 
-   The cap is max-width, never a fixed width. A fixed width made every layout
-   below it dead to the panel size: the tab bar measured 580px whether the
-   panel was 928px or 1960px, so widening the window changed nothing. The cap
-   now only stops the measure from growing past readability; everything from a
-   narrow sidebar up to the cap fills the space it is given.
-
-   container-type makes the @container queries below resolve against THIS
-   column rather than the webview viewport. Those are equal today, but the
-   panel is the axis that actually governs the layout — a host-side split pane
-   would desync the viewport from it. */
 .ave-meeting-ui .mc-inner {
   display: flex;
   flex-direction: column;
@@ -169,19 +98,14 @@ const STYLES = `
   container-type: inline-size;
 }
 
-/* Tabs are sized by their labels and wrap when the row runs out — they do not
-   divide the row. An earlier version gave every tab flex-grow:1, which reads
-   as harmless in a narrow panel but is the whole reason the host used to clamp
-   this panel: at full pane width two tabs each stretched to ~430px, a tab bar
-   made of two enormous buttons. Shrink and min-width are what the wrapping
-   behaviour actually needs; grow was never part of it. */
+
 .ave-meeting-ui .top-nav {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--ave-border);
-  background: var(--ave-bg);
+  border-bottom: 1px solid var(--color-border-primary);
+  background: var(--color-background-primary);
   flex-shrink: 0;
 }
 .ave-meeting-ui .nav-btn {
@@ -192,24 +116,24 @@ const STYLES = `
   justify-content: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: var(--ave-radius-sm, 6px);
-  border: 1px solid var(--ave-border);
-  background: var(--ave-surface);
-  color: var(--ave-fg-muted);
-  font-size: var(--ave-text-sm, 12px);
+  border-radius: var(--border-radius-sm, 6px);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
   transition: background .15s, color .15s, border-color .15s;
 }
 .ave-meeting-ui .nav-btn:hover {
-  background: var(--ave-secondary);
-  color: var(--ave-fg-muted);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .nav-btn.active {
-  background: var(--ave-primary-bg-subtle);
-  border-color: var(--ave-ring);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  border-color: var(--color-ring-info);
+  color: var(--color-background-info);
 }
 .ave-meeting-ui .nav-btn svg { width: 14px; height: 14px; }
 
@@ -233,14 +157,14 @@ const STYLES = `
   display: flex;
   gap: 8px;
   align-items: center;
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius, 8px);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md, 8px);
   padding: 8px 10px;
 }
 .ave-meeting-ui .session-label {
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -251,20 +175,20 @@ const STYLES = `
   min-width: 0;
   background: transparent;
   border: none;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   outline: none;
   padding: 2px 4px;
-  border-radius: var(--ave-radius-xs, 4px);
+  border-radius: var(--border-radius-xs, 4px);
 }
-.ave-meeting-ui .session-input:focus { background: var(--ave-secondary); }
+.ave-meeting-ui .session-input:focus { background: var(--color-background-tertiary); }
 .ave-meeting-ui .session-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .ave-meeting-ui .meter {
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius, 8px);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md, 8px);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -281,21 +205,21 @@ const STYLES = `
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 19px;
   font-weight: 600;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
-.ave-meeting-ui .meter[data-active="true"] .timer { color: var(--ave-primary); }
+.ave-meeting-ui .meter[data-active="true"] .timer { color: var(--color-background-info); }
 .ave-meeting-ui .stats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ave-meeting-ui .stat {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .stat b {
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -305,18 +229,18 @@ const STYLES = `
   align-items: center;
   padding: 1px 7px;
   border-radius: 999px;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-border);
-  color: var(--ave-fg-muted);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .mode-badge[data-mode="batch"] {
-  color: var(--ave-warning);
-  background: var(--ave-warning-bg-subtle);
-  border-color: color-mix(in srgb, var(--ave-warning) 25%, transparent);
+  color: var(--color-background-warning);
+  background: var(--color-background-warning);
+  border-color: color-mix(in srgb, var(--color-background-warning) 25%, transparent);
 }
 
 .ave-meeting-ui .status-pill {
@@ -325,42 +249,41 @@ const STYLES = `
   gap: 5px;
   padding: 3px 8px;
   border-radius: 999px;
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-border);
-  font-size: var(--ave-text-xs, 10px);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 600;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 .ave-meeting-ui .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--ave-fg-muted);
+  background: var(--color-text-secondary);
 }
-.ave-meeting-ui .status-pill[data-state="recording"] { color: var(--ave-danger); background: var(--ave-danger-bg-subtle); border-color: color-mix(in srgb, var(--ave-danger) 25%, transparent); }
-.ave-meeting-ui .status-pill[data-state="recording"] .status-dot { background: var(--ave-danger); }
-.ave-meeting-ui .status-pill[data-state="analyzing"] { color: var(--ave-primary); background: var(--ave-primary-bg-subtle); border-color: color-mix(in srgb, var(--ave-primary) 25%, transparent); }
-.ave-meeting-ui .status-pill[data-state="analyzing"] .status-dot { background: var(--ave-primary); }
-.ave-meeting-ui .status-pill[data-state="done"] { color: var(--ave-success); background: var(--ave-success-bg-subtle); border-color: color-mix(in srgb, var(--ave-success) 25%, transparent); }
-.ave-meeting-ui .status-pill[data-state="done"] .status-dot { background: var(--ave-success); }
-.ave-meeting-ui .status-pill[data-state="error"] { color: var(--ave-danger); background: var(--ave-danger-bg-subtle); border-color: color-mix(in srgb, var(--ave-danger) 25%, transparent); }
-.ave-meeting-ui .status-pill[data-state="error"] .status-dot { background: var(--ave-danger); }
+.ave-meeting-ui .status-pill[data-state="recording"] { color: var(--color-background-danger); background: var(--color-background-danger); border-color: color-mix(in srgb, var(--color-background-danger) 25%, transparent); }
+.ave-meeting-ui .status-pill[data-state="recording"] .status-dot { background: var(--color-background-danger); }
+.ave-meeting-ui .status-pill[data-state="analyzing"] { color: var(--color-background-info); background: var(--color-background-info); border-color: color-mix(in srgb, var(--color-background-info) 25%, transparent); }
+.ave-meeting-ui .status-pill[data-state="analyzing"] .status-dot { background: var(--color-background-info); }
+.ave-meeting-ui .status-pill[data-state="done"] { color: var(--color-background-success); background: var(--color-background-success); border-color: color-mix(in srgb, var(--color-background-success) 25%, transparent); }
+.ave-meeting-ui .status-pill[data-state="done"] .status-dot { background: var(--color-background-success); }
+.ave-meeting-ui .status-pill[data-state="error"] { color: var(--color-background-danger); background: var(--color-background-danger); border-color: color-mix(in srgb, var(--color-background-danger) 25%, transparent); }
+.ave-meeting-ui .status-pill[data-state="error"] .status-dot { background: var(--color-background-danger); }
 
 .ave-meeting-ui .waveform {
   height: 48px;
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius-sm, 6px);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-sm, 6px);
   overflow: hidden;
 }
 .ave-meeting-ui .waveform canvas {
   display: block;
   width: 100%;
   height: 100%;
-  /* Canvas bars read this color via getComputedStyle at draw time so the
-     waveform tracks the active theme bundle's primary hue. */
-  color: var(--ave-primary);
+
+  color: var(--color-background-info);
 }
 
 .ave-meeting-ui .controls { display: flex; gap: 6px; }
@@ -371,32 +294,32 @@ const STYLES = `
   justify-content: center;
   gap: 6px;
   padding: 8px 12px;
-  border-radius: var(--ave-radius-sm, 6px);
-  border: 1px solid var(--ave-border);
-  background: var(--ave-secondary);
-  color: var(--ave-fg-muted);
+  border-radius: var(--border-radius-sm, 6px);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-secondary);
   font-family: inherit;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 600;
   cursor: pointer;
   transition: background .15s, border-color .15s, color .15s, opacity .15s;
 }
 .ave-meeting-ui .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .ave-meeting-ui .btn:not(:disabled):hover {
-  background: var(--ave-surface);
-  border-color: var(--ave-fg-muted);
+  background: var(--color-background-secondary);
+  border-color: var(--color-text-secondary);
 }
 .ave-meeting-ui .btn svg { width: 14px; height: 14px; }
 .ave-meeting-ui .btn-primary {
-  background: var(--ave-primary);
-  border-color: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  border-color: var(--color-background-info);
+  color: var(--color-text-inverse);
 }
-.ave-meeting-ui .btn-primary:not(:disabled):hover { background: var(--ave-ring); border-color: var(--ave-ring); }
+.ave-meeting-ui .btn-primary:not(:disabled):hover { background: var(--color-ring-info); border-color: var(--color-ring-info); }
 .ave-meeting-ui .btn-danger {
-  background: var(--ave-danger);
-  border-color: var(--ave-danger);
-  color: var(--ave-danger-fg);
+  background: var(--color-background-danger);
+  border-color: var(--color-background-danger);
+  color: var(--color-text-danger);
 }
 .ave-meeting-ui .btn-danger:not(:disabled):hover { background: var(--pm-danger-active); border-color: var(--pm-danger-active); }
 
@@ -408,19 +331,19 @@ const STYLES = `
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius, 8px);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md, 8px);
   scrollbar-width: thin;
-  scrollbar-color: var(--ave-border) transparent;
+  scrollbar-color: var(--color-border-primary) transparent;
 }
 .ave-meeting-ui .transcript::-webkit-scrollbar { width: 6px; }
 .ave-meeting-ui .transcript::-webkit-scrollbar-thumb {
-  background: var(--ave-border);
+  background: var(--color-border-primary);
   border-radius: 3px;
 }
 
-/* .empty base defined in the Polish layer below (bigger, friendlier version). */
+
 
 .ave-meeting-ui .segment {
   display: flex;
@@ -434,7 +357,7 @@ const STYLES = `
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
 }
 .ave-meeting-ui .avatar.a0 { background: var(--pm-avatar-0-bg); color: var(--pm-avatar-0-fg); border: 1px solid var(--pm-avatar-0-border); }
@@ -448,52 +371,52 @@ const STYLES = `
   align-items: baseline;
   gap: 6px;
   margin-bottom: 3px;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
 }
-.ave-meeting-ui .segment-speaker { color: var(--ave-fg); font-weight: 700; }
+.ave-meeting-ui .segment-speaker { color: var(--color-text-primary); font-weight: 700; }
 .ave-meeting-ui .segment-time {
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
 }
 .ave-meeting-ui .bubble {
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius-xs, 4px);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-xs, 4px);
   padding: 6px 9px;
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-primary);
   word-break: break-word;
   line-height: 1.5;
 }
 .ave-meeting-ui .segment[data-streaming="1"] .bubble {
-  border-color: var(--ave-ring);
-  background: var(--ave-primary-bg-subtle);
+  border-color: var(--color-ring-info);
+  background: var(--color-background-info);
 }
 
 .ave-meeting-ui .summary {
   margin-top: 4px;
   padding: 12px;
-  border-radius: var(--ave-radius, 8px);
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-ring);
+  border-radius: var(--border-radius-md, 8px);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-ring-info);
 }
 .ave-meeting-ui .summary-title {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 6px;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--ave-border);
+  border-bottom: 1px solid var(--color-border-primary);
 }
 .ave-meeting-ui .summary-title svg { width: 14px; height: 14px; }
 .ave-meeting-ui .summary-body {
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   line-height: 1.6;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   white-space: pre-wrap;
 }
 .ave-meeting-ui .summary-section { margin-top: 10px; }
@@ -501,11 +424,11 @@ const STYLES = `
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   margin-bottom: 5px;
 }
 .ave-meeting-ui .summary-section-label svg { width: 12px; height: 12px; }
@@ -518,21 +441,21 @@ const STYLES = `
   display: flex;
   gap: 6px;
   align-items: flex-start;
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-primary);
   padding: 5px 8px;
-  background: var(--ave-surface);
-  border-radius: var(--ave-radius-xs, 4px);
-  border-left: 2px solid var(--ave-primary);
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-xs, 4px);
+  border-left: 2px solid var(--color-background-info);
 }
-.ave-meeting-ui .summary-item.action { border-left-color: var(--ave-warning); }
+.ave-meeting-ui .summary-item.action { border-left-color: var(--color-background-warning); }
 .ave-meeting-ui .summary-item-marker {
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   flex-shrink: 0;
   font-weight: 700;
 }
 
-/* Inline-edit + regenerate UI for the 회의록 sub-tab */
+
 .ave-meeting-ui .summary-toolbar {
   display: flex;
   gap: 6px;
@@ -540,32 +463,30 @@ const STYLES = `
   justify-content: flex-end;
 }
 .ave-meeting-ui .summary-action-btn {
-  background: var(--ave-secondary);
-  color: var(--ave-fg);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-primary);
   border-radius: 6px;
   padding: 5px 10px;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: background .12s, border-color .12s;
 }
 .ave-meeting-ui .summary-action-btn:hover {
-  background: var(--ave-surface);
-  border-color: var(--ave-border);
+  background: var(--color-background-secondary);
+  border-color: var(--color-border-primary);
 }
 .ave-meeting-ui .summary-action-regen {
-  background: var(--ave-primary-bg-subtle);
-  border-color: var(--ave-ring);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  border-color: var(--color-ring-info);
+  color: var(--color-background-info);
 }
 .ave-meeting-ui .summary-action-regen:hover {
-  background: var(--ave-primary-bg-strong);
+  background: var(--color-background-info);
 }
-/* ⋯ overflow menu in the summary toolbar. Anchor is the toolbar itself
-   (position: relative on .summary-toolbar). Popover floats below the
-   ⋯ button, dismissed by outside-click or by selecting an item. */
+
 .ave-meeting-ui .summary-toolbar { position: relative; }
 .ave-meeting-ui .summary-action-more {
   padding: 5px 8px;
@@ -579,8 +500,8 @@ const STYLES = `
   right: 0;
   z-index: 30;
   min-width: 200px;
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
   border-radius: 8px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
   padding: 4px;
@@ -595,15 +516,15 @@ const STYLES = `
   padding: 7px 10px;
   border-radius: 6px;
   font-family: inherit;
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 .ave-meeting-ui .summary-more-item:hover {
-  background: var(--ave-secondary);
+  background: var(--color-background-tertiary);
 }
 .ave-meeting-ui .summary-more-item:disabled {
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   cursor: not-allowed;
   background: transparent;
 }
@@ -623,7 +544,7 @@ const STYLES = `
 }
 .ave-meeting-ui .prompt-overlay-card {
   flex: 1 1 auto;
-  background: var(--ave-bg);
+  background: var(--color-background-primary);
   display: flex;
   flex-direction: column;
   padding: 14px;
@@ -632,7 +553,7 @@ const STYLES = `
 .ave-meeting-ui .category-dialog-card {
   flex: 0 1 360px;
   max-width: min(360px, 100%);
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, .18);
 }
@@ -645,25 +566,25 @@ const STYLES = `
 .ave-meeting-ui .prompt-overlay-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   flex: 1 1 auto;
 }
 .ave-meeting-ui .prompt-overlay-close {
   background: transparent;
   border: 0;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1;
   padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
 }
-.ave-meeting-ui .prompt-overlay-close:hover { background: var(--ave-secondary); }
+.ave-meeting-ui .prompt-overlay-close:hover { background: var(--color-background-tertiary); }
 .ave-meeting-ui .prompt-overlay-note {
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
-  background: var(--ave-warning-bg-subtle);
-  border-left: 3px solid var(--ave-warning);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
+  background: var(--color-background-warning);
+  border-left: 3px solid var(--color-background-warning);
   padding: 6px 8px;
   border-radius: 4px;
   margin-bottom: 10px;
@@ -677,9 +598,9 @@ const STYLES = `
   gap: 10px;
 }
 .ave-meeting-ui .prompt-overlay-field-label {
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -687,9 +608,9 @@ const STYLES = `
 .ave-meeting-ui .prompt-overlay-field-reset {
   background: transparent;
   border: 0;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-family: inherit;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   padding: 0;
   cursor: pointer;
   text-decoration: underline;
@@ -698,41 +619,41 @@ const STYLES = `
   width: 100%;
   min-height: 140px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-surface);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
   outline: none;
   resize: vertical;
 }
-.ave-meeting-ui .prompt-overlay-textarea:focus { border-color: var(--ave-primary); }
+.ave-meeting-ui .prompt-overlay-textarea:focus { border-color: var(--color-background-info); }
 .ave-meeting-ui .category-dialog-input {
   width: 100%;
   font-family: inherit;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   padding: 9px 10px;
   border-radius: 8px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-surface);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
   outline: none;
 }
 .ave-meeting-ui .category-dialog-input:focus {
-  border-color: var(--ave-primary);
+  border-color: var(--color-background-info);
 }
 .ave-meeting-ui .category-dialog-error {
   min-height: 16px;
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-danger);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-background-danger);
 }
 .ave-meeting-ui .prompt-overlay-footer {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
   padding-top: 10px;
-  border-top: 1px solid var(--ave-border);
+  border-top: 1px solid var(--color-border-primary);
   margin-top: 10px;
 }
 .ave-meeting-ui .prompt-overlay-save,
@@ -740,12 +661,12 @@ const STYLES = `
   border-radius: 6px;
   padding: 6px 14px;
   font-family: inherit;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   cursor: pointer;
 }
 .ave-meeting-ui .prompt-overlay-save {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
   border: 0;
   font-weight: 600;
 }
@@ -755,39 +676,39 @@ const STYLES = `
   cursor: not-allowed;
 }
 .ave-meeting-ui .prompt-overlay-cancel {
-  background: var(--ave-surface);
-  color: var(--ave-fg);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-primary);
 }
 .ave-meeting-ui .prompt-overlay-busy {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--ave-bg) 92%, transparent);
+  background: color-mix(in srgb, var(--color-background-primary) 92%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--ave-fg-muted);
-  font-size: var(--ave-text-sm, 12px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-text-sm-size, 12px);
 }
 .ave-meeting-ui .summary-edit {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  background: var(--ave-primary-bg-subtle);
-  border: 1px solid var(--ave-ring);
+  background: var(--color-background-info);
+  border: 1px solid var(--color-ring-info);
   border-radius: 8px;
 }
 .ave-meeting-ui .summary-edit-banner {
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 600;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   padding: 4px 0;
 }
 .ave-meeting-ui .summary-edit-label {
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   letter-spacing: 0.02em;
   margin-top: 4px;
 }
@@ -795,61 +716,61 @@ const STYLES = `
 .ave-meeting-ui .summary-edit-textarea {
   width: 100%;
   font-family: inherit;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   padding: 6px 8px;
   border-radius: 6px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-secondary);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
   outline: none;
   resize: vertical;
 }
 .ave-meeting-ui .summary-edit-input:focus,
-.ave-meeting-ui .summary-edit-textarea:focus { border-color: var(--ave-primary); }
+.ave-meeting-ui .summary-edit-textarea:focus { border-color: var(--color-background-info); }
 .ave-meeting-ui .summary-edit-list { display: flex; flex-direction: column; gap: 4px; }
 .ave-meeting-ui .summary-edit-row { display: flex; gap: 6px; align-items: center; }
 .ave-meeting-ui .summary-edit-row-input {
   flex: 1 1 auto;
   font-family: inherit;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-secondary);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
   outline: none;
 }
-.ave-meeting-ui .summary-edit-row-input:focus { border-color: var(--ave-primary); }
+.ave-meeting-ui .summary-edit-row-input:focus { border-color: var(--color-background-info); }
 .ave-meeting-ui .summary-edit-row-remove {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
   border-radius: 4px;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   background: transparent;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-family: inherit;
 }
 .ave-meeting-ui .summary-edit-row-remove:hover {
-  background: var(--ave-danger-bg-subtle);
-  color: var(--ave-danger);
-  border-color: var(--ave-danger);
+  background: var(--color-background-danger);
+  color: var(--color-background-danger);
+  border-color: var(--color-background-danger);
 }
 .ave-meeting-ui .summary-edit-add {
   align-self: flex-start;
   background: transparent;
-  color: var(--ave-fg-muted);
-  border: 1px dashed var(--ave-border);
+  color: var(--color-text-secondary);
+  border: 1px dashed var(--color-border-primary);
   border-radius: 6px;
   padding: 4px 10px;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-family: inherit;
   cursor: pointer;
   margin-top: 2px;
 }
-.ave-meeting-ui .summary-edit-add:hover { color: var(--ave-fg); border-color: var(--ave-fg-muted); }
+.ave-meeting-ui .summary-edit-add:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
 .ave-meeting-ui .summary-edit-buttons {
   display: flex;
   gap: 6px;
@@ -857,29 +778,29 @@ const STYLES = `
   margin-top: 8px;
 }
 .ave-meeting-ui .summary-edit-save {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
   border: none;
   border-radius: 6px;
   padding: 6px 14px;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
 }
-.ave-meeting-ui .summary-edit-save:hover { background: var(--ave-ring); }
+.ave-meeting-ui .summary-edit-save:hover { background: var(--color-ring-info); }
 .ave-meeting-ui .summary-edit-cancel {
   background: transparent;
-  color: var(--ave-fg-muted);
-  border: 1px solid var(--ave-border);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-primary);
   border-radius: 6px;
   padding: 6px 14px;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
 }
-.ave-meeting-ui .summary-edit-cancel:hover { color: var(--ave-fg); border-color: var(--ave-fg-muted); }
+.ave-meeting-ui .summary-edit-cancel:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
 .ave-meeting-ui .summary-regen { display: flex; flex-direction: column; gap: 8px; }
 .ave-meeting-ui .summary-regen-tiers {
   display: grid;
@@ -887,27 +808,27 @@ const STYLES = `
   gap: 6px;
 }
 .ave-meeting-ui .summary-regen-tier {
-  background: var(--ave-secondary);
-  color: var(--ave-fg);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-primary);
   border-radius: 6px;
   padding: 8px 10px;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
 }
 .ave-meeting-ui .summary-regen-tier:hover {
-  background: var(--ave-primary-bg-subtle);
-  border-color: var(--ave-ring);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  border-color: var(--color-ring-info);
+  color: var(--color-background-info);
 }
 .ave-meeting-ui .summary-regen-cancel { align-self: flex-end; }
 .ave-meeting-ui .summary-busy {
   padding: 16px;
   text-align: center;
-  color: var(--ave-fg-muted);
-  font-size: var(--ave-text-sm, 12px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-text-sm-size, 12px);
 }
 
 .ave-meeting-ui .session-list {
@@ -918,17 +839,17 @@ const STYLES = `
   flex-direction: column;
   gap: 6px;
   scrollbar-width: thin;
-  scrollbar-color: var(--ave-border) transparent;
+  scrollbar-color: var(--color-border-primary) transparent;
 }
 .ave-meeting-ui .session-list::-webkit-scrollbar { width: 6px; }
 .ave-meeting-ui .session-list::-webkit-scrollbar-thumb {
-  background: var(--ave-border);
+  background: var(--color-border-primary);
   border-radius: 3px;
 }
 .ave-meeting-ui .session-card {
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius, 8px);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md, 8px);
   color: inherit;
   font: inherit;
   padding: 10px 12px;
@@ -938,8 +859,8 @@ const STYLES = `
   width: 100%;
 }
 .ave-meeting-ui .session-card:hover {
-  background: var(--ave-secondary);
-  border-color: var(--ave-border);
+  background: var(--color-background-tertiary);
+  border-color: var(--color-border-primary);
 }
 .ave-meeting-ui .session-card-head {
   display: flex;
@@ -950,28 +871,28 @@ const STYLES = `
 .ave-meeting-ui .session-card-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   font-weight: 600;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   margin-bottom: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ave-meeting-ui .session-card-meta {
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-primary);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-background-info);
   margin-bottom: 4px;
 }
-.ave-meeting-ui .session-card-meta .dot { color: var(--ave-fg-muted); margin: 0 4px; }
+.ave-meeting-ui .session-card-meta .dot { color: var(--color-text-secondary); margin: 0 4px; }
 .ave-meeting-ui .session-card-stats {
   display: flex;
   gap: 8px;
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .session-card-stats b {
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-weight: 700;
 }
 
@@ -986,38 +907,38 @@ const STYLES = `
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--ave-border);
-  background: var(--ave-bg);
+  border-bottom: 1px solid var(--color-border-primary);
+  background: var(--color-background-primary);
   flex-shrink: 0;
 }
 .ave-meeting-ui .back-btn {
   background: transparent;
-  border: 1px solid var(--ave-border);
-  color: var(--ave-fg-muted);
-  border-radius: var(--ave-radius-sm, 6px);
+  border: 1px solid var(--color-border-primary);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-sm, 6px);
   padding: 4px 9px;
   cursor: pointer;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-family: inherit;
   flex-shrink: 0;
 }
 .ave-meeting-ui .back-btn:hover {
-  background: var(--ave-surface);
-  color: var(--ave-fg);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
 }
 .ave-meeting-ui .detail-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   font-weight: 600;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .ave-meeting-ui .detail-time {
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -1026,31 +947,31 @@ const STYLES = `
   display: flex;
   gap: 4px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--ave-border);
-  background: var(--ave-bg);
+  border-bottom: 1px solid var(--color-border-primary);
+  background: var(--color-background-primary);
   flex-shrink: 0;
 }
 .ave-meeting-ui .sub-tab {
   flex: 1;
   padding: 5px 8px;
-  border-radius: var(--ave-radius-sm, 6px);
+  border-radius: var(--border-radius-sm, 6px);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-family: inherit;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 500;
   cursor: pointer;
   transition: background .12s, color .12s, border-color .12s;
 }
 .ave-meeting-ui .sub-tab:hover {
-  background: var(--ave-surface);
-  color: var(--ave-fg-muted);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .sub-tab.active {
-  background: var(--ave-primary-bg-subtle);
-  border-color: var(--ave-ring);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  border-color: var(--color-ring-info);
+  color: var(--color-background-info);
 }
 
 .ave-meeting-ui .detail-body {
@@ -1061,26 +982,26 @@ const STYLES = `
   flex-direction: column;
   gap: 10px;
   scrollbar-width: thin;
-  scrollbar-color: var(--ave-border) transparent;
+  scrollbar-color: var(--color-border-primary) transparent;
 }
 .ave-meeting-ui .detail-body::-webkit-scrollbar { width: 6px; }
 .ave-meeting-ui .detail-body::-webkit-scrollbar-thumb {
-  background: var(--ave-border);
+  background: var(--color-border-primary);
   border-radius: 3px;
 }
 
 .ave-meeting-ui .intermediate-card {
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius, 8px);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-md, 8px);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 .ave-meeting-ui .intermediate-card-meta {
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -1088,8 +1009,8 @@ const STYLES = `
   justify-content: space-between;
 }
 .ave-meeting-ui .intermediate-card-summary {
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-primary);
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -1099,38 +1020,38 @@ const STYLES = `
   gap: 3px;
 }
 .ave-meeting-ui .intermediate-card-highlight {
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-secondary);
   padding: 4px 8px;
-  background: var(--ave-secondary);
-  border-radius: var(--ave-radius-xs, 4px);
-  border-left: 2px solid var(--ave-primary);
+  background: var(--color-background-tertiary);
+  border-radius: var(--border-radius-xs, 4px);
+  border-left: 2px solid var(--color-background-info);
 }
 
 .ave-meeting-ui .error-banner {
   padding: 8px 10px;
-  background: var(--ave-danger-bg-subtle);
-  border: 1px solid color-mix(in srgb, var(--ave-danger) 25%, transparent);
-  border-radius: var(--ave-radius-sm, 6px);
-  color: var(--ave-danger);
-  font-size: var(--ave-text-sm, 12px);
+  background: var(--color-background-danger);
+  border: 1px solid color-mix(in srgb, var(--color-background-danger) 25%, transparent);
+  border-radius: var(--border-radius-sm, 6px);
+  color: var(--color-background-danger);
+  font-size: var(--font-text-sm-size, 12px);
   margin: 10px;
 }
 .ave-meeting-ui .toast-error {
   position: fixed; right: 16px; z-index: 9999;
-  padding: 8px 14px; border-radius: var(--ave-radius, 8px);
-  background: var(--ave-danger-bg-subtle);
-  color: var(--ave-danger);
-  border: 1px solid var(--ave-danger);
-  font-size: var(--ave-text-sm, 12px); animation: pm-fade-out 3s forwards;
+  padding: 8px 14px; border-radius: var(--border-radius-md, 8px);
+  background: var(--color-background-danger);
+  color: var(--color-background-danger);
+  border: 1px solid var(--color-background-danger);
+  font-size: var(--font-text-sm-size, 12px); animation: pm-fade-out 3s forwards;
 }
 .ave-meeting-ui .toast-success {
   position: fixed; right: 16px; z-index: 9999;
-  padding: 8px 14px; border-radius: var(--ave-radius, 8px);
-  background: var(--ave-success-bg-subtle);
-  color: var(--ave-success);
-  border: 1px solid var(--ave-success);
-  font-size: var(--ave-text-sm, 12px); animation: pm-fade-out 3s forwards;
+  padding: 8px 14px; border-radius: var(--border-radius-md, 8px);
+  background: var(--color-background-success);
+  color: var(--color-background-success);
+  border: 1px solid var(--color-background-success);
+  font-size: var(--font-text-sm-size, 12px); animation: pm-fade-out 3s forwards;
 }
 @keyframes pm-fade-out { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
 
@@ -1140,17 +1061,16 @@ const STYLES = `
   gap: 8px;
 }
 
-/* ─── Pre-meeting prep view ─────────────────────────── */
-/* All colors flow from the shared :root palette so this view stays in
-   lockstep with recorder + sessions when the theme changes. */
+
+
 .ave-meeting-ui .pre-meeting {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  background: var(--ave-bg);
-  color: var(--ave-fg);
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
   padding: 18px 22px 22px;
   gap: 14px;
 }
@@ -1166,7 +1086,7 @@ const STYLES = `
   gap: 8px;
   font-size: 14px;
   font-weight: 700;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
 }
 .ave-meeting-ui .pre-meeting .pm-icon-btn {
   width: 28px;
@@ -1174,31 +1094,28 @@ const STYLES = `
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font: inherit;
 }
-.ave-meeting-ui .pre-meeting .pm-icon-btn:hover { background: var(--ave-secondary); }
+.ave-meeting-ui .pre-meeting .pm-icon-btn:hover { background: var(--color-background-tertiary); }
 .ave-meeting-ui .pre-meeting .pm-icon-btn:focus-visible {
-  /* Designer C: tight 2px solid ring without bg-offset gap — the global
-     focus-ring at line 1716 uses a 2px bg-offset + 4px shadow which clips
-     visually against the bg on small (28×28) icon buttons. Single solid
-     ring keeps the affordance visible for keyboard nav. */
+
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ave-ring) 80%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-ring-info) 80%, transparent);
 }
 .ave-meeting-ui .pre-meeting .pm-topbar-left .pm-icon-btn {
-  color: var(--ave-primary);
-  background: var(--ave-primary-bg-subtle);
-  border: 1px solid color-mix(in srgb, var(--ave-ring) 42%, transparent);
+  color: var(--color-background-info);
+  background: var(--color-background-info);
+  border: 1px solid color-mix(in srgb, var(--color-ring-info) 42%, transparent);
 }
 .ave-meeting-ui .pre-meeting .pm-topbar-left .pm-icon-btn:hover {
-  background: var(--ave-primary);
-  border-color: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  border-color: var(--color-background-info);
+  color: var(--color-text-inverse);
 }
 .ave-meeting-ui .pre-meeting .pm-nav {
   display: inline-flex;
@@ -1206,29 +1123,26 @@ const STYLES = `
   gap: 2px;
   padding: 3px 5px;
   border-radius: 999px;
-  background: var(--ave-primary-bg-subtle);
-  border: 1px solid color-mix(in srgb, var(--ave-ring) 42%, transparent);
+  background: var(--color-background-info);
+  border: 1px solid color-mix(in srgb, var(--color-ring-info) 42%, transparent);
 }
 .ave-meeting-ui .pre-meeting .pm-nav-btn {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  /* Use the chat-theme accent (purple/orange/blue/lg whichever the user
-     selected in Ave) so the arrows always render in the same colour
-     family as the active chat highlight. SVG icons use currentColor for
-     their stroke, so setting the color property is enough. */
-  color: var(--ave-primary);
-  background: color-mix(in srgb, var(--ave-primary-bg-subtle) 65%, transparent);
+
+  color: var(--color-background-info);
+  background: color-mix(in srgb, var(--color-background-info) 65%, transparent);
 }
 .ave-meeting-ui .pre-meeting .pm-nav-btn:hover {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
 }
 .ave-meeting-ui .pre-meeting .pm-nav-btn svg { width: 14px; height: 14px; }
 .ave-meeting-ui .pre-meeting .pm-nav-count {
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 700;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-variant-numeric: tabular-nums;
   min-width: 36px;
   text-align: center;
@@ -1237,22 +1151,22 @@ const STYLES = `
 .ave-meeting-ui .pre-meeting .pm-title {
   font-size: 22px;
   font-weight: 800;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   line-height: 1.3;
   margin-top: 4px;
 }
 .ave-meeting-ui .pre-meeting .pm-subtitle {
-  font-size: var(--ave-text-base, 14px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-md-size, 14px);
+  color: var(--color-text-secondary);
   margin-top: -6px;
 }
 .ave-meeting-ui .pre-meeting .pm-description {
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   line-height: 1.6;
-  color: var(--ave-fg-muted);
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius-sm, 6px);
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-sm, 6px);
   padding: 10px 12px;
   white-space: pre-wrap;
 }
@@ -1270,10 +1184,10 @@ const STYLES = `
   gap: 6px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
-  font-size: var(--ave-text-base, 14px);
-  color: var(--ave-fg-muted);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
+  font-size: var(--font-text-md-size, 14px);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .pre-meeting .pm-chip svg { width: 14px; height: 14px; opacity: .7; }
 .ave-meeting-ui .pre-meeting .pm-avatars {
@@ -1284,26 +1198,26 @@ const STYLES = `
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--ave-fg-muted);
-  color: var(--ave-surface);
+  background: var(--color-text-secondary);
+  color: var(--color-background-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
   margin-left: -6px;
-  border: 2px solid var(--ave-bg);
+  border: 2px solid var(--color-background-primary);
 }
 .ave-meeting-ui .pre-meeting .pm-avatar:first-child { margin-left: 0; }
-.ave-meeting-ui .pre-meeting .pm-avatar.more { background: var(--ave-primary); color: var(--ave-primary-fg); }
+.ave-meeting-ui .pre-meeting .pm-avatar.more { background: var(--color-background-info); color: var(--color-text-inverse); }
 .ave-meeting-ui .pre-meeting .pm-webex {
   background: transparent;
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-secondary);
   line-height: 1.6;
   word-break: break-all;
 }
-.ave-meeting-ui .pre-meeting .pm-webex b { color: var(--ave-fg); font-weight: 700; }
+.ave-meeting-ui .pre-meeting .pm-webex b { color: var(--color-text-primary); font-weight: 700; }
 .ave-meeting-ui .pre-meeting .pm-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
@@ -1317,37 +1231,37 @@ const STYLES = `
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   font-weight: 700;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   margin-bottom: 8px;
 }
 .ave-meeting-ui .pre-meeting .pm-section-title svg { width: 16px; height: 16px; }
 .ave-meeting-ui .pre-meeting .pm-card {
-  background: var(--ave-surface);
+  background: var(--color-background-secondary);
   border-radius: 14px;
   padding: 18px 20px;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   box-shadow: 0 1px 2px rgba(0,0,0,.03);
 }
 .ave-meeting-ui .pre-meeting .pm-card + .pm-section-title {
   margin-top: 16px;
 }
 .ave-meeting-ui .pre-meeting .pm-card-title {
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   font-weight: 700;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   margin-bottom: 10px;
 }
 .ave-meeting-ui .pre-meeting .pm-card-body {
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   line-height: 1.65;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   white-space: pre-wrap;
 }
 .ave-meeting-ui .pre-meeting .pm-card-body .hi {
   font-weight: 700;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
 }
 .ave-meeting-ui .pre-meeting .pm-agenda-list {
   display: flex;
@@ -1359,17 +1273,17 @@ const STYLES = `
   grid-template-columns: 22px 1fr;
   gap: 10px;
   align-items: start;
-  font-size: var(--ave-text-base, 14px);
-  color: var(--ave-fg);
+  font-size: var(--font-text-md-size, 14px);
+  color: var(--color-text-primary);
   line-height: 1.45;
 }
 .ave-meeting-ui .pre-meeting .pm-agenda-num {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
-  font-size: var(--ave-text-xs, 10px);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -1392,32 +1306,30 @@ const STYLES = `
   padding: 12px 14px;
   border-radius: 10px;
   border: none;
-  font-size: var(--ave-text-base, 14px);
+  font-size: var(--font-text-md-size, 14px);
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
 }
-/* pm-btn-primary / pm-btn-dark / pm-btn-webex color rules live in the Polish
-   layer below (with correct :not(:disabled) hover guards). */
+
 .ave-meeting-ui .pre-meeting .pm-btn svg { width: 16px; height: 16px; }
 .ave-meeting-ui .pre-meeting .pm-btn:disabled { opacity: .5; cursor: not-allowed; }
 .ave-meeting-ui .pre-meeting input[type="file"] { display: none; }
 .ave-meeting-ui .pre-meeting .pm-status {
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-secondary);
   margin-top: 8px;
   text-align: center;
 }
-.ave-meeting-ui .pre-meeting .pm-status.error { color: var(--ave-danger); }
+.ave-meeting-ui .pre-meeting .pm-status.error { color: var(--color-background-danger); }
 
-/* (The floating recorder's CSS is not here — the recorder is its own card,
-   styled in src/ui/recorder-card.js, mounted into the host's floating dock.) */
 
-/* ─────────────────────────────────────────────────────── */
-/*  Polish layer — appended last so it wins specificity       */
-/*  ties without restructuring earlier rules. Intent: gentle  */
-/*  elevation, smoother hovers, more breathing room.          */
-/* ─────────────────────────────────────────────────────── */
+
+
+
+
+
+
 
 .ave-meeting-ui {
   -webkit-font-smoothing: antialiased;
@@ -1426,46 +1338,46 @@ const STYLES = `
   letter-spacing: 0;
 }
 
-/* Top nav — pill-shaped tabs (no border outline, accent fill on active). */
+
 .ave-meeting-ui .top-nav {
   gap: 6px;
   padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--ave-border);
-  background: var(--ave-bg);
+  border-bottom: 1px solid var(--color-border-primary);
+  background: var(--color-background-primary);
 }
 .ave-meeting-ui .nav-btn {
   border: none;
   background: transparent;
-  color: var(--ave-fg-muted);
-  font-size: var(--ave-text-base, 14px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-text-md-size, 14px);
   font-weight: 600;
   padding: 8px 14px;
   border-radius: 999px;
   transition: background .12s ease, color .12s ease, transform .12s ease;
 }
 .ave-meeting-ui .nav-btn:hover {
-  background: var(--ave-secondary);
-  color: var(--ave-fg);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
 }
 .ave-meeting-ui .nav-btn.active {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
   border-color: transparent;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--ave-primary) 25%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--color-background-info) 25%, transparent);
 }
 .ave-meeting-ui .nav-btn.active:hover {
-  background: var(--ave-ring);
-  color: var(--ave-primary-fg);
+  background: var(--color-ring-info);
+  color: var(--color-text-inverse);
 }
 .ave-meeting-ui .nav-btn svg { width: 15px; height: 15px; }
 
-/* Session list cards — clearer elevation + hover lift. */
+
 .ave-meeting-ui .session-list {
   gap: 12px;
   padding: 18px;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--ave-surface) 45%, transparent), transparent 180px),
-    var(--ave-bg);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background-secondary) 45%, transparent), transparent 180px),
+    var(--color-background-primary);
 }
 .ave-meeting-ui .session-list-shell {
   flex: 1 1 auto;
@@ -1473,8 +1385,8 @@ const STYLES = `
   display: flex;
   flex-direction: column;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--ave-surface) 45%, transparent), transparent 180px),
-    var(--ave-bg);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background-secondary) 45%, transparent), transparent 180px),
+    var(--color-background-primary);
 }
 .ave-meeting-ui .session-list-toolbar {
   flex: 0 0 auto;
@@ -1487,10 +1399,10 @@ const STYLES = `
 .ave-meeting-ui .session-list-filter {
   min-width: 150px;
   max-width: 220px;
-  border: 1px solid color-mix(in srgb, var(--ave-ring) 48%, var(--ave-border));
+  border: 1px solid color-mix(in srgb, var(--color-ring-info) 48%, var(--color-border-primary));
   border-radius: 999px;
-  background: var(--ave-surface);
-  color: var(--ave-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-background-info);
   font-family: inherit;
   font-size: 12px;
   font-weight: 800;
@@ -1506,21 +1418,21 @@ const STYLES = `
   width: 100%;
   padding: 18px 20px;
   border-radius: 16px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-surface);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
   font-family: inherit;
   transition: background .12s ease, border-color .12s ease;
   text-align: left;
   cursor: pointer;
 }
 .ave-meeting-ui .session-card:hover {
-  background: var(--ave-secondary);
-  border-color: var(--ave-fg-muted);
+  background: var(--color-background-tertiary);
+  border-color: var(--color-text-secondary);
 }
 .ave-meeting-ui .session-card:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ave-ring) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-ring-info) 70%, transparent);
 }
 .ave-meeting-ui .session-card-title {
   font-size: 15px;
@@ -1532,7 +1444,7 @@ const STYLES = `
 .ave-meeting-ui .session-card-meta {
   font-size: 12px;
   line-height: 1.45;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .session-card-category-row {
   display: inline-flex;
@@ -1547,19 +1459,19 @@ const STYLES = `
   gap: 4px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: var(--ave-primary-bg-subtle);
-  border: 1px solid color-mix(in srgb, var(--ave-ring) 42%, transparent);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  border: 1px solid color-mix(in srgb, var(--color-ring-info) 42%, transparent);
+  color: var(--color-background-info);
   font-size: 12px;
   font-weight: 800;
 }
 .ave-meeting-ui .session-card-category-select {
   min-width: 124px;
   max-width: 180px;
-  border: 1px solid color-mix(in srgb, var(--ave-ring) 48%, var(--ave-border));
+  border: 1px solid color-mix(in srgb, var(--color-ring-info) 48%, var(--color-border-primary));
   border-radius: 999px;
-  background: var(--ave-surface);
-  color: var(--ave-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-background-info);
   font-family: inherit;
   font-size: 12px;
   font-weight: 800;
@@ -1570,13 +1482,13 @@ const STYLES = `
   margin-top: 4px;
 }
 .ave-meeting-ui .session-card-category-select:hover {
-  background: var(--ave-primary-bg-subtle);
+  background: var(--color-background-info);
 }
 .ave-meeting-ui .session-card-stats {
   gap: 8px;
   margin-top: 14px;
   font-size: 12px;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
 }
 .ave-meeting-ui .session-card-stats span {
   display: inline-flex;
@@ -1584,8 +1496,8 @@ const STYLES = `
   gap: 4px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
 }
 .ave-meeting-ui .session-card-transcript-link {
   display: inline-flex;
@@ -1594,9 +1506,9 @@ const STYLES = `
   margin-top: 14px;
   padding: 7px 11px;
   border-radius: 999px;
-  border: 1px solid var(--ave-primary);
+  border: 1px solid var(--color-background-info);
   background: transparent;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-size: 12px;
   font-weight: 700;
   font-family: inherit;
@@ -1604,39 +1516,39 @@ const STYLES = `
   transition: background .12s, color .12s;
 }
 .ave-meeting-ui .session-card-transcript-link:hover {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
 }
 
-/* Empty state — single definition (consolidated from earlier draft). */
+
 .ave-meeting-ui .empty {
   margin: auto;
   text-align: center;
-  color: var(--ave-fg-muted);
-  font-size: var(--ave-text-sm, 12px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-text-sm-size, 12px);
   padding: 48px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
 }
-.ave-meeting-ui .empty svg { width: 36px; height: 36px; opacity: 0.4; color: var(--ave-fg-muted); }
+.ave-meeting-ui .empty svg { width: 36px; height: 36px; opacity: 0.4; color: var(--color-text-secondary); }
 .ave-meeting-ui .empty b {
   display: block;
-  color: var(--ave-fg-muted);
-  font-weight: var(--ave-weight-semibold, 600);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold, 600);
   font-size: 13px;
   margin-bottom: 2px;
 }
 .ave-meeting-ui .empty-subtitle {
   display: block;
   font-size: 12px;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   margin-top: 4px;
   line-height: 1.4;
 }
 
-/* Pre-meeting — tighten title block, bump card elevation. */
+
 .ave-meeting-ui .pre-meeting { padding: 22px 24px 26px; gap: 16px; }
 .ave-meeting-ui .pre-meeting .pm-title {
   font-size: 22px;
@@ -1644,17 +1556,17 @@ const STYLES = `
   letter-spacing: 0;
   margin-top: 6px;
 }
-.ave-meeting-ui .pre-meeting .pm-subtitle { font-size: 13px; color: var(--ave-fg-muted); }
+.ave-meeting-ui .pre-meeting .pm-subtitle { font-size: 13px; color: var(--color-text-secondary); }
 .ave-meeting-ui .pre-meeting .pm-chip {
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, .02);
   padding: 7px 14px;
   font-size: 12.5px;
 }
 .ave-meeting-ui .pre-meeting .pm-card {
   border-radius: 16px;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, .04);
   padding: 20px 22px;
 }
@@ -1669,8 +1581,7 @@ const STYLES = `
   margin-bottom: 10px;
   letter-spacing: 0;
 }
-/* Buttons — shadcn-style hierarchy.
-   녹음(primary token) > 업로드(secondary surface) > Webex(tertiary brand). */
+
 .ave-meeting-ui .pre-meeting .pm-btn {
   padding: 12px 14px;
   border-radius: 10px;
@@ -1685,75 +1596,73 @@ const STYLES = `
   transform: none;
 }
 
-/* Primary — uses --accent (= ave-primary) so it picks up the chat-theme
-   overlay (purple / blue / orange / lg-red). Hover darkens via --accent-active. */
+
 .ave-meeting-ui .pre-meeting .pm-btn-primary {
-  background: var(--ave-surface);
-  color: var(--ave-fg);
-  border-color: var(--ave-ring);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-ring-info);
   box-shadow: none;
 }
 .ave-meeting-ui .pre-meeting .pm-btn-primary svg {
-  color: var(--ave-ring) !important;
-  stroke: var(--ave-ring) !important;
+  color: var(--color-ring-info) !important;
+  stroke: var(--color-ring-info) !important;
   fill: none !important;
   filter: none;
 }
 .ave-meeting-ui .pre-meeting .pm-btn-primary svg :where(path, line, polyline, polygon, rect, circle) {
-  stroke: var(--ave-ring) !important;
+  stroke: var(--color-ring-info) !important;
 }
 .ave-meeting-ui .pre-meeting .pm-btn-primary:not(:disabled):hover {
-  background: var(--ave-secondary);
-  border-color: var(--ave-ring);
+  background: var(--color-background-tertiary);
+  border-color: var(--color-ring-info);
 }
 
-/* Secondary — surface fill with strong border. Theme-aware. */
+
 .ave-meeting-ui .pre-meeting .pm-btn-dark {
-  background: var(--ave-surface);
-  color: var(--ave-fg);
-  border-color: var(--ave-border);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-primary);
 }
 .ave-meeting-ui .pre-meeting .pm-btn-dark svg {
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   stroke: currentColor;
 }
 .ave-meeting-ui .pre-meeting .pm-btn-dark:not(:disabled):hover {
-  background: var(--ave-secondary);
+  background: var(--color-background-tertiary);
 }
 
-/* Webex — Cisco brand green, intentionally fixed across themes since it's
-   a brand affordance ("this is Webex"), not a UI surface. */
+
 .ave-meeting-ui .pre-meeting .pm-btn-webex {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
-  border-color: var(--ave-primary);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
+  border-color: var(--color-background-info);
 }
 .ave-meeting-ui .pre-meeting .pm-btn-webex svg,
 .ave-meeting-ui .pre-meeting .pm-btn-webex svg :where(path, line, polyline, polygon, rect, circle) {
-  color: var(--ave-primary-fg) !important;
-  stroke: var(--ave-primary-fg) !important;
+  color: var(--color-text-inverse) !important;
+  stroke: var(--color-text-inverse) !important;
   fill: none !important;
 }
 .ave-meeting-ui .pre-meeting .pm-btn-webex:not(:disabled):hover {
-  background: var(--ave-ring);
-  border-color: var(--ave-ring);
+  background: var(--color-ring-info);
+  border-color: var(--color-ring-info);
 }
 .ave-meeting-ui .pre-meeting .pm-actions { gap: 10px; margin-top: 18px; }
 .ave-meeting-ui .pre-meeting .pm-agenda-num {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
   width: 24px;
   height: 24px;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
 }
 .ave-meeting-ui .pre-meeting .pm-agenda-item { gap: 12px; }
 .ave-meeting-ui .pre-meeting .pm-webex {
-  background: var(--ave-secondary);
+  background: var(--color-background-tertiary);
   padding: 12px 14px;
   border-radius: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--ave-text-xs, 10px);
-  border: 1px solid var(--ave-border);
+  font-size: var(--font-text-xs-size, 10px);
+  border: 1px solid var(--color-border-primary);
 }
 .ave-meeting-ui .pre-meeting .pm-description {
   border-radius: 10px;
@@ -1765,7 +1674,7 @@ const STYLES = `
   font-size: 13px;
 }
 
-/* Sub-tabs (session detail header) — pill style matching top nav. */
+
 .ave-meeting-ui .sub-tabs {
   padding: 0;
   gap: 6px;
@@ -1776,20 +1685,20 @@ const STYLES = `
   background: transparent;
   padding: 6px 14px;
   border-radius: 999px;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   font-weight: 600;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   transition: background .12s ease, color .12s ease;
 }
-.ave-meeting-ui .sub-tab:hover { background: var(--ave-secondary); color: var(--ave-fg); }
+.ave-meeting-ui .sub-tab:hover { background: var(--color-background-tertiary); color: var(--color-text-primary); }
 .ave-meeting-ui .sub-tab.active {
-  background: var(--ave-primary-bg-subtle);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  color: var(--color-background-info);
   border: none;
   box-shadow: none;
 }
 
-/* Detail header: compact nav, metadata, and tabs in the top strip. */
+
 .ave-meeting-ui .detail-header {
   padding: 8px 12px;
   gap: 8px;
@@ -1830,35 +1739,35 @@ const STYLES = `
   align-items: center;
   min-height: 24px;
   padding: 3px 8px;
-  border: 1px solid var(--ave-border);
-  border-radius: var(--ave-radius-full, 999px);
-  background: var(--ave-surface);
-  color: var(--ave-fg-muted);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--border-radius-full, 999px);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 }
 .ave-meeting-ui .detail-meta-category {
-  background: var(--ave-primary-bg-subtle);
-  border-color: var(--ave-ring);
-  color: var(--ave-primary);
+  background: var(--color-background-info);
+  border-color: var(--color-ring-info);
+  color: var(--color-background-info);
 }
 .ave-meeting-ui .back-btn {
   border-radius: 8px;
   padding: 7px 12px;
   font-weight: 600;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
 }
-.ave-meeting-ui .back-btn:hover { background: var(--ave-secondary); border-color: var(--ave-border); }
+.ave-meeting-ui .back-btn:hover { background: var(--color-background-tertiary); border-color: var(--color-border-primary); }
 
 .ave-meeting-ui .detail-body {
   padding: 18px;
   gap: 16px;
   align-items: center;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--ave-surface) 35%, transparent), transparent 220px),
-    var(--ave-bg);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background-secondary) 35%, transparent), transparent 220px),
+    var(--color-background-primary);
 }
 .ave-meeting-ui .detail-body > .summary,
 .ave-meeting-ui .detail-body > .transcript-pane,
@@ -1870,8 +1779,8 @@ const STYLES = `
   margin-top: 0;
   padding: 22px 24px 24px;
   border-radius: 18px;
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
 }
 .ave-meeting-ui .summary-title {
   gap: 9px;
@@ -1894,7 +1803,7 @@ const STYLES = `
 }
 .ave-meeting-ui .summary-section-label {
   gap: 7px;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
   letter-spacing: 0.06em;
   margin-bottom: 9px;
 }
@@ -1919,7 +1828,7 @@ const STYLES = `
 .ave-meeting-ui .summary-action-btn {
   padding: 7px 11px;
   border-radius: 999px;
-  font-size: var(--ave-text-sm, 12px);
+  font-size: var(--font-text-sm-size, 12px);
 }
 .ave-meeting-ui .related-meetings {
   width: 100%;
@@ -1927,8 +1836,8 @@ const STYLES = `
   margin-top: -4px;
   padding: 14px 16px;
   border-radius: 14px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-surface);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
 }
 .ave-meeting-ui .related-meetings-title {
   display: flex;
@@ -1937,7 +1846,7 @@ const STYLES = `
   gap: 8px;
   font-size: 13px;
   font-weight: 800;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   margin-bottom: 10px;
 }
 .ave-meeting-ui .related-meetings-list {
@@ -1952,15 +1861,15 @@ const STYLES = `
   align-items: center;
   padding: 8px 10px;
   border-radius: 10px;
-  background: var(--ave-secondary);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-tertiary);
+  border: 1px solid var(--color-border-primary);
 }
 .ave-meeting-ui .related-meeting-link {
   border: 0;
   background: transparent;
   padding: 0;
   text-align: left;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-family: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -1968,13 +1877,13 @@ const STYLES = `
 }
 .ave-meeting-ui .related-meeting-meta {
   margin-top: 2px;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 .ave-meeting-ui .related-meeting-unlink {
-  border: 1px solid var(--ave-border);
-  background: var(--ave-surface);
-  color: var(--ave-fg-muted);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
   border-radius: 999px;
   padding: 5px 8px;
   font-family: inherit;
@@ -1983,8 +1892,8 @@ const STYLES = `
   cursor: pointer;
 }
 .ave-meeting-ui .related-meeting-unlink:hover {
-  color: var(--ave-danger);
-  border-color: color-mix(in srgb, var(--ave-danger) 35%, var(--ave-border));
+  color: var(--color-background-danger);
+  border-color: color-mix(in srgb, var(--color-background-danger) 35%, var(--color-border-primary));
 }
 .ave-meeting-ui .related-meetings-form {
   display: grid;
@@ -1994,19 +1903,19 @@ const STYLES = `
 }
 .ave-meeting-ui .related-meetings-select {
   min-width: 0;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   border-radius: 9px;
-  background: var(--ave-bg);
-  color: var(--ave-fg);
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
   font-family: inherit;
   font-size: 12px;
   padding: 7px 9px;
 }
 .ave-meeting-ui .related-meetings-add {
-  border: 1px solid var(--ave-primary);
+  border: 1px solid var(--color-background-info);
   border-radius: 999px;
   background: transparent;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-family: inherit;
   font-size: 12px;
   font-weight: 800;
@@ -2014,8 +1923,8 @@ const STYLES = `
   cursor: pointer;
 }
 .ave-meeting-ui .related-meetings-add:hover {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
 }
 .ave-meeting-ui .intermediate-card {
   border-radius: 14px;
@@ -2030,7 +1939,7 @@ const STYLES = `
   gap: 12px;
 }
 
-/* Transcript bubbles — slightly softer. */
+
 .ave-meeting-ui .bubble {
   border-radius: 12px;
   padding: 10px 12px;
@@ -2048,19 +1957,17 @@ const STYLES = `
   font-size: 12px;
 }
 
-/* ─────────────────────────────────────────────────────── */
-/* Theme alias layer removed — SOT cutover.                               */
-/* Previously this block redefined --background / --foreground / etc.      */
-/* under [data-shell="dark"], but it had no [data-shell="light"] mirror,   */
-/* leaving consumers unresolvable on light theme. All call sites now read  */
-/* var(--ave-*) directly; the host SDK applies the correct token values   */
-/* per theme bundle on every host.theme.changed event. Plugin-internal     */
-/* computed values (e.g. tinted hover surfaces) live under the --pm-*      */
-/* prefix and stay scoped to this file.                                    */
 
-/* ── Instant-record view (new) — minimal "no-prep" entry point.
-   Reuses the .pm-* card visual language so it reads as a sibling
-   surface to the prep screen rather than a one-off design. */
+
+
+
+
+
+
+
+
+
+
 .ave-meeting-ui .instant-view {
   flex: 1 1 auto;
   display: flex;
@@ -2074,8 +1981,8 @@ const STYLES = `
 .ave-meeting-ui .instant-card {
   width: 100%;
   max-width: 420px;
-  background: var(--ave-surface);
-  border: 1px solid var(--ave-border);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-primary);
   border-radius: 14px;
   padding: 22px 22px 18px;
   display: flex;
@@ -2085,12 +1992,12 @@ const STYLES = `
 .ave-meeting-ui .instant-title {
   font-size: 14px;
   font-weight: 700;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   margin: 0;
 }
 .ave-meeting-ui .instant-subtitle {
   font-size: 12px;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   margin: -8px 0 0;
 }
 .ave-meeting-ui .instant-field {
@@ -2099,9 +2006,9 @@ const STYLES = `
   gap: 6px;
 }
 .ave-meeting-ui .instant-field-label {
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 600;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   letter-spacing: 0.02em;
 }
 .ave-meeting-ui .instant-input {
@@ -2110,12 +2017,12 @@ const STYLES = `
   font-size: 14px;
   padding: 8px 10px;
   border-radius: 8px;
-  border: 1px solid var(--ave-border);
-  background: var(--ave-secondary);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
   outline: none;
 }
-.ave-meeting-ui .instant-input:focus { border-color: var(--ave-primary); }
+.ave-meeting-ui .instant-input:focus { border-color: var(--color-background-info); }
 .ave-meeting-ui select.instant-input {
   cursor: pointer;
 }
@@ -2127,9 +2034,9 @@ const STYLES = `
   gap: 8px;
   padding: 12px 14px;
   border-radius: 10px;
-  border: 1px solid var(--ave-ring);
-  background: var(--ave-surface);
-  color: var(--ave-fg);
+  border: 1px solid var(--color-ring-info);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
@@ -2139,15 +2046,15 @@ const STYLES = `
 .ave-meeting-ui .instant-record-btn svg {
   width: 15px;
   height: 15px;
-  color: var(--ave-ring) !important;
-  stroke: var(--ave-ring) !important;
+  color: var(--color-ring-info) !important;
+  stroke: var(--color-ring-info) !important;
   fill: none !important;
   filter: none;
 }
 .ave-meeting-ui .instant-record-btn svg :where(path, line, polyline, polygon, rect, circle) {
-  stroke: var(--ave-ring) !important;
+  stroke: var(--color-ring-info) !important;
 }
-.ave-meeting-ui .instant-record-btn:hover:not(:disabled) { background: var(--ave-secondary); border-color: var(--ave-ring); }
+.ave-meeting-ui .instant-record-btn:hover:not(:disabled) { background: var(--color-background-tertiary); border-color: var(--color-ring-info); }
 .ave-meeting-ui .instant-record-btn:disabled { opacity: .55; cursor: not-allowed; }
 .ave-meeting-ui .instant-upload-btn {
   width: 100%;
@@ -2157,9 +2064,9 @@ const STYLES = `
   gap: 8px;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   background: transparent;
-  color: var(--ave-fg);
+  color: var(--color-text-primary);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -2170,19 +2077,15 @@ const STYLES = `
 .ave-meeting-ui .instant-upload-btn svg {
   width: 15px;
   height: 15px;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   stroke: currentColor;
 }
 .ave-meeting-ui .instant-upload-btn:hover:not(:disabled) {
-  background: var(--ave-surface-hover);
-  border-color: var(--ave-fg-muted);
+  background: var(--color-background-tertiary);
+  border-color: var(--color-text-secondary);
 }
 .ave-meeting-ui .instant-upload-btn:disabled { opacity: .55; cursor: not-allowed; }
-/* Outlined-accent CTA for empty-state navigation entries (e.g. "녹음 시작"
-   on the prep-empty card). Keeps the accent identity ("this leads to
-   recording") while signalling secondary visual weight — the press routes
-   to a setup screen, not an immediate record start, so a primary green
-   surface would over-promise the action. */
+
 .ave-meeting-ui .pm-card-cta {
   display: inline-flex;
   align-items: center;
@@ -2190,9 +2093,9 @@ const STYLES = `
   gap: 8px;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid var(--ave-primary);
+  border: 1px solid var(--color-background-info);
   background: transparent;
-  color: var(--ave-primary);
+  color: var(--color-background-info);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -2202,22 +2105,20 @@ const STYLES = `
 .ave-meeting-ui .pm-card-cta svg {
   width: 15px;
   height: 15px;
-  /* White/outlined CTA: line icons need the SDK highlight colour directly. */
-  color: var(--ave-primary);
+
+  color: var(--color-background-info);
   stroke: currentColor;
 }
 .ave-meeting-ui .pm-card-cta:hover svg {
-  color: var(--ave-primary-fg);
+  color: var(--color-text-inverse);
 }
-.ave-meeting-ui .pm-card-cta:hover { background: var(--ave-primary); color: var(--ave-primary-fg); }
+.ave-meeting-ui .pm-card-cta:hover { background: var(--color-background-info); color: var(--color-text-inverse); }
 .ave-meeting-ui .pm-card-cta:focus-visible {
-  /* Designer A: match the global shadcn double-ring (line 1716) so all
-     buttons share one focus affordance family. The raw outline form
-     produced a visually thinner ring out of sync with peers. */
+
   outline: none;
   box-shadow:
-    0 0 0 2px var(--ave-bg),
-    0 0 0 4px color-mix(in srgb, var(--ave-ring) 62%, transparent);
+    0 0 0 2px var(--color-background-primary),
+    0 0 0 4px color-mix(in srgb, var(--color-ring-info) 62%, transparent);
 }
 .ave-meeting-ui .pm-card-actions { margin-top: 16px; display: flex; justify-content: center; }
 .ave-meeting-ui .instant-back-row { padding: 12px 16px 0; display: flex; align-items: center; }
@@ -2228,38 +2129,36 @@ const STYLES = `
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: var(--ave-radius-sm, 6px);
+  border-radius: var(--border-radius-sm, 6px);
   border: none;
   background: transparent;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition: background var(--ave-motion-fast, 160ms);
+  transition: background var(--meeting-motion-fast, 160ms);
 }
 .ave-meeting-ui .instant-settings-btn:hover {
-  background: var(--ave-surface-hover);
-  color: var(--ave-fg);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
 }
 .ave-meeting-ui .instant-settings-btn:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px var(--ave-bg),
-    0 0 0 4px color-mix(in srgb, var(--ave-ring) 70%, transparent);
+    0 0 0 2px var(--color-background-primary),
+    0 0 0 4px color-mix(in srgb, var(--color-ring-info) 70%, transparent);
 }
-/* shadcn ghost-button back: text + chevron icon, no border, hover bg, focus ring.
-   margin-left -8px aligns the visible text baseline with the card interior edge
-   (instant-back-row padding 16px – margin 8px = 8px effective inset from window). */
+
 .ave-meeting-ui .instant-back-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px 6px 8px;
   margin-left: -8px;
-  border-radius: var(--ave-radius-sm, 6px);
+  border-radius: var(--border-radius-sm, 6px);
   border: none;
   background: transparent;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-size: 12px;
   font-weight: 500;
   font-family: inherit;
@@ -2268,43 +2167,42 @@ const STYLES = `
   -webkit-app-region: no-drag;
 }
 .ave-meeting-ui .instant-back-btn:hover {
-  background: var(--ave-surface-hover);
-  color: var(--ave-fg);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
 }
 .ave-meeting-ui .instant-back-btn:active {
-  background: color-mix(in srgb, var(--ave-fg) 12%, var(--ave-secondary));
+  background: color-mix(in srgb, var(--color-text-primary) 12%, var(--color-background-tertiary));
 }
 .ave-meeting-ui .instant-back-btn:focus-visible {
-  /* Match the global shadcn double-ring (line ~1768) used by every other
-     interactive element in the plugin — 2px bg-offset + 4px color-mix. */
+
   outline: none;
   box-shadow:
-    0 0 0 2px var(--ave-bg),
-    0 0 0 4px color-mix(in srgb, var(--ave-ring) 62%, transparent);
+    0 0 0 2px var(--color-background-primary),
+    0 0 0 4px color-mix(in srgb, var(--color-ring-info) 62%, transparent);
 }
 .ave-meeting-ui .instant-back-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
 .ave-meeting-ui .instant-upload-hint {
-  font-size: var(--ave-text-xs, 10px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-xs-size, 10px);
+  color: var(--color-text-secondary);
   text-align: center;
   margin-top: 4px;
 }
 .ave-meeting-ui .instant-status {
-  font-size: var(--ave-text-sm, 12px);
-  color: var(--ave-fg-muted);
+  font-size: var(--font-text-sm-size, 12px);
+  color: var(--color-text-secondary);
   text-align: center;
   min-height: 16px;
 }
-.ave-meeting-ui .instant-status.error { color: var(--ave-danger); }
+.ave-meeting-ui .instant-status.error { color: var(--color-background-danger); }
 
-/* Length-tier radio group — shared between prep card and instant view. */
+
 .ave-meeting-ui .length-tier {
   display: flex;
   gap: 4px;
   padding: 3px;
-  background: var(--ave-secondary);
+  background: var(--color-background-tertiary);
   border-radius: 999px;
-  border: 1px solid var(--ave-border);
+  border: 1px solid var(--color-border-primary);
   flex-wrap: wrap;
 }
 .ave-meeting-ui .length-tier-opt {
@@ -2312,9 +2210,9 @@ const STYLES = `
   min-width: 0;
   border: none;
   background: transparent;
-  color: var(--ave-fg-muted);
+  color: var(--color-text-secondary);
   font-family: inherit;
-  font-size: var(--ave-text-xs, 10px);
+  font-size: var(--font-text-xs-size, 10px);
   font-weight: 600;
   padding: 6px 8px;
   border-radius: 999px;
@@ -2322,45 +2220,44 @@ const STYLES = `
   transition: background .12s, color .12s;
   white-space: nowrap;
 }
-.ave-meeting-ui .length-tier-opt:hover { color: var(--ave-fg); }
+.ave-meeting-ui .length-tier-opt:hover { color: var(--color-text-primary); }
 .ave-meeting-ui .length-tier-opt.active {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
 }
 
-/* shadcn interaction layer: selected state and focus rings are visible on
-   every themed surface, including beige/light host bundles. */
+
 .ave-meeting-ui :where(button, input, textarea, select):focus {
   outline: none;
 }
 .ave-meeting-ui :where(button, input, textarea, select):focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 2px var(--ave-bg),
-    0 0 0 4px color-mix(in srgb, var(--ave-ring) 62%, transparent);
+    0 0 0 2px var(--color-background-primary),
+    0 0 0 4px color-mix(in srgb, var(--color-ring-info) 62%, transparent);
 }
 .ave-meeting-ui .nav-btn,
 .ave-meeting-ui .sub-tab,
 .ave-meeting-ui .length-tier-opt,
 .ave-meeting-ui .summary-regen-tier {
-  border-radius: var(--ave-radius-full, 999px);
+  border-radius: var(--border-radius-full, 999px);
   position: relative;
   z-index: 1;
   transform: translateZ(0);
   transition:
-    background var(--ave-motion-fast, 160ms) ease,
-    border-color var(--ave-motion-fast, 160ms) ease,
-    color var(--ave-motion-fast, 160ms) ease,
-    box-shadow var(--ave-motion-fast, 160ms) ease,
-    transform var(--ave-motion-fast, 160ms) ease;
+    background var(--meeting-motion-fast, 160ms) ease,
+    border-color var(--meeting-motion-fast, 160ms) ease,
+    color var(--meeting-motion-fast, 160ms) ease,
+    box-shadow var(--meeting-motion-fast, 160ms) ease,
+    transform var(--meeting-motion-fast, 160ms) ease;
 }
 .ave-meeting-ui .nav-btn:hover:not([data-state="active"]),
 .ave-meeting-ui .sub-tab:hover:not([data-state="active"]),
 .ave-meeting-ui .length-tier-opt:hover:not([data-state="active"]),
 .ave-meeting-ui .summary-regen-tier:hover:not(:disabled) {
   background: var(--pm-toggle-hover-bg);
-  border-color: color-mix(in srgb, var(--ave-ring) 34%, var(--ave-border));
-  color: var(--ave-fg);
+  border-color: color-mix(in srgb, var(--color-ring-info) 34%, var(--color-border-primary));
+  color: var(--color-text-primary);
   box-shadow: var(--pm-toggle-hover-shadow);
   transform: translateY(-1px);
 }
@@ -2370,9 +2267,9 @@ const STYLES = `
 .ave-meeting-ui .sub-tab[data-state="active"],
 .ave-meeting-ui .length-tier-opt.active,
 .ave-meeting-ui .length-tier-opt[data-state="active"] {
-  background: var(--ave-primary);
-  color: var(--ave-primary-fg);
-  border-color: var(--ave-primary);
+  background: var(--color-background-info);
+  color: var(--color-text-inverse);
+  border-color: var(--color-background-info);
   box-shadow: var(--pm-toggle-selected-shadow);
 }
 .ave-meeting-ui .nav-btn.active:hover,
@@ -2381,8 +2278,8 @@ const STYLES = `
 .ave-meeting-ui .sub-tab[data-state="active"]:hover,
 .ave-meeting-ui .length-tier-opt.active:hover,
 .ave-meeting-ui .length-tier-opt[data-state="active"]:hover {
-  background: var(--ave-ring);
-  color: var(--ave-primary-fg);
+  background: var(--color-ring-info);
+  color: var(--color-text-inverse);
   transform: translateY(-1px);
 }
 .ave-meeting-ui .nav-btn:active,
@@ -2392,8 +2289,8 @@ const STYLES = `
   transform: translateY(0) scale(.98);
 }
 .ave-meeting-ui .length-tier {
-  border-color: var(--ave-border);
-  background: var(--ave-secondary);
+  border-color: var(--color-border-primary);
+  background: var(--color-background-tertiary);
   isolation: isolate;
 }
 .ave-meeting-ui .top-nav,
@@ -2423,14 +2320,14 @@ const STYLES = `
 .ave-meeting-ui .summary-edit-textarea:focus-visible,
 .ave-meeting-ui .summary-edit-row-input:focus-visible,
 .ave-meeting-ui .prompt-overlay-textarea:focus-visible {
-  border-color: var(--ave-ring);
+  border-color: var(--color-ring-info);
 }
 .ave-meeting-ui .pre-meeting .pm-title,
 .ave-meeting-ui .pre-meeting .pm-btn {
   letter-spacing: 0;
 }
 
-/* Compact type pass: keep the meeting plugin readable without feeling zoomed-in. */
+
 .ave-meeting-ui :where(button, input, textarea, select) {
   font-size: 12.5px;
 }
@@ -2474,10 +2371,7 @@ const STYLES = `
 .ave-meeting-ui .detail-title,
 .ave-meeting-ui .summary-title { font-size: 16px; }
 
-/* Reduced motion is authoritative: collapse every animation/transition to
-   near-zero so state changes still register (no flash-of-nothing) without
-   the motion itself. Covers the pm-fade-out keyframe, the session-card and
-   button transitions, and any future addition scoped under .ave-meeting-ui. */
+
 @media (prefers-reduced-motion: reduce) {
   .ave-meeting-ui *,
   .ave-meeting-ui *::before,
@@ -2599,19 +2493,8 @@ function showSuccessToast(msg) {
 }
 
 async function copyTextToClipboard(text) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.style.position = "fixed";
-  ta.style.opacity = "0";
-  document.body.appendChild(ta);
-  ta.select();
-  const ok = document.execCommand("copy");
-  document.body.removeChild(ta);
-  if (!ok) throw new Error("clipboard copy failed");
+  if (!navigator.clipboard?.writeText) throw new Error("클립보드 쓰기를 사용할 수 없습니다.");
+  await navigator.clipboard.writeText(text);
 }
 
 function formatListSection(label, items) {
@@ -2853,12 +2736,13 @@ async function persistPromptConfigWithBridge(bridge, finalPrompt, intermediatePr
   return { nextFinal, nextIntermediate };
 }
 
-function openPromptEditOverlay(anchorNode, bridge) {
+function openPromptEditOverlay(anchorNode, bridge, onClosed) {
   const scope = anchorNode?.closest?.(".ave-meeting-ui");
   if (!scope) return;
   if (scope.querySelector(".prompt-overlay")) return;
 
   const overlay = el("div", { class: "prompt-overlay" });
+  const close = () => { overlay.remove(); onClosed?.(); };
   const cardEl = el("div", { class: "prompt-overlay-card" });
   overlay.appendChild(cardEl);
 
@@ -2867,7 +2751,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
   titleEl.textContent = "회의록 프롬프트 편집";
   const closeBtn = el("button", { type: "button", class: "prompt-overlay-close", "aria-label": "닫기" });
   closeBtn.textContent = "×";
-  closeBtn.addEventListener("click", () => overlay.remove());
+  closeBtn.addEventListener("click", () => close());
   header.appendChild(titleEl);
   header.appendChild(closeBtn);
   cardEl.appendChild(header);
@@ -2921,7 +2805,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
   const footer = el("div", { class: "prompt-overlay-footer" });
   const cancelBtn = el("button", { type: "button", class: "prompt-overlay-cancel" });
   cancelBtn.textContent = "취소";
-  cancelBtn.addEventListener("click", () => overlay.remove());
+  cancelBtn.addEventListener("click", () => close());
   const saveBtn = el("button", { type: "button", class: "prompt-overlay-save" });
   saveBtn.textContent = "저장";
   saveBtn.disabled = true;
@@ -2955,7 +2839,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
       );
       finalArea.value = nextFinal;
       intermediateArea.value = nextIntermediate;
-      overlay.remove();
+      close();
     } catch (err) {
       setBusy(null);
       saveBtn.disabled = false;
@@ -2965,7 +2849,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
   });
 
   overlay.addEventListener("click", (ev) => {
-    if (ev.target === overlay) overlay.remove();
+    if (ev.target === overlay) close();
   });
   scope.appendChild(overlay);
 
@@ -2984,7 +2868,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
     .catch((err) => {
       setBusy(null);
       showErrorToast(`설정 불러오기 실패: ${(err?.message ?? err).toString().slice(0, 200)}`);
-      overlay.remove();
+      close();
     });
 }
 
@@ -3229,7 +3113,12 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
   }
 
   function render() {
+    if (mode === "read" && ["edit", "regen", "busy"].includes(card.dataset.summaryMode)) {
+      queueMicrotask(() => opts?.onEditClosed?.());
+    }
     if (typeof activeMoreDismiss === "function") activeMoreDismiss();
+    card.dataset.summaryMode = mode;
+    if (mode === "read") delete card.dataset.dirty;
     card.replaceChildren();
     if (mode === "busy") return renderBusy();
     if (editable) renderToolbar();
@@ -3283,14 +3172,13 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
     editPromptItem.textContent = "프롬프트 편집…";
     editPromptItem.addEventListener("click", () => {
       dismiss();
-      openPromptEditOverlay(card, bridge);
+      openPromptEditOverlay(card, bridge, opts?.onEditClosed);
     });
     const regenSameItem = el("button", { type: "button", class: "summary-more-item" });
     regenSameItem.textContent = "이 프롬프트로 다시 생성";
     regenSameItem.addEventListener("click", () => {
       dismiss();
-      // No lengthTier override — host falls back to the persisted
-      // finalSummary.lengthTier (see meeting_regenerate_summary).
+      // Reuse the displayed summary's tier explicitly, or omit it for the host default if absent.
       doRegenerate(undefined);
     });
     pop.appendChild(editPromptItem);
@@ -3356,6 +3244,7 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
 
   function renderEdit() {
     const form = el("div", { class: "summary-edit" });
+    form.addEventListener("input", () => { card.dataset.dirty = "true"; });
     // Mode banner — makes the inline transition unambiguous (user
     // otherwise can mistake the swap for "nothing happened").
     const banner = el("div", { class: "summary-edit-banner" });
@@ -3448,11 +3337,13 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
   }
 
   async function doRegenerate(tier) {
+    const requestedTier = tier ?? snapshot?.lengthTier;
+    const tierArgs = ["short", "medium", "long"].includes(requestedTier) ? { lengthTier: requestedTier } : {};
     busyText = "회의록 다시 생성 중… (LLM 호출)";
     mode = "busy"; render();
     try {
       const updated = await bridge.callTool("meeting_regenerate_summary", {
-        sessionId, lengthTier: tier,
+        sessionId, ...tierArgs,
       });
       snapshot = updated;
       if (typeof onChanged === "function") onChanged(updated);
@@ -3541,10 +3432,9 @@ function createWaveform(canvas) {
   let writeIdx = 0;
   let dpr = Math.max(1, window.devicePixelRatio || 1);
   let running = false;
-  // Resolved from the canvas's CSS `color` (var(--ave-primary)) so the bars
+  // Resolved from the canvas's CSS `color` (var(--color-text-info)) so the bars
   // track the host theme. Cached so drawOnce() doesn't trigger a style
   // resolve every frame; refreshed on resize (which also reflows on a
-  // host.theme.changed broadcast) and on start().
   let barColor = "";
   const refreshBarColor = () => {
     barColor = getComputedStyle(canvas).color || barColor;
@@ -3893,8 +3783,9 @@ async function uploadLargeFileViaStagedChunks(file, ctx, statusEl, bridge, opts 
   }
 }
 
-export default async function mount(context) {
-  const { root, bridge } = context;
+async function mount() {
+  const root = document.getElementById("app");
+  const bridge = await connectView("meeting-control");
 
   root.replaceChildren();
   const styleEl = document.createElement("style");
@@ -3906,13 +3797,7 @@ export default async function mount(context) {
   scope.className = "ave-meeting-ui";
   root.appendChild(scope);
 
-  // Theme wiring — primeTheme handles getTheme() cold-boot pull +
-  // host.theme.changed subscribe + validated token paint to scope.style
-  // (target: HTMLElement). Floating windows receive host theme changes
-  // through the plugin host service loop, not through a UI-invoked tool.
-  const themeHandle = primeTheme(bridge, {
-    target: scope,
-  });
+  applyHostContext(bridge.app, scope);
 
   // Pull render-time UI config through the UI-only config bridge. This keeps
   // display preferences out of the LLM/tool-call surface.
@@ -3968,33 +3853,48 @@ export default async function mount(context) {
   // from flashing an error the user did nothing to cause. Cleared on
   // meeting.ended (subscribed below).
   let activeFloatingSessionId = null;
-  // Subscribe to meeting.ended so we can navigate to session-detail when
-  // the user presses Done in the floating window. Cancelled meetings
-  // also fire meeting.ended (with cancelled: true) — we only navigate
-  // when there's a real summary to show.
-  let unsubMeetingEnded = () => {};
-  let unsubMeetingPrepRegistered = () => {};
-  if (typeof bridge?.onEvent === "function") {
-    try {
-      const sub = bridge.onEvent("meeting.ended", (payload) => {
-        if (!payload || typeof payload !== "object") return;
-        const { sessionId: sid, cancelled } = payload;
-        if (sid && sid === activeFloatingSessionId) {
-          activeFloatingSessionId = null;
-          if (!cancelled && typeof sid === "string") {
-            setView("session-detail", sid);
-          }
-        }
-      });
-      if (typeof sub === "function") unsubMeetingEnded = sub;
-    } catch { /* bridge missing onEvent — singleton guard still works */ }
-    try {
-      const sub = bridge.onEvent("meeting.prep.registered", () => {
-        if (currentView === "pre-meeting") renderPreMeeting();
-      });
-      if (typeof sub === "function") unsubMeetingPrepRegistered = sub;
-    } catch { /* optional live refresh only */ }
+  const initialState = await bridge.callTool("meeting_view_state", {});
+  const consumeError = createErrorConsumer(initialState.lastError);
+  const pendingChanges = createPendingChanges();
+  async function refreshChanges(result) {
+    const state = await bridge.callTool("meeting_view_state", {});
+    if (consumeError(state.lastError)) showErrorToast("회의 처리 중 오류가 발생했습니다. 설정과 전사를 확인하세요.");
+    const editing = !!scope.querySelector('.summary[data-summary-mode="edit"], .summary[data-summary-mode="busy"], .summary[data-summary-mode="regen"], .prompt-overlay');
+    const dirty = !!scope.querySelector('[data-dirty="true"]');
+    const detailTab = viewArea.querySelector(".detail-body")?.dataset.tab ?? "summary";
+    if (editing || dirty) {
+      pendingChanges.defer(deferCompletionNavigation(result));
+      return;
+    }
+    pendingChanges.defer(result);
+    result = pendingChanges.take();
+    const endedSessionId = endedSessionToOpen(result, activeFloatingSessionId);
+    const notifySessionId = endedSessionToNotify(result, activeFloatingSessionId);
+    if (activeFloatingSessionId && !state.recorder && !state.activeSessions.includes(activeFloatingSessionId)) {
+      const sid = endedSessionId ?? notifySessionId;
+      activeFloatingSessionId = null;
+      const detail = sid ? await bridge.callTool("meeting_session_detail", { sessionId: sid }) : null;
+      if (detail?.finalSummary) {
+        if (notifySessionId) showSuccessToast("“" + (detail.finalSummary.title || detail.context?.title || sid) + "” 회의가 종료되었습니다.");
+        else { setView("session-detail", sid); return; }
+      }
+    }
+    if (!shouldRefreshView(result, { view: currentView, detailTab, editing, dirty })) return;
+    if (currentView === "session-detail") pendingSubTab = detailTab;
+    renderCurrentView();
   }
+  let refreshQueue = Promise.resolve();
+  function scheduleRefresh(result) {
+    if (scope.querySelector('.summary[data-summary-mode="edit"], .summary[data-summary-mode="busy"], .summary[data-summary-mode="regen"], .prompt-overlay, [data-dirty="true"]')) result = deferCompletionNavigation(result);
+    const next = refreshQueue.then(() => refreshChanges(result));
+    refreshQueue = next.catch(() => {});
+    return next;
+  }
+  function flushPendingChanges() {
+    const pending = pendingChanges.take();
+    if (pending) void scheduleRefresh({ ...pending, reset: true }).catch(() => pendingChanges.defer(pending));
+  }
+  const stopChanges = watchChanges(bridge, scheduleRefresh);
 
   // Top nav is intentionally 2 tabs only — "예정 회의" + "회의록".
   // The instant-record view is reachable from the empty state of "예정 회의"
@@ -4065,7 +3965,7 @@ export default async function mount(context) {
     activeStagedUploadId = null;
     if (uploadId) {
       bridge.callTool("meeting_stage_upload_cancel", { uploadId }).catch((err) => {
-        console.warn("[meeting-ui] staged upload cancel failed", err);
+        console.warn("[meeting-ui] staged upload cancel failed");
       });
     }
   }
@@ -4096,14 +3996,13 @@ export default async function mount(context) {
   }
 
   // ─── Length-tier shared state + radio helper ──────────
-  // Persists across view switches in this session. Default "medium"
-  // matches plugin.json's configSchema default; the plugin settings UI
-  // can change the configSchema default but this in-memory value is
-  // the per-window picked tier (carried into meeting_start
-  // context.lengthTier and ultimately into summarizeFinal).
+  // Summary length is convenience state for one Ave run: it survives panel
+  // reopen and resets to unset when Ave restarts. Omitted → host default;
+  // only an explicit selection overrides the configured summary length.
   const LENGTH_TIER_KEY = "ave.meeting.summaryLengthTier";
+  // UI-only convenience state: survives panel reopen within one Ave run and resets on restart.
   const SESSION_CATEGORY_FILTER_KEY = "ave.meeting.sessionCategoryFilter";
-  let pickedLengthTier = "medium";
+  let pickedLengthTier;
   let pickedInstantCategory = "";
   let sessionCategoryFilter = "__all__";
   try {
@@ -4151,6 +4050,7 @@ export default async function mount(context) {
 
       const cleanup = (value) => {
         overlay.remove();
+        flushPendingChanges();
         resolve(value);
       };
       const submit = () => {
@@ -4381,7 +4281,7 @@ export default async function mount(context) {
       const ctx = {
         title: titleVal || undefined,
         category: categoryVal,
-        lengthTier: pickedLengthTier,
+        ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}),
       };
       // Bypass handleStartRecording (which swallows errors and shows a
       // misleading success status) — call the tool directly so any
@@ -4396,14 +4296,12 @@ export default async function mount(context) {
         const result = await bridge.callTool("meeting_start", {
           sessionId, context: ctx,
         });
-        console.log("[meeting-ui] meeting_start →", result);
+        console.log("[meeting-ui] meeting_start →");
         statusEl.textContent = "녹음 창이 열렸습니다.";
       } catch (err) {
-        console.error("[meeting-ui] meeting_start failed:", err);
+        console.error("[meeting-ui] meeting_start failed:");
         statusEl.classList.add("error");
         statusEl.textContent = `오류: ${(err?.message ?? err).toString().slice(0, 200)}`;
-        try { await bridge.callTool("meeting_cancel", { sessionId }); }
-        catch { /* best-effort */ }
         activeFloatingSessionId = null;
       } finally {
         recordBtn.disabled = false;
@@ -4438,7 +4336,7 @@ export default async function mount(context) {
       const uploadCtx = {
         title: titleVal || undefined,
         category: categoryVal,
-        lengthTier: pickedLengthTier,
+        ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}),
       };
       handleFileChosen(e, uploadCtx, statusEl, uploadBtn);
     });
@@ -4682,7 +4580,7 @@ export default async function mount(context) {
 
     const recordBtn = el("button", { type: "button", class: "pm-btn pm-btn-primary" });
     recordBtn.appendChild(document.createTextNode("녹음"));
-    recordBtn.addEventListener("click", () => handleStartRecording({ ...ctx, lengthTier: pickedLengthTier }));
+    recordBtn.addEventListener("click", () => handleStartRecording({ ...ctx, ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}) }));
 
     const uploadBtn = el("button", { type: "button", class: "pm-btn pm-btn-dark" });
     uploadBtn.appendChild(document.createTextNode("업로드"));
@@ -4788,20 +4686,14 @@ export default async function mount(context) {
     // Merge in the user's currently-picked length tier when the caller
     // hasn't supplied one. Centralises tier propagation so legacy call
     // sites (handleOpenConference fire-and-forget) also pick it up.
-    const ctxWithTier = ctx && typeof ctx === "object" && ctx.lengthTier
+    const ctxWithTier = ctx && typeof ctx === "object" && ["short", "medium", "long"].includes(ctx.lengthTier)
       ? ctx
-      : { ...(ctx ?? {}), lengthTier: pickedLengthTier };
+      : { ...(ctx ?? {}), ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}) };
     try {
       await bridge.callTool("meeting_start", { sessionId, context: ctxWithTier });
     } catch (err) {
-      console.error("[meeting-ui] failed to open floating window", err);
-      // Best-effort cleanup if the window failed mid-spawn — await so
-      // the next click sees a clean state rather than racing the cancel.
-      try {
-        await bridge.callTool("meeting_cancel", { sessionId });
-      } catch (e2) {
-        console.warn("[meeting-ui] orphan cancel failed", e2);
-      }
+      console.error("[meeting-ui] failed to open floating window");
+      showErrorToast("녹음 시작이 거부되었거나 실패했습니다.");
       activeFloatingSessionId = null;
     } finally {
       startInFlight = false;
@@ -4882,7 +4774,7 @@ export default async function mount(context) {
     // even if the user already pressed 녹음 first. Fire-and-forget
     // because the URL-open path shouldn't block on window spawn.
     handleStartRecording(ctx).catch((err) => {
-      console.warn("[meeting-ui] background recorder start failed:", err);
+      console.warn("[meeting-ui] background recorder start failed:");
     });
 
     // Primary path: hostPlugin's meeting_open_url calls Electron
@@ -4893,33 +4785,15 @@ export default async function mount(context) {
       setStatus("브라우저에서 회의를 엽니다…");
       return;
     } catch (err) {
-      console.warn("[meeting] meeting_open_url failed, falling back to clipboard:", err);
+      console.warn("[meeting] meeting_open_url failed, falling back to clipboard:");
     }
 
-    // Fallback: clipboard copy. Two write paths — navigator.clipboard
-    // (may fail in insecure contexts) → execCommand legacy.
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-        setStatus("브라우저 자동 열기 실패 — URL을 복사했습니다 (붙여넣어 참여)", true);
-        return;
-      }
-    } catch { /* fall through */ }
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = url;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
-      if (ok) {
-        setStatus("브라우저 자동 열기 실패 — URL을 복사했습니다 (붙여넣어 참여)", true);
-        return;
-      }
-    } catch { /* noop */ }
-    setStatus("URL 열기/복사 모두 실패 — 위 주소를 직접 복사하세요", true);
+      await copyTextToClipboard(url);
+      setStatus("URL을 복사했습니다 (붙여넣어 참여)", true);
+    } catch {
+      setStatus("클립보드 쓰기가 거부되었습니다. 위 주소를 직접 선택해 복사하세요.", true);
+    }
   }
 
   function conferenceLabelFor(type) {
@@ -5209,6 +5083,7 @@ export default async function mount(context) {
     subTranscriptBtn.addEventListener("click", () => setSubTab("transcript"));
 
     function renderSubTab() {
+      body.dataset.tab = subTab;
       if (!snapshot) {
         body.replaceChildren(makeEmpty("clock", "데이터를 불러오는 중입니다", ""));
         return;
@@ -5243,7 +5118,7 @@ export default async function mount(context) {
             regenBtn.textContent = "생성 중…";
             try {
               const created = await bridge.callTool("meeting_regenerate_summary", {
-                sessionId,
+                sessionId, ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}),
               });
               snapshot.finalSummary = created;
               renderSubTab();
@@ -5268,6 +5143,7 @@ export default async function mount(context) {
         // Update local snapshot so subsequent sub-tab switches read the
         // new summary without forcing a full meeting_session_detail
         // refetch (server-side persisted state already updated).
+        onEditClosed: flushPendingChanges,
         onChanged: (updated) => {
           snapshot.finalSummary = updated;
           syncDetailMeta();
@@ -5503,8 +5379,9 @@ export default async function mount(context) {
   return () => {
     window.removeEventListener("pagehide", handlePageHide);
     cancelActiveStagedUpload("mount-dispose");
-    themeHandle.dispose();
-    if (typeof unsubMeetingEnded === "function") unsubMeetingEnded();
-    if (typeof unsubMeetingPrepRegistered === "function") unsubMeetingPrepRegistered();
+    stopChanges();
+    bridge.dispose();
   };
 }
+
+mount().catch(() => { document.getElementById("app").textContent = "회의 화면을 불러오지 못했습니다."; });

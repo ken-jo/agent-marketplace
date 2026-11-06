@@ -31,15 +31,12 @@
  */
 
 // Tokens come from the host's plugin UI shell — the same bridge a sidebar
-// card gets, with `getTheme()` and a `host.theme.changed` subscription
 // already on it. There is no plugin-owned theme channel any more: two
 // sources for one value means one of them can be stale, and the stale one
 // would have been the plugin's.
-// The vendored ./prime-theme.js (copied from plugin-sdk v6.1.0 — SDK
 // v7.0.0 removed its UI surface)
 // handles validation + token paint on document.documentElement, so this
 // file no longer hand-rolls applyTheme / OS-preference cold-start /
-// localStorage persistence dance — primeTheme's getTheme() races
 // against the shell's own paint and the first valid payload wins
 // idempotently.
 //
@@ -47,7 +44,8 @@
 // The document and its CSP belong to the host's plugin UI shell now; this
 // file is a module the shell imports and calls `mount()` on, exactly as it
 // does for a sidebar card.
-import { primeTheme } from "./prime-theme.js";
+import { connectView, applyHostContext, watchChanges } from "./mcp-app.mjs";
+import { recorderText } from "./recorderI18n.ts";
 
 /**
  * The twelve private IPC channels, as tool calls.
@@ -87,10 +85,6 @@ function hostAdapter(bridge) {
       bridge.callTool("meeting_recorder_begin_capture", { context, ...(opts ?? {}) }),
     stop: (sessionId, opts) => bridge.callTool("meeting_stop", { sessionId, ...(opts ?? {}) }),
     cancel: (sessionId) => bridge.callTool("meeting_cancel", { sessionId }),
-    // The card measures its own content and asks; the host clamps and is the
-    // only thing that decides. A card cannot grow its slot past the dock cap
-    // however large a number it sends.
-    resize: (height) => bridge.callTool("meeting_recorder_resize", { height }),
     // Detaching the slot is the plugin's to do — the card asks, and
     // `hostPlugin.ts` releases the handle it holds.
     close: () => bridge.callTool("meeting_recorder_close", {}),
@@ -104,50 +98,52 @@ function hostAdapter(bridge) {
  * `plugin-ui-shell.html`, same bridge, same `mount({ root, bridge })`
  * contract. Nothing here knows it is in a floating window.
  */
-export default async function mount({ root, bridge }) {
+async function mount() {
+  const root = document.getElementById("app");
+  const bridge = await connectView("meeting-recorder");
   const host = hostAdapter(bridge);
 
-// Side-effect: inject `--ave-*` fallback tokens. Replaces the old
-// `/* @sdk-tokens */` sentinel substitution that copy-build-assets.mjs used to
+// Side-effect: inject `standard theme variables` fallback tokens. Replaces the old
+// `` sentinel substitution that copy-build-assets.mjs used to
 // perform on the unbundled file. Without this, cold-start before the shell
-// primes would render against `var(--ave-*, #hex)` fallbacks in the STYLES
+// primes would render against `var(standard theme variables, #hex)` fallbacks in the STYLES
 // block — still legible but missing the SDK's polarity defaults.
 const STYLES = `
-/* @sdk-tokens */
+
 .shell { --w: 100%; --h: 100%; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: transparent; }
 
 .shell {
-  /* shadcn-compatible semantic layer backed by host-owned Ave tokens. */
-  --background:              var(--ave-bg);
-  --foreground:              var(--ave-fg);
-  --card:                    var(--ave-surface);
-  --card-foreground:         var(--ave-fg);
-  --popover:                 var(--ave-surface);
-  --popover-foreground:      var(--ave-fg);
-  --primary:                 var(--ave-primary);
-  --primary-foreground:      var(--ave-primary-fg);
-  --secondary:               var(--ave-secondary);
-  --secondary-foreground:    var(--ave-secondary-fg);
-  --muted:                   var(--ave-secondary);
-  --muted-foreground:        var(--ave-fg-muted);
-  --accent:                  color-mix(in srgb, var(--ave-primary) 12%, var(--ave-surface));
-  --accent-foreground:       var(--ave-fg);
-  --destructive:             var(--ave-danger);
-  --destructive-foreground:  var(--ave-danger-fg);
-  --border:                  var(--ave-border);
-  --input:                   var(--ave-border);
-  --ring:                    var(--ave-ring);
-  --success:                 var(--ave-success);
-  --success-foreground:      var(--ave-success-fg);
-  --warning:                 var(--ave-warning);
-  --warning-foreground:      var(--ave-warning-fg);
-  --radius:                  var(--ave-radius,       8px);
-  --radius-sm:               var(--ave-radius-sm,    6px);
-  --radius-full:             var(--ave-radius-full,  999px);
 
-  /* Legacy aliases kept as a thin compatibility layer while styles converge. */
+  --background:              var(--color-background-primary);
+  --foreground:              var(--color-text-primary);
+  --card:                    var(--color-background-secondary);
+  --card-foreground:         var(--color-text-primary);
+  --popover:                 var(--color-background-secondary);
+  --popover-foreground:      var(--color-text-primary);
+  --primary:                 var(--color-background-info);
+  --primary-foreground:      var(--color-text-inverse);
+  --secondary:               var(--color-background-tertiary);
+  --secondary-foreground:    var(--color-text-primary);
+  --muted:                   var(--color-background-tertiary);
+  --muted-foreground:        var(--color-text-secondary);
+  --accent:                  color-mix(in srgb, var(--color-background-info) 12%, var(--color-background-secondary));
+  --accent-foreground:       var(--color-text-primary);
+  --destructive:             var(--color-background-danger);
+  --destructive-foreground:  var(--color-text-danger);
+  --border:                  var(--color-border-primary);
+  --input:                   var(--color-border-primary);
+  --ring:                    var(--color-ring-info);
+  --success:                 var(--color-background-success);
+  --success-foreground:      var(--color-text-success);
+  --warning:                 var(--color-background-warning);
+  --warning-foreground:      var(--color-text-warning);
+  --radius:                  var(--border-radius-md,       8px);
+  --radius-sm:               var(--border-radius-sm,    6px);
+  --radius-full:             var(--border-radius-full,  999px);
+
+
   --bg:               var(--background);
   --surface:          var(--card);
   --surface-2:        var(--muted);
@@ -169,36 +165,39 @@ html, body { margin: 0; padding: 0; background: transparent; }
   --toggle-selected-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--primary-foreground) 18%, transparent),
     0 2px 8px color-mix(in srgb, var(--primary) 28%, transparent);
-  --motion-fast:      var(--ave-motion-fast, 160ms);
+  --motion-fast:      var(--meeting-motion-fast, 160ms);
   --shadow:           0 12px 32px rgba(0, 0, 0, .18), 0 4px 10px rgba(0, 0, 0, .08);
 }
 
 .shell[data-shell="dark"] {
-  --background:              var(--ave-bg);
-  --foreground:              var(--ave-fg);
-  --card:                    var(--ave-surface);
-  --card-foreground:         var(--ave-fg);
-  --popover:                 var(--ave-surface);
-  --popover-foreground:      var(--ave-fg);
-  --primary:                 var(--ave-primary);
-  --primary-foreground:      var(--ave-primary-fg);
-  --secondary:               var(--ave-secondary);
-  --secondary-foreground:    var(--ave-secondary-fg);
-  --muted:                   var(--ave-secondary);
-  --muted-foreground:        var(--ave-fg-muted);
-  --accent:                  color-mix(in srgb, var(--ave-primary) 18%, var(--ave-surface));
-  --accent-foreground:       var(--ave-fg);
-  --destructive:             var(--ave-danger);
-  --destructive-foreground:  var(--ave-danger-fg);
-  --border:                  var(--ave-border);
-  --input:                   var(--ave-border);
-  --ring:                    var(--ave-ring);
+  --background:              var(--color-background-primary);
+  --foreground:              var(--color-text-primary);
+  --card:                    var(--color-background-secondary);
+  --card-foreground:         var(--color-text-primary);
+  --popover:                 var(--color-background-secondary);
+  --popover-foreground:      var(--color-text-primary);
+  --primary:                 var(--color-background-info);
+  --primary-foreground:      var(--color-text-inverse);
+  --secondary:               var(--color-background-tertiary);
+  --secondary-foreground:    var(--color-text-primary);
+  --muted:                   var(--color-background-tertiary);
+  --muted-foreground:        var(--color-text-secondary);
+  --accent:                  color-mix(in srgb, var(--color-background-info) 18%, var(--color-background-secondary));
+  --accent-foreground:       var(--color-text-primary);
+  --destructive:             var(--color-background-danger);
+  --destructive-foreground:  var(--color-text-danger);
+  --border:                  var(--color-border-primary);
+  --input:                   var(--color-border-primary);
+  --ring:                    var(--color-ring-info);
   --shadow:                  0 14px 36px rgba(0, 0, 0, .55), 0 4px 12px rgba(0, 0, 0, .35);
 }
 
 .shell {
   width: 100%;
   height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px 18px 16px;
   background: var(--surface);
   border-radius: 18px;
@@ -277,7 +276,8 @@ html, body { margin: 0; padding: 0; background: transparent; }
   font-variant-numeric: tabular-nums;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
-.body { min-height: 56px; flex: 1 1 auto; -webkit-app-region: no-drag; }
+.shell > :not(.body) { flex-shrink: 0; }
+.body { min-height: 56px; flex: 1 1 auto; overflow-y: auto; overflow-wrap: anywhere; -webkit-app-region: no-drag; }
 .wave { height: 56px; width: 100%; display: block; color: var(--text-1); }
 .notes {
   background: var(--surface-2);
@@ -287,9 +287,7 @@ html, body { margin: 0; padding: 0; background: transparent; }
   line-height: 1.55;
   color: var(--text-2);
   white-space: pre-wrap;
-  /* No fixed max-height — the card measures content and asks the host for a
-     taller slot. The host caps the dock, so past that point this overflow rule
-     keeps the rest scrollable rather than spilling outside the shell. */
+
   overflow-y: auto;
   display: none;
 }
@@ -351,9 +349,7 @@ html, body { margin: 0; padding: 0; background: transparent; }
 .capture.loopback { color: var(--success); }
 .capture.mic { color: var(--warning); }
 
-/* Mic device picker + Mic/Mix capture-mode toggle. Compact row above the
-   waveform so the user can swap input mid-meeting (we tear down + restart
-   the audio chain on change). */
+
 .mic-controls {
   display: flex;
   gap: 6px;
@@ -424,9 +420,7 @@ html, body { margin: 0; padding: 0; background: transparent; }
   transform: translateY(0) scale(.98);
 }
 
-/* Reduced motion is authoritative: collapse the tab/mode-toggle lift and
-   shadow transitions to near-zero so selection still registers instantly
-   without the motion itself. */
+
 @media (prefers-reduced-motion: reduce) {
   .shell *,
   .shell *::before,
@@ -464,24 +458,25 @@ const styleEl = document.createElement("style");
 styleEl.textContent = STYLES;
 root.appendChild(styleEl);
 
+const t = key => recorderText(bridge.app.getHostContext()?.locale ?? "ko", key);
 const shell = el("div", { class: "shell" });
 const header = el("div", { class: "header" });
 
-const tabs = el("div", { class: "tabs", role: "tablist", "aria-label": "Recorder view" });
+const tabs = el("div", { class: "tabs", role: "tablist", "aria-label": t("recorderView") });
 const noteTab = el("button", {
   type: "button",
   class: "tab",
   role: "tab",
   "aria-selected": "false",
   "data-state": "inactive",
-}, "Note");
+}, t("note"));
 const meetingTab = el("button", {
   type: "button",
   class: "tab active",
   role: "tab",
   "aria-selected": "true",
   "data-state": "active",
-}, "Meeting");
+}, t("meeting"));
 tabs.appendChild(noteTab);
 tabs.appendChild(meetingTab);
 
@@ -493,7 +488,10 @@ timer.appendChild(timerText);
 header.appendChild(tabs);
 header.appendChild(timer);
 
-const captureBadge = el("div", { class: "capture" }, "녹음 시작 중…");
+const captureBadge = el("div", { class: "capture" }, t("starting"));
+let badgeMode = null;
+let badgeHint;
+let badgeHintKey;
 
 // STT 오류 배너 — `meeting_recorder_levels` 응답의 sttError 필드로 전달된다.
 // quota(429) 같은 일반적 실패는 친화 문구로 매핑하고, 그렇지 않은 경우 원문
@@ -501,41 +499,46 @@ const captureBadge = el("div", { class: "capture" }, "녹음 시작 중…");
 // 배너도 자동으로 사라진다.
 const errorBanner = el("div", { class: "error", style: "display: none" });
 let consecutiveSttFailures = 0;
+let lastSttError = null;
 function classifySttError(raw) {
   const msg = String(raw ?? "");
+  if (msg === "pause-denied") return t("pauseDenied");
   if (/429|quota|rate.?limit|exceeded/i.test(msg)) {
-    return "OpenAI 한도 초과 — STT 일시 중단. platform.openai.com 에서 결제/한도 확인이 필요합니다.";
+    return t("quotaError");
   }
   if (/401|unauthor|invalid.?api.?key/i.test(msg)) {
-    return "OpenAI 인증 실패 — 설정에서 API 키를 확인해주세요.";
+    return t("authError");
   }
   if (/timeout|ECONNRESET|network/i.test(msg)) {
-    return "네트워크 오류 — STT 호출 실패. 잠시 후 자동 재시도.";
+    return t("networkError");
   }
   // Fallback: surface the raw error head, capped, with control chars stripped.
-  return `STT 오류: ${msg.replace(/[\x00-\x1f]/g, " ").slice(0, 120)}`;
+  return `${t("sttError")}: ${msg.replace(/[\x00-\x1f]/g, " ").slice(0, 120)}`;
 }
 function showSttError(raw) {
   consecutiveSttFailures++;
+  lastSttError = raw;
   errorBanner.textContent = classifySttError(raw);
   errorBanner.style.display = "";
 }
 function clearSttError() {
   if (consecutiveSttFailures === 0) return;
   consecutiveSttFailures = 0;
+  lastSttError = null;
   errorBanner.style.display = "none";
 }
 
-// Mic device picker + Mic-only / Mix toggle. Both persist to localStorage
-// so the user's preference survives window close/reopen. Inserting the
-// controls inline rather than a settings popover keeps the floating
-// window single-pane (UX target: no nested modals on a 380x240 surface).
+// Microphone ID is convenience state for one Ave run: it survives panel
+// reopen and resets to unset when Ave restarts. Omitted → host default microphone.
+// Capture mode is convenience state for one Ave run: it survives panel
+// reopen and resets to unset when Ave restarts. Omitted → host capture default.
+// Only explicit choices are sent when capture starts or restarts.
 const PREF_MIC_KEY = "ave.meeting.preferredMicId";
 const PREF_MODE_KEY = "ave.meeting.captureMode";
-let preferredMicId = "";
-let captureMode = "mix"; // "mix" | "mic-only"
+let preferredMicId;
+let captureMode; // unset | "mix" | "mic-only"
 try {
-  preferredMicId = localStorage.getItem(PREF_MIC_KEY) ?? "";
+  preferredMicId = localStorage.getItem(PREF_MIC_KEY) || undefined;
   const savedMode = localStorage.getItem(PREF_MODE_KEY);
   if (savedMode === "mic-only" || savedMode === "mix") captureMode = savedMode;
 } catch { /* localStorage may be unavailable in some contexts */ }
@@ -543,32 +546,34 @@ try {
 const micControls = el("div", { class: "mic-controls" });
 const micSelect = document.createElement("select");
 micSelect.className = "mic-select";
-micSelect.title = "마이크 선택";
+micSelect.title = t("chooseMicrophone");
+micSelect.dataset.listState = "initial";
 const defaultMicOpt = document.createElement("option");
 defaultMicOpt.value = "";
-defaultMicOpt.textContent = "기본 마이크";
+defaultMicOpt.textContent = t("defaultMicrophone");
+defaultMicOpt.dataset.labelKey = "defaultMicrophone";
 micSelect.appendChild(defaultMicOpt);
 
-const modeToggle = el("div", { class: "mode-toggle", role: "radiogroup", "aria-label": "Capture mode" });
+const modeToggle = el("div", { class: "mode-toggle", role: "radiogroup", "aria-label": t("captureMode") });
 const mixOpt = el("button", {
   type: "button",
   class: "mode-opt",
   role: "radio",
   "aria-checked": "false",
   "data-state": "inactive",
-}, "Mix");
+}, t("mix"));
 const micOnlyOpt = el("button", {
   type: "button",
   class: "mode-opt",
   role: "radio",
   "aria-checked": "false",
   "data-state": "inactive",
-}, "Mic only");
+}, t("micOnly"));
 modeToggle.appendChild(mixOpt);
 modeToggle.appendChild(micOnlyOpt);
 
 function syncModeButtons() {
-  const isMix = captureMode === "mix";
+  const isMix = captureMode !== "mic-only";
   mixOpt.classList.toggle("active", isMix);
   mixOpt.setAttribute("aria-checked", String(isMix));
   mixOpt.dataset.state = isMix ? "active" : "inactive";
@@ -584,20 +589,20 @@ micControls.appendChild(modeToggle);
 const body = el("div", { class: "body" });
 const waveCanvas = document.createElement("canvas");
 waveCanvas.className = "wave";
-const notes = el("div", { class: "notes" }, "회의 요약이 아직 생성되지 않았습니다.\n몇 분간 대화가 누적되면 자동으로 표시됩니다.");
+const notes = el("div", { class: "notes" }, t("notesEmpty"));
 body.appendChild(waveCanvas);
 body.appendChild(notes);
 
 const actions = el("div", { class: "actions" });
 const cancelBtn = el("button", { type: "button", class: "btn btn--cancel" });
 cancelBtn.appendChild(svgFromString(ICONS.x));
-cancelBtn.appendChild(document.createTextNode(" Cancel"));
+cancelBtn.appendChild(document.createTextNode(" " + t("cancel")));
 const pauseBtn = el("button", { type: "button", class: "btn btn--pause" });
 pauseBtn.appendChild(svgFromString(ICONS.pause));
-pauseBtn.appendChild(document.createTextNode(" Pause"));
+pauseBtn.appendChild(document.createTextNode(" " + t("pause")));
 const doneBtn = el("button", { type: "button", class: "btn btn--done" });
 doneBtn.appendChild(svgFromString(ICONS.check));
-doneBtn.appendChild(document.createTextNode(" Done"));
+doneBtn.appendChild(document.createTextNode(" " + t("done")));
 actions.appendChild(cancelBtn);
 actions.appendChild(pauseBtn);
 actions.appendChild(doneBtn);
@@ -624,6 +629,7 @@ let sessionId = null;
 let context = null;
 let started = false;
 let isPaused = false;
+let finalizing = false;
 let activeTab = "meeting";
 let timerInterval = null;
 let notesPollInterval = null;
@@ -635,7 +641,7 @@ let rafId = 0;
 
 // Cached so the rAF-driven drawWave() doesn't trigger a style resolve
 // every frame. Seeded immediately from the canvas's CSS `color`
-// (.wave { color: var(--text-1) } → --ave-fg) so the very first paint
+// (.wave { color: var(--text-1) } → --color-text-primary) so the very first paint
 // already tracks the host theme; refreshed on theme change and on first
 // start().
 let waveColor = getComputedStyle(waveCanvas).color || "currentColor";
@@ -646,18 +652,21 @@ function refreshWaveColor() {
   waveColor = getComputedStyle(waveCanvas).color || waveColor;
 }
 
-function setCaptureBadge(mode, hint) {
+function setCaptureBadge(mode, hint, hintKey) {
+  badgeMode = mode; badgeHint = hint; badgeHintKey = hintKey;
+  const key = hintKey ?? (hint === "요청이 거부되었거나 실패했습니다." ? "requestFailed" : hint === "host refused to start recording" ? "startRefused" : hint === "restart refused" ? "restartRefused" : null);
+  const detail = key ? t(key) : hint;
   captureBadge.classList.remove("loopback", "mic");
   if (mode === "loopback") {
     captureBadge.classList.add("loopback");
-    captureBadge.textContent = "🔊 + 🎤 시스템 오디오 + 마이크";
+    captureBadge.textContent = t("capturingMix");
   } else if (mode === "mic") {
     captureBadge.classList.add("mic");
-    captureBadge.textContent = hint
-      ? `🎤 마이크만 — ${hint}`
-      : "🎤 마이크만 캡처 중";
+    captureBadge.textContent = detail
+      ? `${t("microphoneOnly")} — ${detail}`
+      : t("capturingMic");
   } else {
-    captureBadge.textContent = "녹음 시작 중…";
+    captureBadge.textContent = t("starting");
   }
 }
 
@@ -696,53 +705,7 @@ function drawWave() {
   rafId = requestAnimationFrame(drawWave);
 }
 
-// Default compact size — used when we're on the Meeting tab (waveform only).
-const DEFAULT_WINDOW_HEIGHT = 240;
-// Shell layout constants — must mirror the .shell CSS rule for the
-// element-sum measurement to add up correctly.
-const SHELL_PADDING_Y = 14 + 16;     // top + bottom from .shell { padding }
-const SHELL_GAP_TOTAL = 10 * 4;      // .shell gap × (children − 1) — 5 children
-const SHELL_CHROME_BORDER = 2;       // 1px top + 1px bottom border on .shell
-
-/**
- * Ask for a taller slot to fit current shell content. Called on tab switch and
- * after note content updates. Debounced via rAF so a flurry of DOM mutations
- * coalesces into one round-trip.
- *
- * It ASKS. Width is not negotiable and the height is clamped by the host
- * against the whole dock, so the number that comes back is what was applied —
- * never assume the request was honoured.
- *
- * We sum each child element's rendered height directly rather than
- * reading documentElement.scrollHeight — with .shell pinned at
- * `height: 100vh` and .notes set to `overflow-y: auto`, the document
- * never reports overflow even when notes content exceeds the visible
- * shell, so the document-level measurement was always returning the
- * current viewport height. notes.scrollHeight, by contrast, reports
- * the intrinsic content size regardless of any clipping ancestor.
- */
-let resizeRafId = 0;
-function requestWindowResize() {
-  if (typeof host.resize !== "function") return;
-  cancelAnimationFrame(resizeRafId);
-  resizeRafId = requestAnimationFrame(() => {
-    let height;
-    if (activeTab === "note") {
-      const chromePx = header.offsetHeight
-        + captureBadge.offsetHeight
-        + micControls.offsetHeight
-        + actions.offsetHeight;
-      // notes.scrollHeight is intrinsic content height; falls back to
-      // a small min so the very-first call (before refreshNotes lands)
-      // doesn't request an absurdly small window.
-      const notesPx = Math.max(notes.scrollHeight, 56);
-      height = chromePx + notesPx + SHELL_PADDING_Y + SHELL_GAP_TOTAL + SHELL_CHROME_BORDER;
-    } else {
-      height = DEFAULT_WINDOW_HEIGHT;
-    }
-    try { host.resize(height); } catch { /* main may be torn down */ }
-  });
-}
+// The host owns slot height. Notes scroll within the granted viewport; the card never asks the slot to grow.
 
 function normalizeIntermediateEntry(entry) {
   const wrappedData = entry && typeof entry === "object" && entry.data && typeof entry.data === "object"
@@ -770,7 +733,7 @@ async function refreshNotes() {
     lastNotesCount = list.length;
     if (list.length === 0) {
       notes.classList.remove("has-content");
-      notes.textContent = "회의 요약이 아직 생성되지 않았습니다.\n몇 분간 대화가 누적되면 자동으로 표시됩니다.";
+      notes.textContent = t("notesEmpty");
     } else {
       const latest = list[list.length - 1];
       const parts = [];
@@ -781,8 +744,6 @@ async function refreshNotes() {
       notes.textContent = parts.join("\n\n") || notes.textContent;
       notes.classList.add("has-content");
     }
-    // Notes content just changed — resize window to fit (rAF-debounced).
-    if (activeTab === "note") requestWindowResize();
   } catch { /* never break recording on poll error */ }
 }
 
@@ -801,13 +762,12 @@ function setTab(tab) {
     notes.style.display = "block";
     lastNotesCount = -1;
     refreshNotes();
-    if (!notesPollInterval) notesPollInterval = setInterval(refreshNotes, 5000);
+
   } else {
     notes.style.display = "none";
     waveCanvas.style.display = "block";
     if (notesPollInterval) { clearInterval(notesPollInterval); notesPollInterval = null; }
   }
-  requestWindowResize();
 }
 noteTab.addEventListener("click", () => setTab("note"));
 meetingTab.addEventListener("click", () => setTab("meeting"));
@@ -818,36 +778,34 @@ function setBusy(busy) {
   doneBtn.disabled = busy;
 }
 
-pauseBtn.addEventListener("click", () => {
-  isPaused = !isPaused;
-  // Main decides what a pause means now. This window used to enforce it by
-  // dropping worklet batches on the floor; the audio no longer passes through
-  // here, so saying so is the only way to stop it being recorded.
-  host.setPaused(isPaused).catch((err) => {
-    console.warn("[recorder-card] setPaused failed", err);
-  });
-  if (isPaused) {
-    pausedAt = Date.now();
-  } else if (pausedAt) {
-    pausedAccum += Date.now() - pausedAt;
-    pausedAt = 0;
-  }
-  pauseBtn.replaceChildren();
-  pauseBtn.appendChild(svgFromString(isPaused ? ICONS.play : ICONS.pause));
-  pauseBtn.appendChild(document.createTextNode(isPaused ? " Resume" : " Pause"));
+pauseBtn.addEventListener("click", async () => {
+  pauseBtn.disabled = true;
+  try {
+    const nextPaused = !isPaused;
+    const result = await host.setPaused(nextPaused);
+    if (!result?.ok) throw new Error("pause denied");
+    isPaused = nextPaused;
+    if (isPaused) pausedAt = Date.now();
+    else if (pausedAt) { pausedAccum += Date.now() - pausedAt; pausedAt = 0; }
+    pauseBtn.replaceChildren();
+    pauseBtn.appendChild(svgFromString(isPaused ? ICONS.play : ICONS.pause));
+    pauseBtn.appendChild(document.createTextNode(" " + t(isPaused ? "resume" : "pause")));
+  } catch { showSttError("pause-denied"); }
+  finally { pauseBtn.disabled = false; }
 });
 
 cancelBtn.addEventListener("click", async () => {
   setBusy(true);
   // No local teardown: `meeting_cancel` ends the host capture, and
   // ending it in two places would be two authorities for one fact.
-  try { await host.cancel(sessionId); } catch (err) { console.warn("cancel failed", err); }
+  try { await host.cancel(sessionId); } catch (err) { console.warn("cancel failed"); }
   await host.close();
 });
 
 doneBtn.addEventListener("click", async () => {
   setBusy(true);
-  doneBtn.replaceChildren(document.createTextNode("분석 중…"));
+  finalizing = true;
+  doneBtn.replaceChildren(document.createTextNode(t("analyzing")));
   started = false;
   if (levelsPollInterval) { clearInterval(levelsPollInterval); levelsPollInterval = null; }
   // The tail is flushed by `meeting_stop`, in main, where the buffer
@@ -856,10 +814,11 @@ doneBtn.addEventListener("click", async () => {
   // Forward the length tier the user picked on the prep/instant-record
   // screen (carried into this window via init payload context) so the
   // host's meeting_stop sets the matching summarizeFinal verbosity.
-  const tier = context && typeof context === "object" ? context.lengthTier : undefined;
+  const requestedTier = context && typeof context === "object" ? context.lengthTier : undefined;
+  const tierArgs = ["short", "medium", "long"].includes(requestedTier) ? { lengthTier: requestedTier } : {};
   try {
-    await host.stop(sessionId, tier ? { lengthTier: tier } : undefined);
-  } catch (err) { console.error("stop failed", err); }
+    await host.stop(sessionId, tierArgs);
+  } catch (err) { console.error("stop failed"); }
   await host.close();
 });
 
@@ -873,20 +832,32 @@ doneBtn.addEventListener("click", async () => {
 // labels in. The selected option remains the preferred mic id so the
 // "selected" state survives the rebuild.
 async function populateMicList() {
-  let inputs = [];
+  let inputs;
   try {
     const res = await host.listMicrophones();
-    inputs = Array.isArray(res?.devices) ? res.devices : [];
-  } catch (err) {
-    console.warn("[recorder-card] listMicrophones failed", err);
+    if (res?.ok !== true || !Array.isArray(res.devices)) throw new Error("microphone list unavailable");
+    inputs = res.devices;
+  } catch {
+    const unavailable = document.createElement("option");
+    micSelect.dataset.listState = "unavailable";
+    unavailable.dataset.labelKey = "microphonesUnavailable";
+    unavailable.value = "";
+    unavailable.textContent = t("microphonesUnavailable");
+    micSelect.replaceChildren(unavailable);
+    micSelect.disabled = true;
+    micSelect.setAttribute("aria-label", t("microphonesUnavailable"));
     return;
   }
+  micSelect.dataset.listState = inputs.length ? "ready" : "empty";
+  micSelect.disabled = inputs.length === 0;
+  micSelect.setAttribute("aria-label", inputs.length ? t("microphone") : t("microphonesEmpty"));
   // Preserve current dropdown value across rebuild — restore it after.
   const desired = preferredMicId;
   micSelect.replaceChildren();
   const def = document.createElement("option");
   def.value = "";
-  def.textContent = "기본 마이크";
+  def.dataset.labelKey = inputs.length ? "defaultMicrophone" : "microphonesEmpty";
+  def.textContent = inputs.length ? t("defaultMicrophone") : t("microphonesEmpty");
   micSelect.appendChild(def);
   for (const d of inputs) {
     const opt = document.createElement("option");
@@ -894,7 +865,8 @@ async function populateMicList() {
     // Labels come up empty until microphone access has been granted at least
     // once — the browser's rule, and the host reports it as it finds it. Show
     // a placeholder so the dropdown is not a row of identical blank options.
-    opt.textContent = d.label || `마이크 (${(d.deviceId || "").slice(0, 6)}…)`;
+    if (!d.label) opt.dataset.deviceSuffix = (d.deviceId || "").slice(0, 6);
+    opt.textContent = d.label || `${t("microphone")} (${opt.dataset.deviceSuffix}…)`;
     micSelect.appendChild(opt);
   }
   // Re-select the user's preferred mic if it's still present.
@@ -909,23 +881,23 @@ async function populateMicList() {
 // and starts a new one; this window only says what it wants.
 async function restartCapture() {
   if (!started) return;
-  setCaptureBadge("mic", "장치 변경 중…");
+  setCaptureBadge("mic", undefined, "changingDevice");
   try {
     const res = await host.restartCapture({
-      captureMode,
-      micId: preferredMicId || "",
+      ...(captureMode ? { captureMode } : {}),
+      ...(preferredMicId ? { micId: preferredMicId } : {}),
     });
     if (!res || res.ok !== true) throw new Error(res?.error || "restart refused");
     setCaptureBadge(res.mode === "loopback" ? "loopback" : "mic");
   } catch (err) {
     setCaptureBadge("mic", (err?.message ?? err).toString().slice(0, 60));
-    console.error("[recorder-card] restartCapture failed", err);
+    console.error("[recorder-card] restartCapture failed");
   }
 }
 
-micSelect.addEventListenermicSelect.addEventListener("change", () => {
-  preferredMicId = micSelect.value || "";
-  try { localStorage.setItem(PREF_MIC_KEY, preferredMicId); } catch { /* noop */ }
+micSelect.addEventListener("change", () => {
+  preferredMicId = micSelect.value || undefined;
+  try { localStorage.setItem(PREF_MIC_KEY, preferredMicId ?? ""); } catch { /* noop */ }
   // If we're already recording, swap the mic by restarting capture.
   // Pre-record changes just persist for next start().
   if (started) restartCapture();
@@ -977,13 +949,13 @@ async function start(payload) {
   sessionId = payload?.sessionId;
   context = payload?.context;
   if (!sessionId) {
-    setCaptureBadge("mic", "sessionId 없음");
+    setCaptureBadge("mic", undefined, "sessionMissing");
     return;
   }
   try {
     const res = await host.start(sessionId, context, {
-      captureMode,
-      micId: preferredMicId || "",
+      ...(captureMode ? { captureMode } : {}),
+      ...(preferredMicId ? { micId: preferredMicId } : {}),
     });
     if (!res || res.ok !== true) {
       throw new Error(
@@ -995,7 +967,7 @@ async function start(payload) {
     setCaptureBadge(res.mode === "loopback" ? "loopback" : "mic");
   } catch (err) {
     setCaptureBadge("mic", (err?.message ?? err).toString().slice(0, 60));
-    console.warn("[recorder-card] host.start failed", err);
+    console.warn("[recorder-card] host.start failed");
     return;
   }
   started = true;
@@ -1011,25 +983,46 @@ async function start(payload) {
   populateMicList().catch(() => { /* the list stays as it was */ });
 }
 
-// primeTheme subscribes to `host.theme.changed` over the bridge and paints
 // validated tokens onto the shell. The TARGET is the shell rather than the
 // document: this card shares its document with the dock's own chrome and with
 // any other plugin's slot, so painting on `documentElement` would let one
 // card's theme decide everyone else's.
-primeTheme(bridge, {
-  target: shell,
-  onPayload: () => refreshWaveColor(),
-});
+function refreshRecorderLabels() {
+  tabs.setAttribute("aria-label", t("recorderView"));
+  noteTab.textContent = t("note");
+  meetingTab.textContent = t("meeting");
+  modeToggle.setAttribute("aria-label", t("captureMode"));
+  mixOpt.textContent = t("mix");
+  micOnlyOpt.textContent = t("micOnly");
+  cancelBtn.lastChild.textContent = " " + t("cancel");
+  pauseBtn.lastChild.textContent = " " + t(isPaused ? "resume" : "pause");
+  doneBtn.lastChild.textContent = finalizing ? t("analyzing") : " " + t("done");
+  micSelect.title = t("chooseMicrophone");
+  const state = micSelect.dataset.listState;
+  micSelect.setAttribute("aria-label", t(state === "unavailable" ? "microphonesUnavailable" : state === "empty" ? "microphonesEmpty" : "microphone"));
+  for (const option of micSelect.options) {
+    if (option.dataset.labelKey) option.textContent = t(option.dataset.labelKey);
+    else if (option.dataset.deviceSuffix !== undefined) option.textContent = `${t("microphone")} (${option.dataset.deviceSuffix}…)`;
+  }
+  if (!notes.classList.contains("has-content")) notes.textContent = t("notesEmpty");
+  if (lastSttError !== null) errorBanner.textContent = classifySttError(lastSttError);
+  setCaptureBadge(badgeMode, badgeHint, badgeHintKey);
+}
+applyHostContext(bridge.app, shell, () => { refreshRecorderLabels(); refreshWaveColor(); });
 
 // What session this card is showing. The dock carries no per-slot payload by
 // design — a card asks its own plugin — so this is the first thing it does.
+const stopChanges = watchChanges(bridge, async () => { await pollLevels(); if (activeTab === "note") await refreshNotes(); });
+window.addEventListener("pagehide", () => { stopChanges(); clearInterval(levelsPollInterval); clearInterval(timerInterval); clearInterval(notesPollInterval); cancelAnimationFrame(rafId); bridge.dispose(); }, { once: true });
 try {
   const payload = await host.getInit();
   if (payload) start(payload);
-  else setCaptureBadge("mic", "표시할 세션이 없습니다");
+  else setCaptureBadge("mic", undefined, "noSession");
 } catch (err) {
   setCaptureBadge("mic", (err?.message ?? err).toString().slice(0, 60));
-  console.error("[recorder-card] init failed", err);
+  console.error("[recorder-card] init failed");
 }
 
 }
+
+mount().catch(() => { document.getElementById("app").textContent = recorderText(document.documentElement.lang || "ko", "loadFailed"); });

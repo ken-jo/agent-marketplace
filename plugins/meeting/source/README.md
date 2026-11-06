@@ -1,15 +1,11 @@
-# @ave/plugin-meeting
-Electron 앱에서 사용할 수 있는 회의록 코어 라이브러리입니다.
+# Ave Meeting 0.10.3
 
-핵심 파이프라인:
-- STT 전사
-- 중간 요약(intermediate summary)
-- 최종 요약(final summary)
-- (호스트 연동 시) 익스텐션 메서드/메타데이터를 통해 UI 확장 포인트 제공
+Requires Ave 0.14.2 / host protocol 5. Views use the MCP Apps SDK and standard host-context theme variables.
+Snapshot tools and the app-only, cursor-based `meeting_wait_changes` refresh views without a private channel.
+Users or agents explicitly request prep, recording and summaries. Automatic calendar subscriptions are removed.
+Copying minutes/links requests clipboard write permission; refused writes show an error. No clipboard reads.
 
-이 저장소는 기존 서버 중심 코드에서 회의록 코어를 분리해, 클라이언트 PC(Electron 메인 프로세스)에서도 재사용 가능하도록 TypeScript 모듈 구조로 전환하는 것을 목표로 합니다.
-실제 UI 렌더링은 호스트 앱(Ave)의 renderer에서 수행하며, 본 익스텐션은 호스트가 소비할 기능 메서드와 `plugin.json`의 `ui` 메타데이터, 그리고 익스텐션 내부 UI 페이지(`dist/ui/meeting-control.html`)를 제공합니다.
-익스텐션 UI 페이지는 `postMessage`로 호스트 브리지와 통신해 `meeting_start`, `batch_processing_audio`, `meeting_push_chunk`, `meeting_stop`, `meeting_transcript` 메서드를 호출합니다.
+회의 녹음·전사·준비·요약을 제공하는 MCP stdio 익스텐션입니다. 사이드바와 플로팅 녹음 카드는 자체 포함 HTML로 제공되며, `@modelcontextprotocol/ext-apps`의 `App.connect()`와 `callServerTool()`로 서버 도구를 호출합니다. 오디오 캡처, 업로드 임시 파일, STT host fetch, 비밀 임대 및 FFmpeg worker는 서버에 유지됩니다.
 
 ## 설치
 ```bash
@@ -64,7 +60,7 @@ bun run build
 
 ## 제공 Extension API
 
-메서드 ID는 Ave canonical underscore convention을 따르며 (`meeting_start`, `meeting_push_chunk` 등), 이벤트 채널은 `meeting.started`, `meeting.summary.created`처럼 dotted naming을 유지합니다.
+메서드 ID는 `meeting_start`, `meeting_push_chunk` 등의 underscore convention을 따릅니다. 두 패널은 `ui://meeting/control`, `ui://meeting/recorder` HTML 리소스를 사용합니다.
 
 ### 세션 제어
 - `meeting_start` — 녹음 플로팅 윈도우 열기 및 회의 세션 시작
@@ -106,27 +102,9 @@ bun run build
 - `meeting_upload_file` — 사전 녹음 파일(오디오/비디오) 업로드 후 STT + 요약
 - `meeting_open_url` — 외부 URL 열기
 
-## 이벤트
+## 화면 갱신
 
-### 발행 이벤트 (emittedEvents)
-| 이벤트 | 설명 |
-|--------|------|
-| `meeting.started` | 세션 시작 |
-| `meeting.ended` | 세션 종료 |
-| `meeting.transcript.updated` | 실시간 전사 업데이트 |
-| `meeting.summary.created` | 최종 요약 생성 완료 (actionItems 포함) |
-| `meeting.summary.degraded` | 요약 생성 부분 실패 |
-| `meeting.error` | 파이프라인 오류 |
-| `meeting.prep.opened` | 회의 사전 준비 화면 열림 |
-| `meeting.prep.registered` | 회의 사전 등록 완료 |
-
-### 알림 이벤트 (notificationEvents)
-호스트 알림 시스템에 자동 연동:
-- `meeting.summary.created` — 요약 완료 알림
-- `meeting.summary.degraded` — 요약 실패 경고 알림
-
-### 구독 이벤트 (eventSubscriptions)
-- `host.theme.changed` — 호스트 테마 변경 시 플로팅 윈도우에 전파
+`meeting_view_state`로 초기화하고 `meeting_wait_changes` 결과의 cursor를 다음 요청에 전달합니다. 변경이 있으면 목록·상세·전사 snapshot을 다시 읽습니다. waitMs는 0–10000, 기록은 최대 256개, 동시 대기는 최대 16개입니다. 재시작·만료 cursor는 reset을 반환합니다.
 
 ## Capabilities
 - `meeting-recorder`
@@ -145,11 +123,11 @@ const recorder = new ElectronMeetingRecorder(pipeline);
 const sessionId = "meeting-2026-04-08";
 
 recorder.on("intermediate-summary", (payload) => {
-  console.log("중간 요약:", payload.summary);
+  process.stderr.write("meeting intermediate summary ready\n");
 });
 
 recorder.on("final-summary", (payload) => {
-  console.log("최종 요약:", payload.title, payload.summary);
+  process.stderr.write("meeting final summary ready\n");
 });
 
 recorder.start(sessionId, { locale: "ko", contextHint: "주간 제품 회의" });

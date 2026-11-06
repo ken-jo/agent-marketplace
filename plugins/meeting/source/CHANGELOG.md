@@ -1,4 +1,14 @@
-# Changelog  
+# Changelog
+
+## [0.10.3] - Unreleased
+
+- Reserve enough initial dock height for the MCP App frame and recorder controls.
+
+- Require Ave 0.14.2 / protocol 5; serve sidebar and floating recorder as MCP Apps HTML.
+- Replace private view updates with snapshots and a bounded app-only change wait.
+- Remove calendar automation and cross-extension subscriptions; retain explicit user/agent prep and recording.
+- Keep uploads, audio, credential leases and governed workers server-side; log fixed codes to stderr.
+- Declare only effect-free reads; mutating and host-effect tools retain approval.
 
 ## [0.10.2] - Unreleased
 
@@ -58,18 +68,10 @@ Ave 0.11.x keeps 0.9.0.
 - The `work_assistant.calendar.sync.requested`,
   `work_assistant.meeting.prep.requested` and
   `work_assistant.meeting.recording.requested` grants, subscriptions and
-  handlers. Calendar automation comes only from ms-graph's calendar events.
+  handlers.
   Rows keep work-assistant's `mscal-…` and `wa-…` identities, so preps it
   registered stay the same entries. The `configInherits` and alert migration
   metadata are unchanged.
-
-### Fixed — calendar automation after a restart
-
-- Which meetings already opened their prep or started their recording is kept
-  in `calendar-automation-claims.json` through the storage HostApi, not only in
-  memory. A restart inside a meeting's 5-minute prep window no longer opens the
-  prep again. Each claim expires one hour after its meeting ends and is then
-  dropped from the file.
 
 ### Fixed — FFmpeg runtime download under host protocol 2
 
@@ -95,25 +97,17 @@ Ave 0.11.x keeps 0.9.0.
 
 Requires Ave 0.11.0, the release that carries the host alert contract.
 
-### Added — meeting alerts and calendar automation owned by meeting
+### Added — meeting alerts
 
 - Two alert kinds, both off until you turn them on in the extension's Alerts
   settings: `summary-ready` (title, up to three highlights and action items)
   and `summary-degraded` (summary only). Former work-assistant users inherit
   their meeting-summary choice.
-- Calendar automation (`calendarAutomationEnabled`, off by default, turned on
-  for former work-assistant users): prep registration from ms-graph's
-  `calendar.events.loaded`, `calendar.event.added`, `upcoming` and
-  `starting`, a prep five minutes before start and the recorder at start.
-  Meeting asks ms-graph for the two-day snapshot when the automation starts.
-- Rows, preps and recording sessions keep work-assistant's identities
-  (`mscal-…`, `wa-…`), so a work-assistant that is still loaded and meeting's
-  own automation register, open and record each meeting once.
 
 ### Removed
 
 - The OS notifications for `meeting.summary.created` and
-  `meeting.summary.degraded` (`notificationEvents`). Summary notifications
+  `meeting.summary.degraded` (`retired notification declaration`). Summary notifications
   stop until you turn on the `summary-ready` or `summary-degraded` kind.
 
 ### Kept until the follow-on release
@@ -150,7 +144,7 @@ Requires Ave 0.11.0, the release that carries the host alert contract.
 ### Changed — the manifest drift guards now read the bundled UI
 
 `validate-hostapi.mjs` and `validate-events.mjs` walked TypeScript only, so a
-`bridge.callTool("…")` or `bridge.onEvent("…")` in `src/ui/*.js` could name a
+`bridge.callTool("…")` or `retired view subscription("…")` in `src/ui/*.js` could name a
 tool or event `plugin.json` no longer declares and both guards stayed green.
 The host does not: a tool without `"app"` visibility is rejected at the IPC
 boundary, and an event no manifest emits is never forwarded to the webview.
@@ -158,7 +152,7 @@ boundary, and an event no manifest emits is never forwarded to the webview.
 Both guards now scan `src/ui/**/*.js` through one shared scanner
 (`scripts/ui-bridge-usage.mjs`), so they cannot disagree about what the UI
 references. A `bridge.callTool` literal must name a tool carrying `"app"`
-visibility. A `bridge.onEvent` literal must name an event the host actually
+visibility. A `retired view subscription` literal must name an event the host actually
 forwards to the UI: this plugin's own `emittedEvents`, a foreign event listed
 in `eventSubscriptions`, or a host broadcast — `host.theme.changed` reaches
 every plugin webview from the host itself, so `primeTheme` needs no
@@ -520,7 +514,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 - `plugin.json`: `meeting_open_url` category `network` → `read` (host 가 OS 핸드오프만 수행)
 - `plugin.json`: 신규 4개 write 도구에 `pathFields: []` 명시
 - `plugin.json`: `configSchema.sttApiKey` 에 `format: "secret"`
-- `plugin.json`: main-process 핸들러가 없던 `eventSubscriptions[host.theme.changed]` 제거 (webview 측 `bridge.onEvent` 가 처리)
+- `plugin.json`: main-process 핸들러가 없던 `eventSubscriptions[host.theme.changed]` 제거 (webview 측 `retired view subscription` 가 처리)
 - `package.json`: 사용하지 않는 `openai`/`ws` 를 `peerDependencies` + `devDependencies` 양쪽에서 제거 (어댑터는 `fetch()` 직접 사용)
 - `src/hostPlugin.ts`: local `HostPluginContext` shadow type 제거 → the plugin SDK 의 `PluginRuntimeContext` 채택 (SoT 일원화)
 - `src/hostPlugin.ts`: 사용 안 하던 `OpenAISummaryProvider` / `MockSummaryProvider` fallback 경로 삭제 — 단일 `HostLlmSummaryProvider` 경로
@@ -528,7 +522,7 @@ const entries = raw.preps ?? raw.briefings ?? [];
 ### Fixed
 - `meeting.transcript.updated` 페이로드 키 `meetingId` → `sessionId` (다른 lifecycle 이벤트와 parity, agent-hub/calendar 등 downstream 구독 정상화)
 - floating recorder window: `window.host.start` 실패 또는 `{ ok: false }` 시 silent 진행 대신 capture badge 에 에러 메시지 표시 후 즉시 return
-- "No Fallback Code" optional-chain 일괄 제거 — `hostApi.config?.get`, `hostApi.logEvent?.(...)` 35+ 사이트, `hostApi.callLlm` 분기, `hostApi.onShutdown?.()` 모두 required 로 사용
+- "No Fallback Code" optional-chain 일괄 제거 — `hostApi.config?.get`, `retired host logger?.(...)` 35+ 사이트, `hostApi.callLlm` 분기, `retired shutdown hook?.()` 모두 required 로 사용
 
 ### Security
 - **STT API key 암호화**: Electron `safeStorage` (당시 옛 패키지 스코프 plugin SDK 의 `runtime/electron` 진입점) 로 sidecar 에 ciphertext + mask 만 저장. 기존 plaintext 사이드카 자동 감지 → 1회 마이그레이션. `safeStorage` 없을 때 plaintext 키 저장 거부

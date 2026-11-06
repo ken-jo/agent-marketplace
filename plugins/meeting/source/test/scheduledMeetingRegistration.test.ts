@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { ChangeStream } from "../src/changeStream.js";
+import { describe, it, expect, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ function makeContext() {
   const root = mkdtempSync(join(tmpdir(), "ave-meeting-scheduled-"));
   mkdirSync(join(root, "sessions"), { recursive: true });
   const emitted: EmittedEvent[] = [];
+  vi.spyOn(ChangeStream.prototype, "publish").mockImplementation((type, data) => { emitted.push({ type, data }); });
   return {
     root,
     emitted,
@@ -24,13 +26,13 @@ function makeContext() {
       pluginDataDir: root,
       log: (_msg: string) => { /* noop */ },
       hostApi: {
-        emitEvent: (type: string, data?: unknown) => {
+        observeChange: (type: string, data?: unknown) => {
           emitted.push({ type, data });
         },
-        onEvent: () => () => {},
+
         getSecret: () => null,
-        logEvent: () => { /* noop */ },
-        onShutdown: () => { /* noop */ },
+        diagnostic: () => { /* noop */ },
+
         config: {
           get: () => undefined,
           onChange: () => () => { /* noop */ },
