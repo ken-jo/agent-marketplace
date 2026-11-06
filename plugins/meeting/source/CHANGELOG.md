@@ -2,6 +2,8 @@
 
 ## [0.10.3] - Unreleased
 
+- Reserve enough initial dock height for the MCP App frame and recorder controls.
+
 - Require Ave 0.14.2 / protocol 5; serve sidebar and floating recorder as MCP Apps HTML.
 - Replace private view updates with snapshots and a bounded app-only change wait.
 - Remove calendar automation and cross-extension subscriptions; retain explicit user/agent prep and recording.

@@ -3593,7 +3593,8 @@ export default async function createPlugin(context: HostPluginContext) {
    * independent pixels. A REQUEST — the dock clamps against the work area and
    * against what is already attached, and `handle.height` is what was applied.
    */
-  const RECORDER_PANEL_HEIGHT = 240;
+  // Include room for MCP Apps framing so the recorder controls remain visible.
+  const RECORDER_PANEL_HEIGHT = 360;
 
   /**
    * Put the recorder card in the host's floating dock.
