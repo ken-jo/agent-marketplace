@@ -1,4 +1,4 @@
-export type ViewChanges = { reset?: boolean; changes: Array<{ kind: string; sessionId?: string }> };
+export type ViewChanges = { reset?: boolean; changes: Array<{ kind: string; sessionId?: string; deferredDuringEdit?: boolean }> };
 export type ViewState = { view: string; detailTab?: string; editing?: boolean; dirty?: boolean };
 
 /** Background invalidations must not replace a draft or an unrelated view. */
@@ -31,14 +31,15 @@ export function createErrorConsumer(initial?: { sequence: number } | null): (err
 /** Coalesce invalidations while a draft is open, then consume them once. */
 export function createPendingChanges() {
   let reset = false;
-  const changes = new Map<string, {kind: string; sessionId?: string}>();
+  const changes = new Map<string, ViewChanges["changes"][number]>();
   return {
     defer(result: ViewChanges) {
       reset ||= result.reset === true;
       for (const change of result.changes) {
         const key = change.kind + ":" + (change.sessionId ?? "");
+        const previous = changes.get(key);
         changes.delete(key);
-        changes.set(key, change);
+        changes.set(key, { ...change, ...(previous?.deferredDuringEdit ? { deferredDuringEdit: true } : {}) });
         if (changes.size > 256) { reset = true; changes.delete(changes.keys().next().value!); }
       }
     },
@@ -54,5 +55,16 @@ export function createPendingChanges() {
 /** A later end event must never navigate to an earlier recording. */
 export function endedSessionToOpen(result: ViewChanges, activeSessionId: string | null): string | null {
   const ended = result.changes.filter(change => change.kind === "meeting.ended").at(-1);
-  return ended?.sessionId && ended.sessionId === activeSessionId ? ended.sessionId : null;
+  return !ended?.deferredDuringEdit && ended?.sessionId && ended.sessionId === activeSessionId ? ended.sessionId : null;
+}
+
+/** Completion noticed while editing must inform the user without moving them. */
+export function endedSessionToNotify(result: ViewChanges, activeSessionId: string | null): string | null {
+  const ended = result.changes.filter(change => change.kind === "meeting.ended" && change.deferredDuringEdit && change.sessionId === activeSessionId).at(-1);
+  return ended?.sessionId ?? null;
+}
+
+/** Remember the edit at receipt time, even if it closes while a snapshot is pending. */
+export function deferCompletionNavigation(result: ViewChanges): ViewChanges {
+  return { ...result, changes: result.changes.map(change => change.kind === "meeting.ended" ? { ...change, deferredDuringEdit: true } : change) };
 }

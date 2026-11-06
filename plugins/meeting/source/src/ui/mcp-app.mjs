@@ -29,7 +29,7 @@ export async function connectView(name) {
   };
 }
 
-export function applyHostContext(app, target) {
+export function applyHostContext(app, target, onContextChanged = () => {}) {
   let painted = new Set();
   const paint = ctx => {
     const variables = ctx?.styles?.variables ?? {};
@@ -39,6 +39,7 @@ export function applyHostContext(app, target) {
     for (const [key, value] of Object.entries(ctx?.styles?.variables ?? {})) {
       if (typeof value === 'string') target.style.setProperty(key, value);
     }
+    onContextChanged(ctx);
   };
   paint(app.getHostContext());
   app.onhostcontextchanged = () => paint(app.getHostContext());

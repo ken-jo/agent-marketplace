@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { recorderText } from "../src/ui/recorderI18n.js";
 
 const sidebar = readFileSync(new URL("../src/ui/meeting-control.mjs", import.meta.url), "utf8");
 const recorder = readFileSync(new URL("../src/ui/recorder-card.js", import.meta.url), "utf8");
@@ -27,7 +28,8 @@ describe("run-local preference defaults", () => {
       let click: () => Promise<void> = async () => {};
       const stop = vi.fn(async () => {});
       runInNewContext(slice(recorder, 'doneBtn.addEventListener', '// ─── Mic device picker'), {
-        context, sessionId: "fixture", started: false, levelsPollInterval: null,
+        context, sessionId: "fixture", started: false, finalizing: false, levelsPollInterval: null,
+        t: (key: Parameters<typeof recorderText>[1]) => recorderText("en", key),
         doneBtn: { addEventListener: (_name: string, callback: typeof click) => { click = callback; }, replaceChildren: () => {} },
         setBusy: () => {}, document: { createTextNode: (text: string) => text },
         host: { stop, close: async () => {} }, console,

@@ -90,13 +90,13 @@ describe("recorder microphone availability UI", () => {
     const source = readFileSync(new URL("../src/ui/recorder-card.js", import.meta.url), "utf8");
     const start = source.indexOf("async function populateMicList()");
     const end = source.indexOf("// Restart the audio chain", start);
-    const select = { options: [] as Array<{value: string; textContent: string}>, disabled: false, value: "", label: "",
+    const select = { dataset: {}, options: [] as Array<{value: string; textContent: string}>, disabled: false, value: "", label: "",
       replaceChildren(...items: Array<{value: string; textContent: string}>) { this.options = items; },
       appendChild(item: {value: string; textContent: string}) { this.options.push(item); },
       setAttribute(_key: string, value: string) { this.label = value; } };
     const populate = runInNewContext(source.slice(start, end) + "\npopulateMicList", {
       host: { listMicrophones: async () => { if (rejects) throw Error("denied"); return result; } },
-      t: (key: Parameters<typeof recorderText>[1]) => recorderText("en", key), micSelect: select, preferredMicId: "", document: { createElement: () => ({value: "", textContent: ""}) },
+      t: (key: Parameters<typeof recorderText>[1]) => recorderText("en", key), micSelect: select, preferredMicId: "", document: { createElement: () => ({value: "", textContent: "", dataset: {}}) },
     });
     await populate();
     return select;

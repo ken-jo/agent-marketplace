@@ -1,7 +1,7 @@
 
 
 import { connectView, applyHostContext, watchChanges } from "./mcp-app.mjs";
-import { shouldRefreshView, createErrorConsumer, createPendingChanges, endedSessionToOpen } from "./viewUpdates.ts";
+import { shouldRefreshView, createErrorConsumer, createPendingChanges, endedSessionToOpen, endedSessionToNotify, deferCompletionNavigation } from "./viewUpdates.ts";
 import {
   CUSTOM_PROMPT_MAX_BYTES,
   buildFinalSystem,
@@ -3862,15 +3862,22 @@ async function mount() {
     const editing = !!scope.querySelector('.summary[data-summary-mode="edit"], .summary[data-summary-mode="busy"], .summary[data-summary-mode="regen"], .prompt-overlay');
     const dirty = !!scope.querySelector('[data-dirty="true"]');
     const detailTab = viewArea.querySelector(".detail-body")?.dataset.tab ?? "summary";
-    if (editing || dirty) { pendingChanges.defer(result); return; }
+    if (editing || dirty) {
+      pendingChanges.defer(deferCompletionNavigation(result));
+      return;
+    }
     pendingChanges.defer(result);
     result = pendingChanges.take();
     const endedSessionId = endedSessionToOpen(result, activeFloatingSessionId);
+    const notifySessionId = endedSessionToNotify(result, activeFloatingSessionId);
     if (activeFloatingSessionId && !state.recorder && !state.activeSessions.includes(activeFloatingSessionId)) {
-      const sid = endedSessionId;
+      const sid = endedSessionId ?? notifySessionId;
       activeFloatingSessionId = null;
       const detail = sid ? await bridge.callTool("meeting_session_detail", { sessionId: sid }) : null;
-      if (detail?.finalSummary) { setView("session-detail", sid); return; }
+      if (detail?.finalSummary) {
+        if (notifySessionId) showSuccessToast("“" + (detail.finalSummary.title || detail.context?.title || sid) + "” 회의가 종료되었습니다.");
+        else { setView("session-detail", sid); return; }
+      }
     }
     if (!shouldRefreshView(result, { view: currentView, detailTab, editing, dirty })) return;
     if (currentView === "session-detail") pendingSubTab = detailTab;
@@ -3878,6 +3885,7 @@ async function mount() {
   }
   let refreshQueue = Promise.resolve();
   function scheduleRefresh(result) {
+    if (scope.querySelector('.summary[data-summary-mode="edit"], .summary[data-summary-mode="busy"], .summary[data-summary-mode="regen"], .prompt-overlay, [data-dirty="true"]')) result = deferCompletionNavigation(result);
     const next = refreshQueue.then(() => refreshChanges(result));
     refreshQueue = next.catch(() => {});
     return next;
@@ -4042,6 +4050,7 @@ async function mount() {
 
       const cleanup = (value) => {
         overlay.remove();
+        flushPendingChanges();
         resolve(value);
       };
       const submit = () => {

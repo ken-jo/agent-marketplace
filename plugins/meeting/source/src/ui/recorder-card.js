@@ -462,7 +462,7 @@ const t = key => recorderText(bridge.app.getHostContext()?.locale ?? "ko", key);
 const shell = el("div", { class: "shell" });
 const header = el("div", { class: "header" });
 
-const tabs = el("div", { class: "tabs", role: "tablist", "aria-label": "Recorder view" });
+const tabs = el("div", { class: "tabs", role: "tablist", "aria-label": t("recorderView") });
 const noteTab = el("button", {
   type: "button",
   class: "tab",
@@ -488,7 +488,10 @@ timer.appendChild(timerText);
 header.appendChild(tabs);
 header.appendChild(timer);
 
-const captureBadge = el("div", { class: "capture" }, "녹음 시작 중…");
+const captureBadge = el("div", { class: "capture" }, t("starting"));
+let badgeMode = null;
+let badgeHint;
+let badgeHintKey;
 
 // STT 오류 배너 — `meeting_recorder_levels` 응답의 sttError 필드로 전달된다.
 // quota(429) 같은 일반적 실패는 친화 문구로 매핑하고, 그렇지 않은 경우 원문
@@ -496,28 +499,32 @@ const captureBadge = el("div", { class: "capture" }, "녹음 시작 중…");
 // 배너도 자동으로 사라진다.
 const errorBanner = el("div", { class: "error", style: "display: none" });
 let consecutiveSttFailures = 0;
+let lastSttError = null;
 function classifySttError(raw) {
   const msg = String(raw ?? "");
+  if (msg === "pause-denied") return t("pauseDenied");
   if (/429|quota|rate.?limit|exceeded/i.test(msg)) {
-    return "OpenAI 한도 초과 — STT 일시 중단. platform.openai.com 에서 결제/한도 확인이 필요합니다.";
+    return t("quotaError");
   }
   if (/401|unauthor|invalid.?api.?key/i.test(msg)) {
-    return "OpenAI 인증 실패 — 설정에서 API 키를 확인해주세요.";
+    return t("authError");
   }
   if (/timeout|ECONNRESET|network/i.test(msg)) {
-    return "네트워크 오류 — STT 호출 실패. 잠시 후 자동 재시도.";
+    return t("networkError");
   }
   // Fallback: surface the raw error head, capped, with control chars stripped.
-  return `STT 오류: ${msg.replace(/[\x00-\x1f]/g, " ").slice(0, 120)}`;
+  return `${t("sttError")}: ${msg.replace(/[\x00-\x1f]/g, " ").slice(0, 120)}`;
 }
 function showSttError(raw) {
   consecutiveSttFailures++;
+  lastSttError = raw;
   errorBanner.textContent = classifySttError(raw);
   errorBanner.style.display = "";
 }
 function clearSttError() {
   if (consecutiveSttFailures === 0) return;
   consecutiveSttFailures = 0;
+  lastSttError = null;
   errorBanner.style.display = "none";
 }
 
@@ -539,13 +546,15 @@ try {
 const micControls = el("div", { class: "mic-controls" });
 const micSelect = document.createElement("select");
 micSelect.className = "mic-select";
-micSelect.title = "마이크 선택";
+micSelect.title = t("chooseMicrophone");
+micSelect.dataset.listState = "initial";
 const defaultMicOpt = document.createElement("option");
 defaultMicOpt.value = "";
-defaultMicOpt.textContent = "기본 마이크";
+defaultMicOpt.textContent = t("defaultMicrophone");
+defaultMicOpt.dataset.labelKey = "defaultMicrophone";
 micSelect.appendChild(defaultMicOpt);
 
-const modeToggle = el("div", { class: "mode-toggle", role: "radiogroup", "aria-label": "Capture mode" });
+const modeToggle = el("div", { class: "mode-toggle", role: "radiogroup", "aria-label": t("captureMode") });
 const mixOpt = el("button", {
   type: "button",
   class: "mode-opt",
@@ -580,7 +589,7 @@ micControls.appendChild(modeToggle);
 const body = el("div", { class: "body" });
 const waveCanvas = document.createElement("canvas");
 waveCanvas.className = "wave";
-const notes = el("div", { class: "notes" }, "회의 요약이 아직 생성되지 않았습니다.\n몇 분간 대화가 누적되면 자동으로 표시됩니다.");
+const notes = el("div", { class: "notes" }, t("notesEmpty"));
 body.appendChild(waveCanvas);
 body.appendChild(notes);
 
@@ -620,6 +629,7 @@ let sessionId = null;
 let context = null;
 let started = false;
 let isPaused = false;
+let finalizing = false;
 let activeTab = "meeting";
 let timerInterval = null;
 let notesPollInterval = null;
@@ -642,18 +652,21 @@ function refreshWaveColor() {
   waveColor = getComputedStyle(waveCanvas).color || waveColor;
 }
 
-function setCaptureBadge(mode, hint) {
+function setCaptureBadge(mode, hint, hintKey) {
+  badgeMode = mode; badgeHint = hint; badgeHintKey = hintKey;
+  const key = hintKey ?? (hint === "요청이 거부되었거나 실패했습니다." ? "requestFailed" : hint === "host refused to start recording" ? "startRefused" : hint === "restart refused" ? "restartRefused" : null);
+  const detail = key ? t(key) : hint;
   captureBadge.classList.remove("loopback", "mic");
   if (mode === "loopback") {
     captureBadge.classList.add("loopback");
-    captureBadge.textContent = "🔊 + 🎤 시스템 오디오 + 마이크";
+    captureBadge.textContent = t("capturingMix");
   } else if (mode === "mic") {
     captureBadge.classList.add("mic");
-    captureBadge.textContent = hint
-      ? `🎤 마이크만 — ${hint}`
-      : "🎤 마이크만 캡처 중";
+    captureBadge.textContent = detail
+      ? `${t("microphoneOnly")} — ${detail}`
+      : t("capturingMic");
   } else {
-    captureBadge.textContent = "녹음 시작 중…";
+    captureBadge.textContent = t("starting");
   }
 }
 
@@ -720,7 +733,7 @@ async function refreshNotes() {
     lastNotesCount = list.length;
     if (list.length === 0) {
       notes.classList.remove("has-content");
-      notes.textContent = "회의 요약이 아직 생성되지 않았습니다.\n몇 분간 대화가 누적되면 자동으로 표시됩니다.";
+      notes.textContent = t("notesEmpty");
     } else {
       const latest = list[list.length - 1];
       const parts = [];
@@ -777,7 +790,7 @@ pauseBtn.addEventListener("click", async () => {
     pauseBtn.replaceChildren();
     pauseBtn.appendChild(svgFromString(isPaused ? ICONS.play : ICONS.pause));
     pauseBtn.appendChild(document.createTextNode(" " + t(isPaused ? "resume" : "pause")));
-  } catch { showSttError("녹음 상태 변경이 거부되었습니다."); }
+  } catch { showSttError("pause-denied"); }
   finally { pauseBtn.disabled = false; }
 });
 
@@ -791,7 +804,8 @@ cancelBtn.addEventListener("click", async () => {
 
 doneBtn.addEventListener("click", async () => {
   setBusy(true);
-  doneBtn.replaceChildren(document.createTextNode("분석 중…"));
+  finalizing = true;
+  doneBtn.replaceChildren(document.createTextNode(t("analyzing")));
   started = false;
   if (levelsPollInterval) { clearInterval(levelsPollInterval); levelsPollInterval = null; }
   // The tail is flushed by `meeting_stop`, in main, where the buffer
@@ -825,6 +839,8 @@ async function populateMicList() {
     inputs = res.devices;
   } catch {
     const unavailable = document.createElement("option");
+    micSelect.dataset.listState = "unavailable";
+    unavailable.dataset.labelKey = "microphonesUnavailable";
     unavailable.value = "";
     unavailable.textContent = t("microphonesUnavailable");
     micSelect.replaceChildren(unavailable);
@@ -832,6 +848,7 @@ async function populateMicList() {
     micSelect.setAttribute("aria-label", t("microphonesUnavailable"));
     return;
   }
+  micSelect.dataset.listState = inputs.length ? "ready" : "empty";
   micSelect.disabled = inputs.length === 0;
   micSelect.setAttribute("aria-label", inputs.length ? t("microphone") : t("microphonesEmpty"));
   // Preserve current dropdown value across rebuild — restore it after.
@@ -839,6 +856,7 @@ async function populateMicList() {
   micSelect.replaceChildren();
   const def = document.createElement("option");
   def.value = "";
+  def.dataset.labelKey = inputs.length ? "defaultMicrophone" : "microphonesEmpty";
   def.textContent = inputs.length ? t("defaultMicrophone") : t("microphonesEmpty");
   micSelect.appendChild(def);
   for (const d of inputs) {
@@ -847,7 +865,8 @@ async function populateMicList() {
     // Labels come up empty until microphone access has been granted at least
     // once — the browser's rule, and the host reports it as it finds it. Show
     // a placeholder so the dropdown is not a row of identical blank options.
-    opt.textContent = d.label || `마이크 (${(d.deviceId || "").slice(0, 6)}…)`;
+    if (!d.label) opt.dataset.deviceSuffix = (d.deviceId || "").slice(0, 6);
+    opt.textContent = d.label || `${t("microphone")} (${opt.dataset.deviceSuffix}…)`;
     micSelect.appendChild(opt);
   }
   // Re-select the user's preferred mic if it's still present.
@@ -862,7 +881,7 @@ async function populateMicList() {
 // and starts a new one; this window only says what it wants.
 async function restartCapture() {
   if (!started) return;
-  setCaptureBadge("mic", "장치 변경 중…");
+  setCaptureBadge("mic", undefined, "changingDevice");
   try {
     const res = await host.restartCapture({
       ...(captureMode ? { captureMode } : {}),
@@ -930,7 +949,7 @@ async function start(payload) {
   sessionId = payload?.sessionId;
   context = payload?.context;
   if (!sessionId) {
-    setCaptureBadge("mic", "sessionId 없음");
+    setCaptureBadge("mic", undefined, "sessionMissing");
     return;
   }
   try {
@@ -968,7 +987,28 @@ async function start(payload) {
 // document: this card shares its document with the dock's own chrome and with
 // any other plugin's slot, so painting on `documentElement` would let one
 // card's theme decide everyone else's.
-applyHostContext(bridge.app, shell);
+function refreshRecorderLabels() {
+  tabs.setAttribute("aria-label", t("recorderView"));
+  noteTab.textContent = t("note");
+  meetingTab.textContent = t("meeting");
+  modeToggle.setAttribute("aria-label", t("captureMode"));
+  mixOpt.textContent = t("mix");
+  micOnlyOpt.textContent = t("micOnly");
+  cancelBtn.lastChild.textContent = " " + t("cancel");
+  pauseBtn.lastChild.textContent = " " + t(isPaused ? "resume" : "pause");
+  doneBtn.lastChild.textContent = finalizing ? t("analyzing") : " " + t("done");
+  micSelect.title = t("chooseMicrophone");
+  const state = micSelect.dataset.listState;
+  micSelect.setAttribute("aria-label", t(state === "unavailable" ? "microphonesUnavailable" : state === "empty" ? "microphonesEmpty" : "microphone"));
+  for (const option of micSelect.options) {
+    if (option.dataset.labelKey) option.textContent = t(option.dataset.labelKey);
+    else if (option.dataset.deviceSuffix !== undefined) option.textContent = `${t("microphone")} (${option.dataset.deviceSuffix}…)`;
+  }
+  if (!notes.classList.contains("has-content")) notes.textContent = t("notesEmpty");
+  if (lastSttError !== null) errorBanner.textContent = classifySttError(lastSttError);
+  setCaptureBadge(badgeMode, badgeHint, badgeHintKey);
+}
+applyHostContext(bridge.app, shell, () => { refreshRecorderLabels(); refreshWaveColor(); });
 
 // What session this card is showing. The dock carries no per-slot payload by
 // design — a card asks its own plugin — so this is the first thing it does.
@@ -977,7 +1017,7 @@ window.addEventListener("pagehide", () => { stopChanges(); clearInterval(levelsP
 try {
   const payload = await host.getInit();
   if (payload) start(payload);
-  else setCaptureBadge("mic", "표시할 세션이 없습니다");
+  else setCaptureBadge("mic", undefined, "noSession");
 } catch (err) {
   setCaptureBadge("mic", (err?.message ?? err).toString().slice(0, 60));
   console.error("[recorder-card] init failed");
@@ -985,4 +1025,4 @@ try {
 
 }
 
-mount().catch(() => { document.getElementById("app").textContent = "녹음 화면을 불러오지 못했습니다."; });
+mount().catch(() => { document.getElementById("app").textContent = recorderText(document.documentElement.lang || "ko", "loadFailed"); });
