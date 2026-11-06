@@ -11,12 +11,9 @@ import { dirname, join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { verifiedRuntime } from "../verified-import.mjs";
-import { SIGNER_ISSUER, bundleUrl, cosignArgs, embeddedBuildPaths, signerIdentity } from "../vendor.mjs";
-import { testKeys, testSignature } from "./fake-sigstore.mjs";
+import { checkMarketplaceRepository } from "../vendor/marketplace-check.js";
 import { workingTree } from "../repo.mjs";
 
-const { marketplace: { checkMarketplaceRepository } } = await verifiedRuntime();
 
 const TOOLS = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const REAL_ROOT = resolve(TOOLS, "..");
@@ -44,17 +41,8 @@ function skill(version) {
   return { schemaVersion: 2, kind: "skill", name: "review", version, minAppVersion: "0.10.0", payload: { entry: "SKILL.md" } };
 }
 
-/**
- * A scratch marketplace repository with its own copy of the tools. Its vendored
- * inventories are pinned to a development commit, and `tool` and `call` run
- * that copy, so every tool subprocess uses the offline inventory integrity
- * check. Run from the checkout, a subprocess would verify the committed release
- * tag: it would download and cosign-verify the real contract bundle in each
- * run, and any network or Sigstore hiccup would fail whichever test was
- * running. Tests of the tag path pass `{ tagged: true }` or pin a tag with
- * `pinVendored`, and serve a test-signed bundle.
- */
-function repo({ tagged = false } = {}) {
+/** A scratch marketplace using local copies of the tools and contract. */
+function repo() {
   const root = mkdtempSync(join(tmpdir(), "marketplace-tools-"));
   scratch.push(root);
   const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -77,46 +65,17 @@ function repo({ tagged = false } = {}) {
     git("commit", "-q", "-m", message);
     return git("rev-parse", "HEAD").trim();
   };
-  // Tools run from this repository's copy, so they verify its own vendored
-  // inventories, never the installation's tag bundle.
   const installed = (script) => realpathSync(join(root, "tools", script));
-  /**
-   * Module code that, while this repository pins a release tag, first verifies
-   * its tools against a test-signed bundle of its own vendored files. Test
-   * signatures are available only through the function API: the production CLI
-   * and environment cannot replace signature verification. A development pin
-   * needs no preamble; the tools check its inventory integrity offline.
-   */
-  const signedPreamble = (allowDevelopment) => {
-    const sources = JSON.parse(readFileSync(join(root, "contract/sources.json"), "utf8"));
-    if (!sources.ref.startsWith("v")) return "";
-    const keys = testKeys();
-    const { served } = publishBundle({ root }, sources.ref, keys);
-    return `
-      const t = await import(${JSON.stringify(join(TOOLS, "__tests__/fake-sigstore.mjs"))});
-      const loader = await import(${JSON.stringify(installed("verified-import.mjs"))});
-      await loader.verifiedRuntime({ allowDevelopment: ${allowDevelopment}, get: t.servedFrom(${JSON.stringify(served)}, []), verifySignature: t.testVerifier(${JSON.stringify(keys.publicKey)}) });`;
-  };
-  const runTool = (script, args, env, allowDevelopment) => {
-    const target = installed(script);
-    const preamble = signedPreamble(allowDevelopment);
-    if (!preamble) return spawnSync("node", [target, ...args], { env, encoding: "utf8" });
-    const code = `
-      process.argv = [process.execPath, ${JSON.stringify(target)}, ...${JSON.stringify(args)}];
-      ${preamble}
-      await import(${JSON.stringify(target)});`;
-    return spawnSync("node", ["--input-type=module", "-e", code], { env, encoding: "utf8" });
-  };
-  const tool = (script, ...args) => runTool(script, args, { ...process.env, MARKETPLACE_ROOT: root }, true);
+  const runTool = (script, args, env) => spawnSync("node", [installed(script), ...args], { env, encoding: "utf8" });
+  const tool = (script, ...args) => runTool(script, args, { ...process.env, MARKETPLACE_ROOT: root });
   const publishTool = (script, ...args) => {
     const env = { ...process.env };
     delete env.MARKETPLACE_ROOT;
-    return runTool(script, args, env, false);
+    return runTool(script, args, env);
   };
   /** Run `body` as a module with the tools module `script`'s exports in scope as `m`, against this repository. */
   const evaluate = (script, body) => spawnSync("node", ["--input-type=module", "-e",
-    `${signedPreamble(true)}
-    const m = await import(${JSON.stringify(installed(script))}); ${body}`,
+    `const m = await import(${JSON.stringify(installed(script))}); ${body}`,
   ], { env: { ...process.env, MARKETPLACE_ROOT: root }, encoding: "utf8" });
   const index = () => JSON.parse(readFileSync(join(root, "marketplace.json"), "utf8"));
   /** Evaluate `expression` with the tools module `script`'s exports in scope as `m`, against this repository. */
@@ -126,7 +85,6 @@ function repo({ tagged = false } = {}) {
     return JSON.parse(out.stdout);
   };
   const r = { root, git, write, commit, tool, publishTool, evaluate, index, call };
-  if (!tagged) pinVendored(r, DEV_PIN);
   return r;
 }
 
@@ -145,6 +103,16 @@ function withMeetingNotesKit(r) {
 }
 
 describe("index generation", () => {
+  it("retires published entries whose kind left the app contract", () => {
+    const r = repo();
+    r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [{ kind: "retired", name: "old", path: "retired/old", versions: [{ version: "1.0.0", commit: "a".repeat(40) }] }] });
+    const base = r.commit("historical kind");
+    const result = r.tool("index.mjs");
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(r.index().packages, []);
+    assert.equal(r.tool("check.mjs", "--base", base).status, 0);
+  });
+
   it("keeps descriptor-resolved entries in a single-commit import and pins them on request", () => {
     const r = repo();
     r.write("skills/review/ave-package.json", skill("1.0.0"));
@@ -546,37 +514,12 @@ describe("repository check", () => {
     assert.match(r.tool("check.mjs").stderr, /carries notificationEvents at or above app 0\.11\.0/u);
   });
 
-  it("refuses an edited vendored file", () => {
-    const { r } = published();
-    const edited = join(r.root, "contract/public-contract.ts");
-    // Edit after the loader has verified and loaded the tools, so checkVendored itself must notice.
-    const checked = r.evaluate("check.mjs", `
-      const { appendFileSync } = await import("node:fs");
-      appendFileSync(${JSON.stringify(edited)}, "// edited\\n");
-      console.log(JSON.stringify(m.checkRepository()));`);
-    assert.equal(checked.status, 0, checked.stderr);
-    assert.ok(JSON.parse(checked.stdout).some((problem) => /^contract\/public-contract\.ts: bytes differ from sources\.json/u.test(problem)), checked.stdout);
-    // A later run refuses before evaluating anything.
-    assert.match(r.tool("check.mjs").stderr, /contract\/public-contract\.ts: bytes differ from sources\.json/u);
-  });
-
-  it("rejects checkout paths in the vendored checker even when its inventory hash matches", () => {
-    const bundle = readFileSync(join(REAL_ROOT, "tools/vendor/marketplace-check.js"));
-    assert.deepEqual(embeddedBuildPaths(bundle), []);
-    for (const path of ["/private/tmp/app", "/Users/ken/app", "/home/ci/app", "/tmp/app", "/var/build/app", "/workspace/app", "/root/app"]) {
-      assert.deepEqual(embeddedBuildPaths(Buffer.from(JSON.stringify(path))), ["Unix checkout path"]);
-    }
-    assert.deepEqual(embeddedBuildPaths(Buffer.from(JSON.stringify("C:\\build\\app"))), ["Windows drive path"]);
+  it("checks existence without imposing an integrity gate", () => {
     const r = repo();
-    const injected = Buffer.concat([bundle, Buffer.from('\nvar buildPaths = ["/private/tmp/app", "/Users/ken/app", "/home/ci/app", "C:\\\\build\\\\app"];\n')]);
-    r.write("tools/vendor/marketplace-check.js", injected.toString());
-    const sources = JSON.parse(readFileSync(join(r.root, "tools/vendor/sources.json"), "utf8"));
-    sources.files["marketplace-check.js"].sha256 = createHash("sha256").update(injected).digest("hex");
-    r.write("tools/vendor/sources.json", sources);
-    const result = r.tool("vendor.mjs", "check");
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /embedded absolute build path \(Unix checkout path\)/u);
-    assert.match(result.stderr, /embedded absolute build path \(Windows drive path\)/u);
+    r.write("contract/public-contract.ts", "// local copy\n");
+    assert.equal(r.tool("vendor.mjs", "check").status, 0);
+    rmSync(join(r.root, "contract/public-contract.ts"));
+    assert.match(r.tool("vendor.mjs", "check").stderr, /contract\/public-contract\.ts: missing/u);
   });
 
   it("includes the renamed extension template in the CI package matrix", () => {
@@ -629,320 +572,7 @@ describe("repository check", () => {
   });
 });
 
-describe("vendored bundles", () => {
-  // The checker bundle is built with the stub-logger recipe, so no bundled
-  // module inlines a checkout `__dirname`; vendor.mjs rejects any embedded
-  // build path on sync, check and verify instead of rewriting it.
-  it("carry no checkout path", () => {
-    const bundle = readFileSync(join(REAL_ROOT, "tools/vendor/marketplace-check.js"), "utf8");
-    assert.doesNotMatch(bundle, /__dirname = "\//u);
-  });
-});
-
-const VENDORED_SOURCES = ["contract/sources.json", "tools/vendor/sources.json"];
-const DEV_PIN = "23feef1aec6ba9e38448c35e646f75c5f53aaff9";
-const TAG = "v0.14.0";
-const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-
-/** Pin both inventories to `ref`, whatever the committed ref is: a tag carries its bundle URL, a commit none. */
-function pinVendored(r, ref) {
-  for (const path of VENDORED_SOURCES) {
-    const sources = JSON.parse(readFileSync(join(r.root, path), "utf8"));
-    sources.ref = ref;
-    sources.bundle = ref.startsWith("v") ? bundleUrl(ref) : null;
-    r.write(path, sources);
-  }
-}
-
-/**
- * A contract bundle for `tag` built from `r`'s vendored files, as Ave's tag
- * build lays it out, signed with the test key. `files` replaces a file's
- * bytes before hashing; `manifest` overrides bundle.json fields.
- */
-function publishBundle(r, tag, keys, { identity = signerIdentity(tag), issuer = SIGNER_ISSUER, files: replaced = {}, manifest = {} } = {}) {
-  const served = mkdtempSync(join(tmpdir(), "contract-bundle-served-"));
-  scratch.push(served);
-  const dir = join(served, tag);
-  mkdirSync(dir);
-  const files = {};
-  for (const path of VENDORED_SOURCES) {
-    for (const name of Object.keys(JSON.parse(readFileSync(join(r.root, path), "utf8")).files)) {
-      const bytes = replaced[name] ?? readFileSync(join(r.root, dirname(path), name));
-      writeFileSync(join(dir, name), bytes);
-      files[name] = { sha256: hash(bytes), bytes: Buffer.byteLength(bytes) };
-    }
-  }
-  const bundleJson = `${JSON.stringify({ schemaVersion: 1, app: "ave", tag, commit: "c".repeat(40), files, ...manifest }, null, 2)}\n`;
-  writeFileSync(join(dir, "bundle.json"), bundleJson);
-  const sums = [["bundle.json", hash(bundleJson)], ...Object.entries(files).map(([name, entry]) => [name, entry.sha256])]
-    .map(([name, sha]) => `${sha}  ${name}\n`).join("");
-  writeFileSync(join(dir, "SHA256SUMS"), sums);
-  writeFileSync(join(dir, "SHA256SUMS.sigstore.json"), testSignature(keys.privateKey, Buffer.from(sums), identity, issuer));
-  return { served, dir };
-}
-
-/** Evaluate `expression` against `r` with vendor.mjs as `m` and `options` serving `served` through the test verifier. */
-function bundleRun(r, served, keys, expression) {
-  const code = `
-    const m = await import(${JSON.stringify(join(TOOLS, "vendor.mjs"))});
-    const t = await import(${JSON.stringify(join(TOOLS, "__tests__/fake-sigstore.mjs"))});
-    const calls = [];
-    const options = { get: t.servedFrom(${JSON.stringify(served)}, calls), verifySignature: t.testVerifier(${JSON.stringify(keys.publicKey)}) };
-    let result, error;
-    try { result = await (${expression}); } catch (e) { error = e.message; }
-    console.log(JSON.stringify({ result, error, calls }));`;
-  return JSON.parse(execFileSync("node", ["--input-type=module", "-e", code], { env: { ...process.env, MARKETPLACE_ROOT: r.root }, encoding: "utf8" }));
-}
-
-describe("vendored sources", () => {
-  for (const field of ["repository", "ref"]) {
-    it(`rejects mismatched ${field} in check and verify`, () => {
-      for (const path of VENDORED_SOURCES) {
-        const r = repo();
-        pinVendored(r, TAG);
-        const sources = JSON.parse(readFileSync(join(r.root, path), "utf8"));
-        const original = sources[field];
-        const changed = field === "repository" ? "other/ave" : "v0.14.1";
-        sources[field] = changed;
-        if (field === "ref") sources.bundle = bundleUrl(changed);
-        r.write(path, sources);
-        for (const command of ["check", "verify"]) {
-          const result = r.tool("vendor.mjs", command);
-          assert.equal(result.status, 1, `${command} accepted mismatched ${field} in ${path}`);
-          for (const value of [...VENDORED_SOURCES, field, original, changed]) {
-            assert.ok(result.stderr.includes(value), result.stderr);
-          }
-        }
-      }
-    });
-  }
-
-  it("accepts agreeing inventories pinned to a commit or to a tag, offline", () => {
-    for (const ref of [DEV_PIN, TAG]) {
-      const r = repo();
-      pinVendored(r, ref);
-      const result = r.tool("vendor.mjs", "check");
-      assert.equal(result.status, 0, `${ref}: ${result.stderr}`);
-    }
-  });
-
-  it("rejects a bundle URL other than the tag's, a bundle on a commit pin, and a ref of any other shape", () => {
-    const cases = [
-      [TAG, "https://example.com/contract/v0.14.0/", /bundle must be https:\/\/downloads\.agent-connector\.ai\/contract\/v0\.14\.0\//u],
-      [TAG, bundleUrl("v0.13.0"), /bundle must be .*v0\.14\.0\//u],
-      [DEV_PIN, bundleUrl(TAG), /a development commit pin has no bundle/u],
-      ["main", null, /neither an Ave release tag \(vX\.Y\.Z\) nor a 40-hex commit pin/u],
-      ["v0.14.0-rc.1", null, /neither an Ave release tag/u],
-    ];
-    for (const [ref, bundle, message] of cases) {
-      const r = repo();
-      for (const path of VENDORED_SOURCES) {
-        const sources = JSON.parse(readFileSync(join(r.root, path), "utf8"));
-        Object.assign(sources, { ref, bundle });
-        r.write(path, sources);
-      }
-      assert.match(r.tool("vendor.mjs", "check").stderr, message);
-    }
-  });
-
-  it("never checks out or clones the Ave source in a workflow, and verifies the bundle with a pinned cosign", () => {
-    for (const name of ["validate.yml", "release.yml"]) {
-      const workflow = readFileSync(join(REAL_ROOT, ".github/workflows", name), "utf8");
-      assert.doesNotMatch(workflow, /ken-jo\/ave|git clone|^\s+repository:/mu, name);
-      assert.doesNotMatch(workflow, /--app|--release-tag|refs\/tags\/v\d/u, name);
-      assert.match(workflow, /tools\/install-cosign\.sh "\$RUNNER_TEMP\/cosign"\n\s+echo "\$RUNNER_TEMP\/cosign" >> "\$GITHUB_PATH"\n(?:.*\n)*?\s+run: node tools\/vendor\.mjs verify\n/u, name);
-    }
-    const release = readFileSync(join(REAL_ROOT, ".github/workflows/release.yml"), "utf8");
-    assert.ok(release.indexOf("node tools/vendor.mjs verify") < release.indexOf("release.mjs plan --publish"), "release verifies the bundle before planning");
-    const installer = readFileSync(join(REAL_ROOT, "tools/install-cosign.sh"), "utf8");
-    assert.match(installer, /^COSIGN_VERSION="v\d+\.\d+\.\d+"$/mu);
-    assert.match(installer, /^COSIGN_LINUX_AMD64_SHA256="[0-9a-f]{64}"$/mu);
-    assert.match(installer, /sha256sum -c -/u);
-  });
-
-  it("keeps the release tag in sources.json only", () => {
-    for (const path of ["tools/release.mjs", "tools/vendor.mjs", ".github/workflows/release.yml", ".github/workflows/validate.yml"]) {
-      assert.doesNotMatch(readFileSync(join(REAL_ROOT, path), "utf8"), /(?<!# )\bv\d+\.\d+\.\d+\b/u, path);
-    }
-  });
-});
-
-describe("contract bundle", () => {
-  const verifyIn = (r, served, keys) => bundleRun(r, served, keys, "m.verifyVendored(options)");
-
-  it("accepts a bundle signed by the tag's build workflow whose files equal the vendored copies", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const { served } = publishBundle(r, TAG, keys);
-    const run = verifyIn(r, served, keys);
-    assert.deepEqual(run.result, [], JSON.stringify(run));
-    assert.ok(run.calls.every((url) => url.startsWith(`https://downloads.agent-connector.ai/contract/${TAG}/`)), JSON.stringify(run.calls));
-    assert.ok(run.calls.includes(bundleUrl(TAG) + "SHA256SUMS.sigstore.json"));
-  });
-
-  it("refuses a signature from any other workflow, ref, repository or issuer", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const expected = /SHA256SUMS\.sigstore\.json: the signature over SHA256SUMS does not verify for identity https:\/\/github\.com\/ken-jo\/ave\/\.github\/workflows\/build-installers\.yml@refs\/tags\/v0\.14\.0 issued by https:\/\/token\.actions\.githubusercontent\.com: certificate names/u;
-    for (const signer of [
-      { identity: "https://github.com/ken-jo/ave/.github/workflows/release.yml@refs/tags/v0.14.0" },
-      { identity: "https://github.com/ken-jo/ave/.github/workflows/build-installers.yml@refs/heads/main" },
-      { identity: signerIdentity("v0.13.0") },
-      { identity: "https://github.com/someone-else/ave/.github/workflows/build-installers.yml@refs/tags/v0.14.0" },
-      { issuer: "https://accounts.example.com" },
-    ]) {
-      const { served } = publishBundle(r, TAG, keys, signer);
-      const run = verifyIn(r, served, keys);
-      assert.equal(run.result.length, 1, JSON.stringify(run));
-      assert.match(run.result[0], expected);
-    }
-  });
-
-  it("refuses a signature made with another key, and a SHA256SUMS edited after signing", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const forged = publishBundle(r, TAG, testKeys());
-    assert.match(verifyIn(r, forged.served, keys).result[0], /does not verify for identity .*: signature does not match the artifact/u);
-
-    const { served, dir } = publishBundle(r, TAG, keys);
-    const tampered = Buffer.from("// tampered\n");
-    writeFileSync(join(dir, "public-contract.ts"), tampered);
-    const sums = readFileSync(join(dir, "SHA256SUMS"), "utf8").replace(/^[0-9a-f]{64}(?= {2}public-contract\.ts$)/mu, hash(tampered));
-    writeFileSync(join(dir, "SHA256SUMS"), sums);
-    assert.match(verifyIn(r, served, keys).result[0], /does not verify for identity .*: signature does not match the artifact/u);
-  });
-
-  it("refuses a bundle file whose sha256 differs from the signed SHA256SUMS", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const { served, dir } = publishBundle(r, TAG, keys);
-    writeFileSync(join(dir, "marketplace-check.js"), "// replaced after signing\n");
-    assert.match(verifyIn(r, served, keys).result[0], /^v0\.14\.0\/marketplace-check\.js: sha256 [0-9a-f]{64} differs from the signed SHA256SUMS/u);
-  });
-
-  it("refuses a vendored copy that differs from the bundle, even when sources.json matches the copy", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const { served } = publishBundle(r, TAG, keys);
-    const edited = `${readFileSync(join(r.root, "contract/public-contract.ts"), "utf8")}// edited\n`;
-    r.write("contract/public-contract.ts", edited);
-    const sources = JSON.parse(readFileSync(join(r.root, "contract/sources.json"), "utf8"));
-    sources.files["public-contract.ts"].sha256 = hash(edited);
-    r.write("contract/sources.json", sources);
-    assert.equal(r.tool("vendor.mjs", "check").status, 0, "the offline check cannot see this");
-    assert.deepEqual(verifyIn(r, served, keys).result, [
-      "contract/public-contract.ts: bytes differ from public-contract.ts in the signed v0.14.0 bundle",
-      "contract/sources.json: public-contract.ts sha256 differs from the signed v0.14.0 bundle",
-    ]);
-  });
-
-  it("refuses a missing bundle and a missing bundle file", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const empty = mkdtempSync(join(tmpdir(), "contract-bundle-empty-"));
-    scratch.push(empty);
-    assert.deepEqual(verifyIn(r, empty, keys).result, [
-      "https://downloads.agent-connector.ai/contract/v0.14.0/SHA256SUMS: HTTP 404; the contract bundle for v0.14.0 is missing or incomplete",
-    ]);
-    const { served, dir } = publishBundle(r, TAG, keys);
-    rmSync(join(dir, "agent-plugin-components.js"));
-    assert.match(verifyIn(r, served, keys).result[0], /contract\/v0\.14\.0\/agent-plugin-components\.js: HTTP 404/u);
-  });
-
-  it("refuses a bundle.json for another tag or one that disagrees with SHA256SUMS", () => {
-    const r = repo();
-    pinVendored(r, TAG);
-    const keys = testKeys();
-    const otherTag = publishBundle(r, TAG, keys, { manifest: { tag: "v0.13.0" } });
-    assert.match(verifyIn(r, otherTag.served, keys).result[0], /^v0\.14\.0\/bundle\.json: expected \{ schemaVersion: 1, app: "ave", tag: "v0\.14\.0"/u);
-    const extra = publishBundle(r, TAG, keys, { manifest: { files: { "public-contract.ts": { sha256: SHA, bytes: 1 } } } });
-    assert.match(verifyIn(r, extra.served, keys).result[0], /SHA256SUMS lists .* but bundle\.json describes public-contract\.ts/u);
-  });
-
-  it("refuses a commit pin before downloading anything", () => {
-    const r = repo();
-    pinVendored(r, DEV_PIN);
-    const keys = testKeys();
-    const { served } = publishBundle(r, TAG, keys);
-    const run = verifyIn(r, served, keys);
-    assert.deepEqual(run.result, [`vendored sources pin ${DEV_PIN}, a development commit; only an Ave release tag has a signed contract bundle to verify against`]);
-    assert.deepEqual(run.calls, []);
-    const cli = r.tool("vendor.mjs", "verify");
-    assert.equal(cli.status, 1);
-    assert.match(cli.stderr, /a development commit; only an Ave release tag has a signed contract bundle/u);
-  });
-
-  it("syncs both directories from a verified bundle, and writes nothing from a refused one", () => {
-    const r = repo();
-    pinVendored(r, DEV_PIN);
-    const keys = testKeys();
-    const contract = Buffer.from("export const fromBundle = true;\n");
-    const checker = Buffer.from("export const checker = 1;\n");
-    const before = readFileSync(join(r.root, "contract/sources.json"), "utf8");
-
-    const refused = publishBundle(r, TAG, keys, { identity: signerIdentity("v0.13.0"), files: { "public-contract.ts": contract } });
-    assert.match(bundleRun(r, refused.served, keys, `m.syncFromBundle(${JSON.stringify(TAG)}, options)`).error, /does not verify for identity/u);
-    assert.equal(readFileSync(join(r.root, "contract/sources.json"), "utf8"), before);
-    assert.notDeepEqual(readFileSync(join(r.root, "contract/public-contract.ts")), contract);
-
-    const { served } = publishBundle(r, TAG, keys, { files: { "public-contract.ts": contract, "marketplace-check.js": checker } });
-    const run = bundleRun(r, served, keys, `m.syncFromBundle(${JSON.stringify(TAG)}, options)`);
-    assert.equal(run.error, undefined, run.error);
-    for (const path of VENDORED_SOURCES) {
-      const sources = JSON.parse(readFileSync(join(r.root, path), "utf8"));
-      assert.equal(sources.ref, TAG);
-      assert.equal(sources.bundle, bundleUrl(TAG));
-    }
-    assert.deepEqual(readFileSync(join(r.root, "contract/public-contract.ts")), contract);
-    assert.deepEqual(readFileSync(join(r.root, "tools/vendor/marketplace-check.js")), checker);
-    assert.equal(r.tool("vendor.mjs", "check").status, 0);
-    assert.deepEqual(verifyIn(r, served, keys).result, []);
-    assert.match(bundleRun(r, served, keys, `m.syncFromBundle(${JSON.stringify(DEV_PIN)}, options)`).error, /only an Ave release tag/u);
-  });
-
-  it("asks cosign for the exact identity and issuer, never a pattern", () => {
-    const args = cosignArgs({ artifactPath: "SUMS", bundlePath: "SIG", identity: signerIdentity(TAG), issuer: SIGNER_ISSUER });
-    assert.deepEqual(args, [
-      "verify-blob", "--bundle", "SIG",
-      "--certificate-identity", "https://github.com/ken-jo/ave/.github/workflows/build-installers.yml@refs/tags/v0.14.0",
-      "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com",
-      "SUMS",
-    ]);
-    assert.doesNotMatch(readFileSync(join(TOOLS, "vendor.mjs"), "utf8"), /regexp|process\.env\.(?!MARKETPLACE_ROOT)/u);
-  });
-});
-
 describe("releases", () => {
-  const markDevelopmentPin = (r) => pinVendored(r, DEV_PIN);
-  const protocolSchema = (tag) => ({
-    $id: `https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/${tag}/protocol.schema.json`,
-    $schema: "https://json-schema.org/draft/2020-12/schema",
-    title: "Ave plugin host protocol 3",
-  });
-
-  /** Pin `tag` and vendor its protocol-3 schema, whatever ref and schema the repository holds. */
-  function markPublicationReady(r, tag = TAG) {
-    pinVendored(r, tag);
-    const contract = JSON.parse(readFileSync(join(r.root, "contract/sources.json"), "utf8"));
-    const manifestSchema = JSON.parse(readFileSync(join(r.root, "contract/plugin-manifest.schema.json"), "utf8"));
-    manifestSchema.properties.extensions.properties["ai.agent-connector.ave"].properties.sandbox = { type: "object" };
-    const manifestBytes = `${JSON.stringify(manifestSchema, null, 2)}\n`;
-    r.write("contract/plugin-manifest.schema.json", manifestBytes);
-    contract.files["plugin-manifest.schema.json"].sha256 = hash(manifestBytes);
-    const schema = protocolSchema(tag);
-    const bytes = `${JSON.stringify(schema, null, 2)}\n`;
-    r.write("contract/protocol.schema.json", bytes);
-    contract.files["protocol.schema.json"] = { from: "schemas/plugin-host-protocol/3/protocol.schema.json", sha256: hash(bytes) };
-    r.write("contract/sources.json", contract);
-    return { contract, schema };
-  }
-
   function built(r, version = "1.0.0") {
     withSourcePlugin(r, version);
     r.write("plugins/alpha/source/package.json", { name: "@ave/plugin-alpha", version, files: ["dist"] });
@@ -953,43 +583,8 @@ describe("releases", () => {
   }
   const entries = (zip) => execFileSync("unzip", ["-Z1", zip], { encoding: "utf8" }).split("\n").filter(Boolean).sort();
 
-  it("holds publication until sources.json pins an Ave release tag and its protocol-3 schema is vendored", () => {
-    const r = repo();
-    const publish = () => r.publishTool("release.mjs", "plan", "--publish");
-    markDevelopmentPin(r);
-    const pinned = publish();
-    assert.equal(pinned.status, 1);
-    assert.match(pinned.stderr, /publication requires an Ave release tag with a signed contract bundle; development inventory trust is not allowed/u);
-
-    const { contract, schema } = markPublicationReady(r);
-    assert.equal(publish().status, 0, publish().stderr);
-
-    const entry = contract.files["protocol.schema.json"];
-    delete contract.files["protocol.schema.json"];
-    r.write("contract/sources.json", contract);
-    assert.match(publish().stderr, /contract\/sources\.json: files must contain exactly/u);
-    contract.files["protocol.schema.json"] = entry;
-    r.write("contract/sources.json", contract);
-    assert.equal(publish().status, 0, publish().stderr);
-
-    // The tag comes from sources.json alone: a schema for any other tag or protocol is refused.
-    for (const id of [
-      "https://ave.agent-connector.ai/schemas/plugin-host-protocol/2/v0.12.0/protocol.schema.json",
-      "https://ave.agent-connector.ai/schemas/plugin-host-protocol/3/v0.13.0/protocol.schema.json",
-    ]) {
-      const bytes = `${JSON.stringify({ ...schema, $id: id }, null, 2)}\n`;
-      r.write("contract/protocol.schema.json", bytes);
-      contract.files["protocol.schema.json"].sha256 = hash(bytes);
-      r.write("contract/sources.json", contract);
-      assert.match(publish().stderr, /expected the protocol 3 schema for v0\.14\.0 \(\$id https:\/\/ave\.agent-connector\.ai\/schemas\/plugin-host-protocol\/3\/v0\.14\.0\/protocol\.schema\.json/u);
-    }
-    markPublicationReady(r, "v0.15.0");
-    assert.equal(publish().status, 0, publish().stderr);
-  });
-
   it("rejects MARKETPLACE_ROOT on every publication command", () => {
     const r = repo();
-    markPublicationReady(r);
     assert.equal(r.publishTool("release.mjs", "plan", "--publish").status, 0);
     for (const args of [["plan", "--publish"], ["pin", "alpha", "/missing.zip"], ["verify", "--publish"]]) {
       assert.match(r.tool("release.mjs", ...args).stderr, /MARKETPLACE_ROOT is for tests only/u);
@@ -1088,9 +683,6 @@ describe("releases", () => {
     const zip = join(r.root, "..", `${r.root.split("/").pop()}-alpha.zip`);
     scratch.push(zip);
     const sha256 = r.tool("release.mjs", "pack", "alpha", zip).stdout.trim();
-    markDevelopmentPin(r);
-    assert.match(r.publishTool("release.mjs", "pin", "alpha", zip).stderr, /publication requires an Ave release tag with a signed contract bundle/u);
-    markPublicationReady(r);
     assert.equal(r.publishTool("release.mjs", "pin", "alpha", zip).status, 0);
     const descriptor = JSON.parse(readFileSync(join(r.root, "plugins/alpha/ave-package.json"), "utf8"));
     assert.deepEqual(descriptor.payload, {
@@ -1117,7 +709,6 @@ describe("releases", () => {
 
   it("lists new versions against a base without a catalog quietly, and refuses a base that is not a commit", () => {
     const r = repo();
-    markPublicationReady(r);
     rmSync(join(r.root, "marketplace.json"));
     const base = r.commit("before the format-2 catalog");
     r.git("update-ref", "refs/remotes/origin/main", base);

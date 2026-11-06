@@ -19,7 +19,7 @@ repository. The `file:` paths in `package.json` assume that depth, so change
 typecheck, build and test against a verified contract snapshot:
 
 ```bash
-node tools/verified-import.mjs plugin plugins/<name>/source --allow-development
+node tools/plugin-check.mjs plugins/<name>/source
 ```
 
 Development commit pins trust the reviewed inventory hashes. Release tags

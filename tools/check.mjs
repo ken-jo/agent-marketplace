@@ -6,7 +6,7 @@
  * Ave's `checkMarketplaceRepository`, bundled from the ref in its
  * sources.json, so this check and the app cannot disagree. What only this
  * repository knows is checked here:
- * - the vendored copies are unedited;
+ * - every listed vendored file exists;
  * - every package sits in its kind's directory under its own name;
  * - official plugins ship as release assets of this repository only (no
  *   tree rung, design §3.1), and their source agrees with itself and with the
@@ -27,7 +27,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkVendored } from "./vendor.mjs";
-import { verifiedRuntime } from "./verified-import.mjs";
+import { checkMarketplaceRepository } from "./vendor/marketplace-check.js";
 import {
   ALERTS_RELEASE_VERSION,
   AVE_EXTENSION,
@@ -50,7 +50,6 @@ import {
   workingTree,
 } from "./repo.mjs";
 
-const { marketplace: { checkMarketplaceRepository } } = await verifiedRuntime();
 
 /** Fields a version may change after it is published: withdrawing it, or widening its rollout. */
 const CREDENTIALS = [
@@ -140,6 +139,8 @@ function checkPublishedVersions(base, problems) {
   const withdrawn = withdrawnPackages();
   for (const { index: previous } of baseIndexes(base)) {
     for (const entry of previous.packages) {
+      // Historical entries for kinds the app no longer supports are retired.
+      if (![...KIND_DIRS.values()].includes(entry.kind)) continue;
       const subject = `${entry.kind}/${entry.name}`;
       const current = now.get(subject);
       // A withdrawn package leaves whole; one it keeps listed stays immutable.

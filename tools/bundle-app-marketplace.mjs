@@ -7,7 +7,6 @@ if (!app || !entry) throw new Error("usage: bundle-app-marketplace.mjs <app chec
 
 const appRoot = realpathSync(app);
 const loggerImport = resolve(appRoot, "src/lib/logger.js");
-let stubbed = 0;
 const result = await Bun.build({
   entrypoints: [resolve(appRoot, entry)],
   root: appRoot,
@@ -18,7 +17,6 @@ const result = await Bun.build({
     setup(build) {
       build.onResolve({ filter: /\/lib\/logger\.js$/u }, (args) => {
         if (resolve(args.resolveDir, args.path) !== loggerImport) return;
-        stubbed += 1;
         return { path: "unused-host-logger", namespace: "marketplace-check" };
       });
       build.onLoad({ filter: /.*/u, namespace: "marketplace-check" }, () => ({

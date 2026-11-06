@@ -38,20 +38,8 @@ export const RETIRED_NAME_PATTERN = new RegExp(
   "u",
 );
 
-const VENDORED = "signed vendored bundle until the next ave tag sync";
-
-/**
- * Where the name may stay: `[path, reason]`, each one exact path. The three
- * files are byte-pinned to the signed Ave contract bundle (contract/sources.json,
- * tools/vendor/sources.json) and cannot be edited; `node tools/vendor.mjs sync
- * --ref <tag>` from an Ave release without the name clears them, and the stale
- * check then forces their removal here.
- */
-export const ALLOWLIST = Object.freeze([
-  ["contract/public-contract.ts", VENDORED],
-  ["tools/vendor/agent-plugin-components.js", VENDORED],
-  ["tools/vendor/marketplace-check.js", VENDORED],
-]);
+/** No upstream files currently require a retired-name exception. */
+export const ALLOWLIST = Object.freeze([]);
 
 const BINARY_PROBE_BYTES = 8000;
 

@@ -1,0 +1,65 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+test("sync reads and builds the requested commit or tag independently of HEAD and dirty files", () => {
+  const root = mkdtempSync(join(tmpdir(), "vendor-ref-"));
+  try {
+    const app = join(root, "ave");
+    mkdirSync(app);
+    const git = (...args) => execFileSync("git", ["-C", app, ...args], { encoding: "utf8" }).trim();
+    const write = (path, text) => { mkdirSync(dirname(join(app, path)), { recursive: true }); writeFileSync(join(app, path), text); };
+    git("init", "-q");
+    git("config", "user.name", "test");
+    git("config", "user.email", "test@example.com");
+    git("config", "commit.gpgsign", "false");
+    write("package.json", '{"name":"vendor-fixture","private":true}\n');
+    execFileSync("bun", ["install", "--ignore-scripts"], { cwd: app, stdio: "pipe" });
+    write("src/plugins/public-contract.ts", 'export const protocol = "original";\n');
+    write("schemas/plugin-manifest.schema.json", '{}\n');
+    write("schemas/plugin-host-protocol/5/protocol.schema.json", '{}\n');
+    write("src/marketplace/content/value.ts", 'export const value = "original";\n');
+    write("src/marketplace/content/agent-plugin-components.ts", 'export { value } from "./value.ts";\n');
+    write("src/marketplace/repository-check.ts", 'export const check = "original";\n');
+    git("add", ".");
+    git("commit", "-qm", "Original sources");
+    const ref = git("rev-parse", "HEAD");
+    git("tag", "test-release");
+    write("src/marketplace/content/value.ts", 'export const value = "new HEAD";\n');
+    git("add", ".");
+    git("commit", "-qm", "Change HEAD");
+    write("src/plugins/public-contract.ts", 'export const protocol = "dirty";\n');
+    write("src/marketplace/content/value.ts", 'export const value = "dirty";\n');
+    const tools = join(root, "tools");
+    mkdirSync(tools);
+    for (const name of ["vendor.mjs", "bundle-app-marketplace.mjs"]) cpSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), join(tools, name));
+    const run = (...args) => spawnSync("node", [join(tools, "vendor.mjs"), ...args], { encoding: "utf8" });
+    const sync = (ref) => { const result = run("sync", "--ref", ref, "--app", app); assert.equal(result.status, 0, result.stderr); };
+    sync(ref);
+    assert.match(readFileSync(join(root, "contract/public-contract.ts"), "utf8"), /original/);
+    const built = readFileSync(join(root, "tools/vendor/agent-plugin-components.js"), "utf8");
+    assert.match(built, /original/);
+    assert.doesNotMatch(built, /dirty|new HEAD/);
+    const before = readFileSync(join(root, "tools/vendor/sources.json"), "utf8");
+    sync(ref);
+    assert.equal(readFileSync(join(root, "tools/vendor/sources.json"), "utf8"), before);
+    assert.equal(readFileSync(join(root, "tools/vendor/agent-plugin-components.js"), "utf8"), built);
+    sync("test-release");
+    const sources = JSON.parse(readFileSync(join(root, "contract/sources.json"), "utf8"));
+    assert.deepEqual(Object.keys(sources), ["repository", "ref", "files"]);
+    assert.equal(sources.ref, "test-release");
+    assert.equal(run("check").status, 0);
+    assert.notEqual(run("sync", "--ref", "missing-tag", "--app", app).status, 0);
+    git("rm", "-q", "src/marketplace/repository-check.ts");
+    git("commit", "-qm", "Remove checker");
+    sync(git("rev-parse", "HEAD"));
+    const files = JSON.parse(readFileSync(join(root, "tools/vendor/sources.json"), "utf8")).files;
+    assert.equal(files["marketplace-check.js"], undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

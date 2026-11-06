@@ -187,6 +187,8 @@ export function generateIndex(previous, { pinVersions = false } = {}) {
     if (found.has(subject)) problems.push(`${subject}: withdrawn in ${WITHDRAWN_PATH} but its package is still here`);
   }
   for (const [subject, entry] of before) {
+    // Kinds removed from the app contract leave the catalog as a whole.
+    if (!KIND_ORDER.includes(entry.kind)) continue;
     // A withdrawn package leaves the index with every version it had.
     if (!found.has(subject) && (entry.versions?.length ?? 0) > 0 && !withdrawn.has(subject)) {
       problems.push(`${subject}: published package is missing; withdraw it in ${WITHDRAWN_PATH}`);
