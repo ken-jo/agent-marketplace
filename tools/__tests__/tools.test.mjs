@@ -12,7 +12,7 @@ import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { checkMarketplaceRepository } from "../vendor/marketplace-check.js";
-import { compareVersions, workingTree } from "../repo.mjs";
+import { compareVersions, requiredHostProtocol, workingTree } from "../repo.mjs";
 
 
 const TOOLS = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -940,5 +940,11 @@ describe("plugin alert drift checks", () => {
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, new RegExp(`runtime raises "${removedKind}" without an alerts\\.kinds declaration`, "u"));
     });
+  }
+});
+
+ it("maps app release boundaries to the protocol each host serves", () => {
+  for (const [version, protocol] of [["0.11.9", undefined], ["0.12.0", "2"], ["0.13.9", "2"], ["0.14.0", "3"], ["0.14.1", "3"], ["0.14.2", "5"], ["0.15.0", "5"]]) {
+    assert.equal(requiredHostProtocol(version), protocol, version);
   }
 });

@@ -3322,8 +3322,6 @@
   "useStarred.sessionFallbackText": "핀한 세션 · #{sessionId}",
   "useStatusBarInstall.installFailure": "{target} 설치 실패: {error}",
   "useStatusBarInstall.installSuccess": "{target} 설치 완료",
-  "useStatusBarInstall.labelAgent": "에이전트",
-  "useStatusBarInstall.labelSkill": "스킬",
   "useStatusBarInstall.uninstallFailure": "{target} 제거 실패: {error}",
   "useStatusBarInstall.uninstallSuccess": "{target} 제거 완료",
   "useStatusBarVendor.activeVendorA11y": "활성 LLM 벤더 및 모델",

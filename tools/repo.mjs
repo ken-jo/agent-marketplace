@@ -224,11 +224,11 @@ export function isPrerelease(version) {
 
 /**
  * The host protocol an app line serves, newest first: 0.12.x and 0.13.x serve
- * protocol 2, Ave 0.14.0 and later serve protocol 3 only (the app's
- * `HOST_PROTOCOL_FIRST_APP_VERSION`). A plugin's `minAppVersion` picks the one
+ * protocol 2, Ave 0.14.0 serves protocol 3, and Ave 0.14.2 and later serve
+ * protocol 5 (the app's `HOST_PROTOCOL_FIRST_APP_VERSION`). A plugin's `minAppVersion` picks the one
  * protocol it must declare; below 0.12.0 there was none.
  */
-export const HOST_PROTOCOL_FLOORS = Object.freeze([["0.14.0", "3"], ["0.12.0", "2"]]);
+export const HOST_PROTOCOL_FLOORS = Object.freeze([["0.14.2", "5"], ["0.14.0", "3"], ["0.12.0", "2"]]);
 
 export function requiredHostProtocol(minAppVersion) {
   if (typeof minAppVersion !== "string") return undefined;
