@@ -4,13 +4,14 @@ import { randomUUID } from "node:crypto";
 export class ChangeStream {
   private readonly epoch = randomUUID();
   private sequence = 0;
-  private readonly history: Array<{ sequence: number; kind: string }> = [];
+  private readonly history: Array<{ sequence: number; kind: string; sessionId?: string }> = [];
   private readonly waiting = new Set<() => void>();
   private closed = false;
 
-  publish(kind: string, _payload?: unknown): void {
+  publish(kind: string, payload?: unknown): void {
     if (this.closed) return;
-    this.history.push({ sequence: ++this.sequence, kind });
+    const sessionId = kind === "meeting.ended" && payload && typeof payload === "object" && "sessionId" in payload && typeof payload.sessionId === "string" ? payload.sessionId : undefined;
+    this.history.push({ sequence: ++this.sequence, kind, ...(sessionId ? { sessionId } : {}) });
     if (this.history.length > 256) this.history.shift();
     for (const wake of [...this.waiting]) wake();
   }
@@ -24,7 +25,7 @@ export class ChangeStream {
     if (!Number.isSafeInteger(sequence) || sequence < oldest - 1 || sequence > this.sequence) {
       return { cursor: current, reset: true, changes: [], closed: this.closed };
     }
-    return { cursor: current, reset: false, changes: this.history.filter(item => item.sequence > sequence).map(item => ({ kind: item.kind })), closed: this.closed };
+    return { cursor: current, reset: false, changes: this.history.filter(item => item.sequence > sequence).map(({ kind, sessionId }) => ({ kind, ...(sessionId ? { sessionId } : {}) })), closed: this.closed };
   }
 
   async wait(input: unknown) {

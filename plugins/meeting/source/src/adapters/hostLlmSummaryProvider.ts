@@ -115,7 +115,7 @@ export class HostLlmSummaryProvider implements SummaryProvider {
         createdAt: new Date().toISOString(),
       };
     }
-    this.diagnostic?.("warn", "summary parse failed (intermediate)", {
+    this.diagnostic?.("warn", "meeting_summary_parse_failed.intermediate", {
       length: typeof result === "string" ? result.length : 0,
     });
     return {
@@ -172,7 +172,7 @@ export class HostLlmSummaryProvider implements SummaryProvider {
         lengthTier: tier,
       };
     }
-    this.diagnostic?.("warn", "summary parse failed (final)", {
+    this.diagnostic?.("warn", "meeting_summary_parse_failed.final", {
       length: typeof result === "string" ? result.length : 0,
     });
     return {

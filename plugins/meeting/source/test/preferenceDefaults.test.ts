@@ -17,12 +17,12 @@ describe("run-local preference defaults", () => {
       const localStorage = { getItem };
       const length = runInNewContext(slice(sidebar, '  const LENGTH_TIER_KEY', '  function setPickedLengthTier') + '\npickedLengthTier', { localStorage });
       const capture = runInNewContext(slice(recorder, 'const PREF_MIC_KEY', 'const micControls') + '\n({ preferredMicId, captureMode })', { localStorage });
-      expect(length).toBe("medium");
-      expect(capture).toEqual({ preferredMicId: "", captureMode: "mix" });
+      expect(length).toBeUndefined();
+      expect(capture).toEqual({ preferredMicId: undefined, captureMode: undefined });
     }
   });
 
-  it("Done sends an explicit medium tier when the init context has none", async () => {
+  it("Done omits an unset tier so host configuration decides", async () => {
     for (const context of [undefined, {}, { lengthTier: "invalid" }, { lengthTier: "long" }]) {
       let click: () => Promise<void> = async () => {};
       const stop = vi.fn(async () => {});
@@ -33,31 +33,46 @@ describe("run-local preference defaults", () => {
         host: { stop, close: async () => {} }, console,
       });
       await click();
-      expect(stop).toHaveBeenCalledWith("fixture", { lengthTier: context?.lengthTier === "long" ? "long" : "medium" });
+      expect(stop).toHaveBeenCalledWith("fixture", context?.lengthTier === "long" ? { lengthTier: "long" } : {});
     }
   });
 
-  it("regeneration explicitly sends the selected, displayed or default tier", async () => {
-    for (const [stored, selected, expected] of [[undefined, undefined, "medium"], ["invalid", undefined, "medium"], ["long", undefined, "long"], ["long", "short", "short"]]) {
+  it("regeneration sends only a valid selected or displayed tier", async () => {
+    for (const [stored, selected, expected] of [[undefined, undefined, undefined], ["invalid", undefined, undefined], ["long", undefined, "long"], ["long", "short", "short"]]) {
       const callTool = vi.fn(async () => ({}));
       const regenerate = runInNewContext(slice(sidebar, '  async function doRegenerate(', '  function renderBusy()') + '\ndoRegenerate', {
         snapshot: stored ? { lengthTier: stored } : {}, busyText: "", mode: "read", render: () => {},
         sessionId: "fixture", bridge: { callTool }, onChanged: undefined, showErrorToast: () => {},
       });
       await regenerate(selected);
-      expect(callTool).toHaveBeenCalledWith("meeting_regenerate_summary", { sessionId: "fixture", lengthTier: expected });
+      expect(callTool).toHaveBeenCalledWith("meeting_regenerate_summary", { sessionId: "fixture", ...(expected ? { lengthTier: expected } : {}) });
     }
   });
 
-  it("missing-minutes generation sends the view's explicit default tier", async () => {
+  it("missing-minutes generation omits an unset tier", async () => {
     let click: () => Promise<void> = async () => {};
     const callTool = vi.fn(async () => ({}));
     const start = sidebar.indexOf('regenBtn.textContent = "🔄 지금 회의록 생성"');
     runInNewContext(slice(sidebar.slice(start), 'regenBtn.addEventListener', '          body.appendChild(regenBtn);'), {
       regenBtn: { disabled: false, textContent: "", addEventListener: (_name: string, callback: typeof click) => { click = callback; } },
-      sessionId: "fixture", pickedLengthTier: "medium", bridge: { callTool }, snapshot: {}, renderSubTab: () => {}, showErrorToast: () => {},
+      sessionId: "fixture", pickedLengthTier: undefined, bridge: { callTool }, snapshot: {}, renderSubTab: () => {}, showErrorToast: () => {},
     });
     await click();
-    expect(callTool).toHaveBeenCalledWith("meeting_regenerate_summary", { sessionId: "fixture", lengthTier: "medium" });
+    expect(callTool).toHaveBeenCalledWith("meeting_regenerate_summary", { sessionId: "fixture" });
+  });
+});
+
+
+describe("unset capture arguments", () => {
+  it("omits microphone and capture-mode arguments unless explicitly selected", async () => {
+    for (const explicit of [false, true]) {
+      const start = vi.fn(async () => ({ok: false}));
+      const begin = runInNewContext(slice(recorder, 'async function start(payload)', '// validated tokens') + '\nstart', {
+        sessionId: undefined, context: undefined, captureMode: explicit ? "mic-only" : undefined,
+        preferredMicId: explicit ? "fixture-mic" : undefined, host: {start}, setCaptureBadge: () => {}, console: {warn: () => {}},
+      });
+      await begin({sessionId: "fixture", context: {}});
+      expect(start).toHaveBeenCalledWith("fixture", {}, explicit ? {captureMode: "mic-only", micId: "fixture-mic"} : {});
+    }
   });
 });

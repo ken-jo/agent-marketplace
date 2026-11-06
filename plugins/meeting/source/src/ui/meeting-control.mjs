@@ -1,7 +1,7 @@
 
 
 import { connectView, applyHostContext, watchChanges } from "./mcp-app.mjs";
-import { shouldRefreshView, createErrorConsumer } from "./viewUpdates.ts";
+import { shouldRefreshView, createErrorConsumer, createPendingChanges, endedSessionToOpen } from "./viewUpdates.ts";
 import {
   CUSTOM_PROMPT_MAX_BYTES,
   buildFinalSystem,
@@ -2736,12 +2736,13 @@ async function persistPromptConfigWithBridge(bridge, finalPrompt, intermediatePr
   return { nextFinal, nextIntermediate };
 }
 
-function openPromptEditOverlay(anchorNode, bridge) {
+function openPromptEditOverlay(anchorNode, bridge, onClosed) {
   const scope = anchorNode?.closest?.(".ave-meeting-ui");
   if (!scope) return;
   if (scope.querySelector(".prompt-overlay")) return;
 
   const overlay = el("div", { class: "prompt-overlay" });
+  const close = () => { overlay.remove(); onClosed?.(); };
   const cardEl = el("div", { class: "prompt-overlay-card" });
   overlay.appendChild(cardEl);
 
@@ -2750,7 +2751,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
   titleEl.textContent = "회의록 프롬프트 편집";
   const closeBtn = el("button", { type: "button", class: "prompt-overlay-close", "aria-label": "닫기" });
   closeBtn.textContent = "×";
-  closeBtn.addEventListener("click", () => overlay.remove());
+  closeBtn.addEventListener("click", () => close());
   header.appendChild(titleEl);
   header.appendChild(closeBtn);
   cardEl.appendChild(header);
@@ -2804,7 +2805,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
   const footer = el("div", { class: "prompt-overlay-footer" });
   const cancelBtn = el("button", { type: "button", class: "prompt-overlay-cancel" });
   cancelBtn.textContent = "취소";
-  cancelBtn.addEventListener("click", () => overlay.remove());
+  cancelBtn.addEventListener("click", () => close());
   const saveBtn = el("button", { type: "button", class: "prompt-overlay-save" });
   saveBtn.textContent = "저장";
   saveBtn.disabled = true;
@@ -2838,7 +2839,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
       );
       finalArea.value = nextFinal;
       intermediateArea.value = nextIntermediate;
-      overlay.remove();
+      close();
     } catch (err) {
       setBusy(null);
       saveBtn.disabled = false;
@@ -2848,7 +2849,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
   });
 
   overlay.addEventListener("click", (ev) => {
-    if (ev.target === overlay) overlay.remove();
+    if (ev.target === overlay) close();
   });
   scope.appendChild(overlay);
 
@@ -2867,7 +2868,7 @@ function openPromptEditOverlay(anchorNode, bridge) {
     .catch((err) => {
       setBusy(null);
       showErrorToast(`설정 불러오기 실패: ${(err?.message ?? err).toString().slice(0, 200)}`);
-      overlay.remove();
+      close();
     });
 }
 
@@ -3112,6 +3113,9 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
   }
 
   function render() {
+    if (mode === "read" && ["edit", "regen", "busy"].includes(card.dataset.summaryMode)) {
+      queueMicrotask(() => opts?.onEditClosed?.());
+    }
     if (typeof activeMoreDismiss === "function") activeMoreDismiss();
     card.dataset.summaryMode = mode;
     if (mode === "read") delete card.dataset.dirty;
@@ -3168,13 +3172,13 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
     editPromptItem.textContent = "프롬프트 편집…";
     editPromptItem.addEventListener("click", () => {
       dismiss();
-      openPromptEditOverlay(card, bridge);
+      openPromptEditOverlay(card, bridge, opts?.onEditClosed);
     });
     const regenSameItem = el("button", { type: "button", class: "summary-more-item" });
     regenSameItem.textContent = "이 프롬프트로 다시 생성";
     regenSameItem.addEventListener("click", () => {
       dismiss();
-      // Reuse the displayed summary's tier explicitly, or "medium" if absent.
+      // Reuse the displayed summary's tier explicitly, or omit it for the host default if absent.
       doRegenerate(undefined);
     });
     pop.appendChild(editPromptItem);
@@ -3334,12 +3338,12 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
 
   async function doRegenerate(tier) {
     const requestedTier = tier ?? snapshot?.lengthTier;
-    const lengthTier = ["short", "medium", "long"].includes(requestedTier) ? requestedTier : "medium";
+    const tierArgs = ["short", "medium", "long"].includes(requestedTier) ? { lengthTier: requestedTier } : {};
     busyText = "회의록 다시 생성 중… (LLM 호출)";
     mode = "busy"; render();
     try {
       const updated = await bridge.callTool("meeting_regenerate_summary", {
-        sessionId, lengthTier,
+        sessionId, ...tierArgs,
       });
       snapshot = updated;
       if (typeof onChanged === "function") onChanged(updated);
@@ -3849,25 +3853,40 @@ async function mount() {
   // from flashing an error the user did nothing to cause. Cleared on
   // meeting.ended (subscribed below).
   let activeFloatingSessionId = null;
-  const consumeError = createErrorConsumer();
-  const stopChanges = watchChanges(bridge, async (result) => {
+  const initialState = await bridge.callTool("meeting_view_state", {});
+  const consumeError = createErrorConsumer(initialState.lastError);
+  const pendingChanges = createPendingChanges();
+  async function refreshChanges(result) {
     const state = await bridge.callTool("meeting_view_state", {});
     if (consumeError(state.lastError)) showErrorToast("회의 처리 중 오류가 발생했습니다. 설정과 전사를 확인하세요.");
     const editing = !!scope.querySelector('.summary[data-summary-mode="edit"], .summary[data-summary-mode="busy"], .summary[data-summary-mode="regen"], .prompt-overlay');
     const dirty = !!scope.querySelector('[data-dirty="true"]');
     const detailTab = viewArea.querySelector(".detail-body")?.dataset.tab ?? "summary";
-    if (editing || dirty) return;
-    const ended = result.reset || result.changes.some(change => change.kind === "meeting.ended");
-    if (ended && activeFloatingSessionId && !state.recorder && !state.activeSessions.includes(activeFloatingSessionId)) {
-      const sid = activeFloatingSessionId;
+    if (editing || dirty) { pendingChanges.defer(result); return; }
+    pendingChanges.defer(result);
+    result = pendingChanges.take();
+    const endedSessionId = endedSessionToOpen(result, activeFloatingSessionId);
+    if (activeFloatingSessionId && !state.recorder && !state.activeSessions.includes(activeFloatingSessionId)) {
+      const sid = endedSessionId;
       activeFloatingSessionId = null;
-      const detail = await bridge.callTool("meeting_session_detail", { sessionId: sid });
+      const detail = sid ? await bridge.callTool("meeting_session_detail", { sessionId: sid }) : null;
       if (detail?.finalSummary) { setView("session-detail", sid); return; }
     }
     if (!shouldRefreshView(result, { view: currentView, detailTab, editing, dirty })) return;
     if (currentView === "session-detail") pendingSubTab = detailTab;
     renderCurrentView();
-  });
+  }
+  let refreshQueue = Promise.resolve();
+  function scheduleRefresh(result) {
+    const next = refreshQueue.then(() => refreshChanges(result));
+    refreshQueue = next.catch(() => {});
+    return next;
+  }
+  function flushPendingChanges() {
+    const pending = pendingChanges.take();
+    if (pending) void scheduleRefresh({ ...pending, reset: true }).catch(() => pendingChanges.defer(pending));
+  }
+  const stopChanges = watchChanges(bridge, scheduleRefresh);
 
   // Top nav is intentionally 2 tabs only — "예정 회의" + "회의록".
   // The instant-record view is reachable from the empty state of "예정 회의"
@@ -3970,12 +3989,12 @@ async function mount() {
 
   // ─── Length-tier shared state + radio helper ──────────
   // Summary length is convenience state for one Ave run: it survives panel
-  // reopen and resets to "medium" when Ave restarts. The view sends the
-  // selected tier or that default explicitly when recording or uploading starts.
+  // reopen and resets to unset when Ave restarts. Omitted → host default;
+  // only an explicit selection overrides the configured summary length.
   const LENGTH_TIER_KEY = "ave.meeting.summaryLengthTier";
   // UI-only convenience state: survives panel reopen within one Ave run and resets on restart.
   const SESSION_CATEGORY_FILTER_KEY = "ave.meeting.sessionCategoryFilter";
-  let pickedLengthTier = "medium";
+  let pickedLengthTier;
   let pickedInstantCategory = "";
   let sessionCategoryFilter = "__all__";
   try {
@@ -4253,7 +4272,7 @@ async function mount() {
       const ctx = {
         title: titleVal || undefined,
         category: categoryVal,
-        lengthTier: pickedLengthTier,
+        ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}),
       };
       // Bypass handleStartRecording (which swallows errors and shows a
       // misleading success status) — call the tool directly so any
@@ -4308,7 +4327,7 @@ async function mount() {
       const uploadCtx = {
         title: titleVal || undefined,
         category: categoryVal,
-        lengthTier: pickedLengthTier,
+        ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}),
       };
       handleFileChosen(e, uploadCtx, statusEl, uploadBtn);
     });
@@ -4552,7 +4571,7 @@ async function mount() {
 
     const recordBtn = el("button", { type: "button", class: "pm-btn pm-btn-primary" });
     recordBtn.appendChild(document.createTextNode("녹음"));
-    recordBtn.addEventListener("click", () => handleStartRecording({ ...ctx, lengthTier: pickedLengthTier }));
+    recordBtn.addEventListener("click", () => handleStartRecording({ ...ctx, ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}) }));
 
     const uploadBtn = el("button", { type: "button", class: "pm-btn pm-btn-dark" });
     uploadBtn.appendChild(document.createTextNode("업로드"));
@@ -4658,9 +4677,9 @@ async function mount() {
     // Merge in the user's currently-picked length tier when the caller
     // hasn't supplied one. Centralises tier propagation so legacy call
     // sites (handleOpenConference fire-and-forget) also pick it up.
-    const ctxWithTier = ctx && typeof ctx === "object" && ctx.lengthTier
+    const ctxWithTier = ctx && typeof ctx === "object" && ["short", "medium", "long"].includes(ctx.lengthTier)
       ? ctx
-      : { ...(ctx ?? {}), lengthTier: pickedLengthTier };
+      : { ...(ctx ?? {}), ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}) };
     try {
       await bridge.callTool("meeting_start", { sessionId, context: ctxWithTier });
     } catch (err) {
@@ -5090,7 +5109,7 @@ async function mount() {
             regenBtn.textContent = "생성 중…";
             try {
               const created = await bridge.callTool("meeting_regenerate_summary", {
-                sessionId, lengthTier: pickedLengthTier,
+                sessionId, ...(pickedLengthTier ? { lengthTier: pickedLengthTier } : {}),
               });
               snapshot.finalSummary = created;
               renderSubTab();
@@ -5115,6 +5134,7 @@ async function mount() {
         // Update local snapshot so subsequent sub-tab switches read the
         // new summary without forcing a full meeting_session_detail
         // refetch (server-side persisted state already updated).
+        onEditClosed: flushPendingChanges,
         onChanged: (updated) => {
           snapshot.finalSummary = updated;
           syncDetailMeta();

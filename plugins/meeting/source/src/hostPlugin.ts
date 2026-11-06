@@ -1355,7 +1355,7 @@ export default async function createPlugin(context: HostPluginContext) {
       sttBaseUrl = normalizeKnownSttEndpoint(validated.url, sttModel);
     } else {
       sttBaseUrlInvalidReason = validated.error;
-      diagnostic("warn", "sttBaseUrl rejected", {
+      diagnostic("warn", "meeting_stt_base_url_rejected", {
         error: validated.error,
         preview: sanitizePreview(rawSttBaseUrl),
       });
@@ -1438,7 +1438,7 @@ export default async function createPlugin(context: HostPluginContext) {
   // instructions. Surface this once at plugin load so the mismatch
   // doesn't silently produce wrong-length summaries.
   if (customSummaryFinalPrompt.trim().length > 0) {
-    diagnostic("warn", "customSummaryFinalPrompt overrides built-in tier guidance — short/medium/long settings will NOT affect output length unless the custom prompt itself encodes length instructions.", {
+    diagnostic("warn", "meeting_custom_summary_prompt_overrides_tier", {
       tierConfigured: summaryLengthTier,
       customPromptBytes: new TextEncoder().encode(customSummaryFinalPrompt).length,
     });
@@ -1871,7 +1871,7 @@ export default async function createPlugin(context: HostPluginContext) {
           sessionId,
           reason: "stt-key-unavailable:plugin-stt-key-is-url",
         });
-        diagnostic("warn", "plugin sttApiKey rejected because it looks like an endpoint URL", {
+        diagnostic("warn", "meeting_stt_api_key_url_rejected", {
           sessionId,
           sttKeySource,
         });
@@ -2174,7 +2174,7 @@ export default async function createPlugin(context: HostPluginContext) {
       lastIngestError.delete(sessionId);
     } catch (err) {
       lastIngestError.set(sessionId, (err as Error).message);
-      diagnostic("warn", "meeting-capture.ingest_failed", {
+      diagnostic("warn", "meeting_capture.ingest_failed", {
         sessionId,
         error: (err as Error).message,
       });
@@ -2232,7 +2232,7 @@ export default async function createPlugin(context: HostPluginContext) {
       // A capture that ended on its own means the recording is now silent and
       // nothing else would say so. Reported rather than swallowed: a meeting
       // that quietly stops recording halfway is the worst outcome here.
-      diagnostic("warn", "meeting-capture.ended_unexpectedly", {
+      diagnostic("warn", "meeting_capture.ended_unexpectedly", {
         sessionId,
         reason: end.reason,
         detail: end.detail,
@@ -2259,7 +2259,7 @@ export default async function createPlugin(context: HostPluginContext) {
     try {
       await entry.capture.stop();
     } catch (err) {
-      diagnostic("warn", "meeting-capture.stop_failed", {
+      diagnostic("warn", "meeting_capture.stop_failed", {
         sessionId,
         error: (err as Error).message,
       });

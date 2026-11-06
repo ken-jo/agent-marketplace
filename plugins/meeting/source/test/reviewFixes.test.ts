@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
+import { recorderText } from "../src/ui/recorderI18n.js";
 import createPlugin from "../src/hostPlugin.js";
 import { MockSttProvider, MockSummaryProvider } from "../src/adapters/mockProviders.js";
 import { MeetingPipeline } from "../src/pipeline/meetingPipeline.js";
@@ -95,7 +96,7 @@ describe("recorder microphone availability UI", () => {
       setAttribute(_key: string, value: string) { this.label = value; } };
     const populate = runInNewContext(source.slice(start, end) + "\npopulateMicList", {
       host: { listMicrophones: async () => { if (rejects) throw Error("denied"); return result; } },
-      micSelect: select, preferredMicId: "", document: { createElement: () => ({value: "", textContent: ""}) },
+      t: (key: Parameters<typeof recorderText>[1]) => recorderText("en", key), micSelect: select, preferredMicId: "", document: { createElement: () => ({value: "", textContent: ""}) },
     });
     await populate();
     return select;

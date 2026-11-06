@@ -45,6 +45,7 @@
 // file is a module the shell imports and calls `mount()` on, exactly as it
 // does for a sidebar card.
 import { connectView, applyHostContext, watchChanges } from "./mcp-app.mjs";
+import { recorderText } from "./recorderI18n.ts";
 
 /**
  * The twelve private IPC channels, as tool calls.
@@ -457,6 +458,7 @@ const styleEl = document.createElement("style");
 styleEl.textContent = STYLES;
 root.appendChild(styleEl);
 
+const t = key => recorderText(bridge.app.getHostContext()?.locale ?? "ko", key);
 const shell = el("div", { class: "shell" });
 const header = el("div", { class: "header" });
 
@@ -467,14 +469,14 @@ const noteTab = el("button", {
   role: "tab",
   "aria-selected": "false",
   "data-state": "inactive",
-}, "Note");
+}, t("note"));
 const meetingTab = el("button", {
   type: "button",
   class: "tab active",
   role: "tab",
   "aria-selected": "true",
   "data-state": "active",
-}, "Meeting");
+}, t("meeting"));
 tabs.appendChild(noteTab);
 tabs.appendChild(meetingTab);
 
@@ -520,16 +522,16 @@ function clearSttError() {
 }
 
 // Microphone ID is convenience state for one Ave run: it survives panel
-// reopen and resets to "" (the default microphone) when Ave restarts.
+// reopen and resets to unset when Ave restarts. Omitted → host default microphone.
 // Capture mode is convenience state for one Ave run: it survives panel
-// reopen and resets to "mix" (microphone + system audio) when Ave restarts.
-// Both values are sent explicitly when capture starts or restarts.
+// reopen and resets to unset when Ave restarts. Omitted → host capture default.
+// Only explicit choices are sent when capture starts or restarts.
 const PREF_MIC_KEY = "ave.meeting.preferredMicId";
 const PREF_MODE_KEY = "ave.meeting.captureMode";
-let preferredMicId = "";
-let captureMode = "mix"; // "mix" | "mic-only"
+let preferredMicId;
+let captureMode; // unset | "mix" | "mic-only"
 try {
-  preferredMicId = localStorage.getItem(PREF_MIC_KEY) ?? "";
+  preferredMicId = localStorage.getItem(PREF_MIC_KEY) || undefined;
   const savedMode = localStorage.getItem(PREF_MODE_KEY);
   if (savedMode === "mic-only" || savedMode === "mix") captureMode = savedMode;
 } catch { /* localStorage may be unavailable in some contexts */ }
@@ -550,19 +552,19 @@ const mixOpt = el("button", {
   role: "radio",
   "aria-checked": "false",
   "data-state": "inactive",
-}, "Mix");
+}, t("mix"));
 const micOnlyOpt = el("button", {
   type: "button",
   class: "mode-opt",
   role: "radio",
   "aria-checked": "false",
   "data-state": "inactive",
-}, "Mic only");
+}, t("micOnly"));
 modeToggle.appendChild(mixOpt);
 modeToggle.appendChild(micOnlyOpt);
 
 function syncModeButtons() {
-  const isMix = captureMode === "mix";
+  const isMix = captureMode !== "mic-only";
   mixOpt.classList.toggle("active", isMix);
   mixOpt.setAttribute("aria-checked", String(isMix));
   mixOpt.dataset.state = isMix ? "active" : "inactive";
@@ -585,13 +587,13 @@ body.appendChild(notes);
 const actions = el("div", { class: "actions" });
 const cancelBtn = el("button", { type: "button", class: "btn btn--cancel" });
 cancelBtn.appendChild(svgFromString(ICONS.x));
-cancelBtn.appendChild(document.createTextNode(" Cancel"));
+cancelBtn.appendChild(document.createTextNode(" " + t("cancel")));
 const pauseBtn = el("button", { type: "button", class: "btn btn--pause" });
 pauseBtn.appendChild(svgFromString(ICONS.pause));
-pauseBtn.appendChild(document.createTextNode(" Pause"));
+pauseBtn.appendChild(document.createTextNode(" " + t("pause")));
 const doneBtn = el("button", { type: "button", class: "btn btn--done" });
 doneBtn.appendChild(svgFromString(ICONS.check));
-doneBtn.appendChild(document.createTextNode(" Done"));
+doneBtn.appendChild(document.createTextNode(" " + t("done")));
 actions.appendChild(cancelBtn);
 actions.appendChild(pauseBtn);
 actions.appendChild(doneBtn);
@@ -774,7 +776,7 @@ pauseBtn.addEventListener("click", async () => {
     else if (pausedAt) { pausedAccum += Date.now() - pausedAt; pausedAt = 0; }
     pauseBtn.replaceChildren();
     pauseBtn.appendChild(svgFromString(isPaused ? ICONS.play : ICONS.pause));
-    pauseBtn.appendChild(document.createTextNode(isPaused ? " Resume" : " Pause"));
+    pauseBtn.appendChild(document.createTextNode(" " + t(isPaused ? "resume" : "pause")));
   } catch { showSttError("녹음 상태 변경이 거부되었습니다."); }
   finally { pauseBtn.disabled = false; }
 });
@@ -799,9 +801,9 @@ doneBtn.addEventListener("click", async () => {
   // screen (carried into this window via init payload context) so the
   // host's meeting_stop sets the matching summarizeFinal verbosity.
   const requestedTier = context && typeof context === "object" ? context.lengthTier : undefined;
-  const tier = ["short", "medium", "long"].includes(requestedTier) ? requestedTier : "medium";
+  const tierArgs = ["short", "medium", "long"].includes(requestedTier) ? { lengthTier: requestedTier } : {};
   try {
-    await host.stop(sessionId, { lengthTier: tier });
+    await host.stop(sessionId, tierArgs);
   } catch (err) { console.error("stop failed"); }
   await host.close();
 });
@@ -824,20 +826,20 @@ async function populateMicList() {
   } catch {
     const unavailable = document.createElement("option");
     unavailable.value = "";
-    unavailable.textContent = "Microphone list unavailable";
+    unavailable.textContent = t("microphonesUnavailable");
     micSelect.replaceChildren(unavailable);
     micSelect.disabled = true;
-    micSelect.setAttribute("aria-label", "Microphone list unavailable");
+    micSelect.setAttribute("aria-label", t("microphonesUnavailable"));
     return;
   }
   micSelect.disabled = inputs.length === 0;
-  micSelect.setAttribute("aria-label", inputs.length ? "Microphone" : "No microphones found");
+  micSelect.setAttribute("aria-label", inputs.length ? t("microphone") : t("microphonesEmpty"));
   // Preserve current dropdown value across rebuild — restore it after.
   const desired = preferredMicId;
   micSelect.replaceChildren();
   const def = document.createElement("option");
   def.value = "";
-  def.textContent = inputs.length ? "기본 마이크" : "No microphones found";
+  def.textContent = inputs.length ? t("defaultMicrophone") : t("microphonesEmpty");
   micSelect.appendChild(def);
   for (const d of inputs) {
     const opt = document.createElement("option");
@@ -863,8 +865,8 @@ async function restartCapture() {
   setCaptureBadge("mic", "장치 변경 중…");
   try {
     const res = await host.restartCapture({
-      captureMode,
-      micId: preferredMicId || "",
+      ...(captureMode ? { captureMode } : {}),
+      ...(preferredMicId ? { micId: preferredMicId } : {}),
     });
     if (!res || res.ok !== true) throw new Error(res?.error || "restart refused");
     setCaptureBadge(res.mode === "loopback" ? "loopback" : "mic");
@@ -875,8 +877,8 @@ async function restartCapture() {
 }
 
 micSelect.addEventListener("change", () => {
-  preferredMicId = micSelect.value || "";
-  try { localStorage.setItem(PREF_MIC_KEY, preferredMicId); } catch { /* noop */ }
+  preferredMicId = micSelect.value || undefined;
+  try { localStorage.setItem(PREF_MIC_KEY, preferredMicId ?? ""); } catch { /* noop */ }
   // If we're already recording, swap the mic by restarting capture.
   // Pre-record changes just persist for next start().
   if (started) restartCapture();
@@ -933,8 +935,8 @@ async function start(payload) {
   }
   try {
     const res = await host.start(sessionId, context, {
-      captureMode,
-      micId: preferredMicId || "",
+      ...(captureMode ? { captureMode } : {}),
+      ...(preferredMicId ? { micId: preferredMicId } : {}),
     });
     if (!res || res.ok !== true) {
       throw new Error(
