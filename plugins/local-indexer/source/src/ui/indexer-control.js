@@ -1,14 +1,3 @@
-// indexer-control.js — Local Indexer 의 webview 진입점.
-//
-// 이전에는 단일 파일에 CSS/순수 헬퍼/모달/테마 동기화/렌더링/IPC 가 모두
-// 들어 있었지만, 책임을 다음 모듈로 분리했다:
-//   - indexer-control.styles.js : 모든 CSS 변수/규칙
-//   - indexer-state.js          : 순수 헬퍼(getDocName 등) + FILE_ICONS
-//   - theme-sync.js             : host.theme.changed 동기화
-//   - folder-preview-modal.js   : "폴더 추가" 시 미리보기 모달
-// 본 파일에는 createMarkup() 의 HTML 골격, ICONS(SVG 인라인),
-// 폴더/문서 렌더링, IPC 라이프사이클, mount() 의 cleanup 패턴만 남는다.
-
 import { STYLES } from "./indexer-control.styles.js";
 import {
   FILE_ICONS,
@@ -23,7 +12,7 @@ import {
   normalizeScanProgress,
 } from "./indexer-state.js";
 import { showFolderPreviewModal } from "./folder-preview-modal.js";
-import { primeTheme } from "./prime-theme.js";
+import { App } from "@modelcontextprotocol/ext-apps";
 
 const ICONS = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -143,6 +132,7 @@ function createMarkup() {
           </div>
         </section>
 
+        <section class="card"><form data-role="questionForm"><label>문서에 질문 <input name="question" class="input" maxlength="4096" required /></label><button>질문 초안 작성</button></form></section>
         <section class="card doc-section">
           <div class="card-head">
             <div class="card-title">${ICONS.document}<span>문서</span><span class="count" data-role="docCountBadge">0</span></div>
@@ -200,7 +190,15 @@ function getFolderStatusLabelUi(status) {
 }
 
 export async function mount(context) {
-  const { root, bridge } = context;
+  const { root, app } = context;
+  const callTool = async (name, args = {}) => {
+    if (disposed) throw new Error("View disposed");
+    const result = await app.callServerTool({ name, arguments: args }, { signal: waitAbort.signal });
+    if (result.isError) throw new Error(result.content?.filter(c => c.type === "text").map(c => c.text).join("\n") || "Tool failed");
+    if (result.structuredContent !== undefined) return result.structuredContent;
+    const text = result.content?.find(c => c.type === "text")?.text;
+    return text === undefined ? result : JSON.parse(text);
+  };
   root.innerHTML = createMarkup();
   const scope = root.querySelector(".ave-local-indexer-ui");
   if (!scope) throw new Error("local-indexer ui mount failed");
@@ -255,7 +253,8 @@ export async function mount(context) {
     hasApiKey: false,
   };
   const cleanups = [];
-  let pollTimer = null;
+  const waitAbort = new AbortController();
+  let disposed = false;
 
   const on = (el, ev, fn) => {
     if (!el) return;
@@ -420,16 +419,7 @@ export async function mount(context) {
     if (warnings.length > 0) warningSection?.setCollapsed(false);
     renderWarnings();
   };
-  const appendWarning = (item) => {
-    if (!item || typeof item !== "object") return;
-    const key = getWarningKey(item);
-    if (dismissedWarningKeys.has(key)) return;
-    if (warnings.some((existing) => getWarningKey(existing) === key)) return;
-    warnings.push(item);
-    if (warnings.length > MAX_WARNINGS) warnings.splice(0, warnings.length - MAX_WARNINGS);
-    if (warnings.length === 1) warningSection?.setCollapsed(false);
-    renderWarnings();
-  };
+
   const clearWarningsLocal = ({ dismiss = false, resetDismissed = false } = {}) => {
     if (dismiss) {
       for (const warning of warnings) dismissedWarningKeys.add(getWarningKey(warning));
@@ -442,7 +432,7 @@ export async function mount(context) {
   };
   const clearWarningsHost = async () => {
     try {
-      await bridge.callTool("index_clear_warnings");
+      await callTool("index_clear_warnings");
     } catch {
       // Best-effort only. Local dismissal still prevents immediate rehydration.
     }
@@ -477,28 +467,14 @@ export async function mount(context) {
     if (scanDetailEl) scanDetailEl.textContent = text || "";
   };
 
-  const stopScanStatusPolling = () => {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  };
-
   const pollScanStatusOnce = async () => {
     try {
-      const latest = await bridge.callTool("index_scan_status");
+      const latest = await callTool("index_scan_status");
       applyScanProgress(latest);
       replaceWarnings(latest?.warnings);
     } catch {
       // Ignore transient poll failures and let the next tick retry.
     }
-  };
-
-  const ensureScanStatusPolling = () => {
-    if (pollTimer) return;
-    pollTimer = setInterval(() => {
-      void pollScanStatusOnce();
-    }, 500);
   };
 
   const syncControls = () => {
@@ -527,7 +503,7 @@ export async function mount(context) {
       // eslint-disable-next-line no-constant-condition
       while (true) {
         // UI 는 page_count / line_count 를 표시하므로 full shape 요청.
-        const res = await bridge.callTool("index_documents", { limit: PAGE_SIZE, offset, full: true });
+        const res = await callTool("index_documents", { limit: PAGE_SIZE, offset, full: true });
         if (!res || typeof res !== "object" || !Array.isArray(res.documents)) {
           throw new Error("index_documents returned an invalid response.");
         }
@@ -562,11 +538,6 @@ export async function mount(context) {
     setStatus(getScanStatusText(scanProgress));
     setProgress(getProgressPercent(scanProgress));
     syncControls();
-    if (scanProgress.status === "running") {
-      ensureScanStatusPolling();
-    } else {
-      stopScanStatusPolling();
-    }
     // Re-render folder cards so live byFolder counters move folders between
     // groups (pending ↔ indexed) and refresh the "X / Y 색인됨" counts
     // without waiting for the post-scan summary refresh.
@@ -688,7 +659,7 @@ export async function mount(context) {
         if (!folder || isScanLocked(scanProgress)) return;
         setStatus("Removing folder...");
         try {
-          const res = await bridge.callTool("index_folders", { action: "remove", folder });
+          const res = await callTool("index_folders", { action: "remove", folder });
           await loadFolders();
           setStatus(res.message || "Folder removed.");
           void refreshDocuments({ quiet: true });
@@ -703,7 +674,7 @@ export async function mount(context) {
         if (!folder || isScanLocked(scanProgress)) return;
         setStatus("Refreshing folder...");
         try {
-          const res = await bridge.callTool("index_scan", { folder });
+          const res = await callTool("index_scan", { folder });
           await loadFolders();
           void refreshDocuments({ quiet: true });
           setStatus(res.message || "Folder refreshed.");
@@ -738,7 +709,7 @@ export async function mount(context) {
 
   const loadFolders = async () => {
     try {
-      const res = await bridge.callTool("index_folders");
+      const res = await callTool("index_folders");
       renderFolders(res?.folders || [], res?.summaries || []);
     } catch {
       renderFolders([], []);
@@ -862,7 +833,7 @@ export async function mount(context) {
 
   const loadSettings = async () => {
     try {
-      const res = await bridge.callTool("index_get_settings");
+      const res = await callTool("index_get_settings");
       if (res && typeof res === "object") {
         settings = {
           imageEmbeddingEnabled: res.imageEmbeddingEnabled === true,
@@ -889,7 +860,7 @@ export async function mount(context) {
   // provider changes (which would happen if we called full loadSettings).
   const refreshApiKeyStatus = async () => {
     try {
-      const res = await bridge.callTool("index_get_settings");
+      const res = await callTool("index_get_settings");
       if (res && typeof res === "object" && typeof res.hasApiKey === "boolean") {
         settings = { ...settings, hasApiKey: res.hasApiKey };
         renderSettings();
@@ -918,7 +889,7 @@ export async function mount(context) {
         // endpoint / model / apiKey from its config + secret store on
         // every push and returns them in the response so we can refresh
         // the read-only summary line.
-        const res = await bridge.callTool("index_set_image_embedding", { enabled, mode: "cloud" });
+        const res = await callTool("index_set_image_embedding", { enabled, mode: "cloud" });
         if (res && typeof res === "object") {
           settings = {
             ...settings,
@@ -998,7 +969,7 @@ export async function mount(context) {
     setStatus("폴더 선택 중...");
     let picked;
     try {
-      picked = await bridge.callTool("index_pick_folder");
+      picked = await callTool("index_pick_folder");
     } catch (error) {
       setStatus(`폴더 선택 실패: ${formatErrorMessage(error)}`);
       return;
@@ -1014,8 +985,7 @@ export async function mount(context) {
     try {
       previews = await Promise.all(
         folders.map((folder) =>
-          bridge
-            .callTool("index_preview_folder", { folder })
+          callTool("index_preview_folder", { folder })
             .catch((err) => ({ folder, total: 0, byType: {}, sample: [], error: formatErrorMessage(err) })),
         ),
       );
@@ -1035,7 +1005,7 @@ export async function mount(context) {
     let skipped = 0;
     const failures = [];
     try {
-      const res = await bridge.callTool("index_folders", { action: "add", folders: confirmed });
+      const res = await callTool("index_folders", { action: "add", folders: confirmed });
       added = Array.isArray(res?.added) ? res.added.length : 0;
       skipped = Array.isArray(res?.skipped) ? res.skipped.length : 0;
       if (Array.isArray(res?.failures)) {
@@ -1097,7 +1067,7 @@ export async function mount(context) {
     let lastError;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        return await bridge.callTool(toolName, payload);
+        return await callTool(toolName, payload);
       } catch (error) {
         lastError = error;
         if (attempt === maxAttempts || !isTransientError(error)) {
@@ -1166,7 +1136,7 @@ export async function mount(context) {
   on(stopScanBtn, "click", async () => {
     if (!isScanLocked(scanProgress)) return;
     try {
-      const res = await bridge.callTool("index_scan_cancel");
+      const res = await callTool("index_scan_cancel");
       setStatus(res?.message || "스캔 중단 요청 중...");
       await pollScanStatusOnce();
     } catch (error) {
@@ -1185,7 +1155,7 @@ export async function mount(context) {
     if (refreshFoldersBtn) refreshFoldersBtn.disabled = true;
     setStatus("폴더 상태 새로고침 중...");
     try {
-      await bridge.callTool("index_folders_purge_orphans");
+      await callTool("index_folders_purge_orphans");
       await loadFolders();
       await refreshDocuments({ quiet: true });
       setStatus("폴더 상태 새로고침 완료.");
@@ -1197,24 +1167,6 @@ export async function mount(context) {
     }
   });
 
-  // Host events reach a plugin panel through the guest bridge, never through
-  // `window.aveApi`. The panel runs in a sandboxed <webview> whose preload
-  // exposes `avePlugin` only and deliberately withholds the host surface, so
-  // `window.aveApi` is always undefined here and every subscription hung off
-  // it silently did nothing. Progress still moved and warnings still appeared
-  // because `index_scan_status` carries both, which is exactly why this went
-  // unnoticed: the panel looked alive.
-  //
-  // The 경고 지우기 wiring sat inside the same `if`, so the button was dead —
-  // visible, enabled, connected to nothing. Registering it next to the other
-  // controls, outside any capability check, is the point: an affordance the
-  // panel renders unconditionally has to be wired unconditionally.
-  cleanups.push(bridge.onEvent("index.scan.progress", (payload) => {
-    applyScanProgress(payload);
-  }));
-  cleanups.push(bridge.onEvent("index.warning", (payload) => {
-    appendWarning(payload);
-  }));
   if (clearWarningsBtn) {
     on(clearWarningsBtn, "click", () => {
       clearWarningsLocal({ dismiss: true });
@@ -1222,17 +1174,28 @@ export async function mount(context) {
     });
   }
 
-  // Theme sync — SDK primeTheme handles cold-boot `getTheme()` pull +
-  // `host.theme.changed` subscribe + validated --ave-* token paint to
-  // `scope.style` (inline styles win over the static scope-local fallback in
-  // ave-tokens.css.js). Mirrors the meeting plugin's pattern: a single
-  // call replaces the hand-rolled bundleId/shell attribute mirroring and
-  // the cold-boot race window — primeTheme races getTheme() against the
-  // initial onEvent broadcast and applies whichever lands first.
-  const themeHandle = primeTheme(bridge, { target: scope });
-  cleanups.push(() => themeHandle.dispose());
+  on($("[data-role='questionForm']"), "submit", async event => {
+    event.preventDefault();
+    const text = event.currentTarget.elements.question.value.trim();
+    if (!text) return;
+    try { await app.sendMessage({ role: "user", content: [{ type: "text", text }] }); setStatus("질문 초안을 작성했습니다."); }
+    catch (error) { setStatus(`질문 초안 작성 실패: ${formatErrorMessage(error)}`); }
+  });
+
+  const applyContext = (next) => {
+    for (const [key, value] of Object.entries(next?.styles?.variables ?? {})) {
+      if (typeof value === "string") document.documentElement.style.setProperty(key, value);
+    }
+    scope.dataset.shell = next?.theme || "light";
+    document.documentElement.style.colorScheme = next?.theme || "light dark";
+  };
+  app.onhostcontextchanged = applyContext;
+  applyContext(app.getHostContext());
+  cleanups.push(() => { app.onhostcontextchanged = undefined; });
 
   void (async () => {
+    // Capture the cursor BEFORE snapshots so changes during initialization replay.
+    let cursor = (await callTool("index_wait_changes", { cursor: "", waitMs: 0 })).cursor;
     // Settings are independent of folders/scan — load them first so the
     // toggle is consistent before the user can interact with the UI.
     await loadSettings();
@@ -1259,13 +1222,42 @@ export async function mount(context) {
         setStatus(`Initial load failed: ${formatErrorMessage(error)}`);
       }
     }
-  })();
+    while (!disposed) {
+      try {
+        const result = await app.callServerTool({ name: "index_wait_changes", arguments: { cursor, waitMs: 10000 } }, { signal: waitAbort.signal });
+        if (disposed) break;
+        if (result.isError) throw new Error("Change wait failed");
+        const update = result.structuredContent ?? JSON.parse(result.content.find(c => c.type === "text").text);
+        cursor = update.cursor;
+        if (update.closed) break;
+        if (update.reset || update.changes.length) {
+          await pollScanStatusOnce();
+          if (update.reset || update.changes.some(c => c.kind !== "index.scan.progress" && c.kind !== "index.warning" && c.kind !== "warnings.cleared")) {
+            await loadFolders();
+            await refreshDocuments({ quiet: true });
+          }
+        }
+      } catch (error) {
+        if (disposed) break;
+        setStatus(`Live updates failed: ${formatErrorMessage(error)}`);
+        await new Promise(resolve => { const timer = setTimeout(resolve, 1000); waitAbort.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true, signal: waitAbort.signal }); });
+      }
+    }
+  })().catch(error => setStatus(`Initialization failed: ${formatErrorMessage(error)}`));
 
   return () => {
-    stopScanStatusPolling();
+    disposed = true;
+    waitAbort.abort();
     cleanups.forEach((fn) => fn());
     root.replaceChildren();
   };
 }
 
 export default mount;
+
+const app = new App({ name: "local-indexer", version: "0.8.0" });
+try {
+  await app.connect();
+  const dispose = await mount({ root: document.getElementById("app"), app });
+  window.addEventListener("pagehide", () => { dispose(); void app.close(); }, { once: true });
+} catch (error) { document.getElementById("app").textContent = `Connection failed: ${String(error)}`; }

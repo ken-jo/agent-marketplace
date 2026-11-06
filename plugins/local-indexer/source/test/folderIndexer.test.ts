@@ -158,6 +158,56 @@ describe("FolderAutoIndexer", () => {
 
   // ─── Unlink tests ─────────────────────────────────────
 
+  it("a failed or pending row from the worker does not make the next scan skip the file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ave-fi-failed-"));
+    try {
+      const names = ["indexed.md", "failed.md", "pending.md", "legacy.md"];
+      for (const name of names) await writeFile(join(dir, name), `# ${name}`);
+      const { stat } = await import("node:fs/promises");
+      const rows = [];
+      for (const [i, name] of names.entries()) {
+        const path = join(dir, name);
+        const status = ["indexed", "failed", "pending", undefined][i];
+        rows.push({ path, doc_id: `d-${name}`, mtime_ms: Math.floor((await stat(path)).mtimeMs) + 1, status });
+      }
+      const client = makeClient();
+      const indexer = new FolderAutoIndexer({ client, folders: [dir], extensions: [".md"] });
+      indexer.prePopulateCache(rows);
+      const result = await indexer.scanOnce();
+      // The indexed row, and a row from a worker that reports no status, are up to date.
+      expect(client.indexDocument.mock.calls.map((c) => c[0]).sort()).toEqual([
+        resolve(dir, "failed.md"),
+        resolve(dir, "pending.md"),
+      ]);
+      expect(result.indexed).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports each failed file with whether its failure may pass", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ave-fi-failures-"));
+    try {
+      for (const name of ["ok.md", "bad.md", "lost.md"]) await writeFile(join(dir, name), `# ${name}`);
+      const { WorkerCallError, WorkerIndexFailure } = await import("../src/workerClient");
+      const client = makeClient();
+      client.indexDocument.mockImplementation(async (path: string) => {
+        if (path.endsWith("bad.md")) throw new WorkerIndexFailure("unreadable", path, false);
+        if (path.endsWith("lost.md")) throw new WorkerCallError("gone", "worker-incarnation-ended");
+        return "doc-ok";
+      });
+      const indexer = new FolderAutoIndexer({ client, folders: [dir], extensions: [".md"] });
+      const result = await indexer.scanOnce();
+      expect([...(result.failures ?? [])].sort((a, b) => a.path.localeCompare(b.path))).toEqual([
+        { path: resolve(dir, "bad.md"), retryable: false },
+        { path: resolve(dir, "lost.md"), retryable: true },
+      ]);
+      expect(result.failedTransient).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("unlink: 인덱싱된 파일 삭제 → removeDocument 호출 및 맵 정리", async () => {
     const dir = await mkdtemp(join(tmpdir(), "ave-unlink-"));
     const filePath = join(dir, "doc.md");

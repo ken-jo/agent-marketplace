@@ -11,12 +11,12 @@ provider's model must not survive it.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import Any, Dict
 
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -27,10 +27,9 @@ from local_indexer import LocalIndexer  # noqa: E402
 from local_indexer_worker import (  # noqa: E402
     AppState,
     SetImageCaptioningRequest,
-    create_app,
+    build_handlers,
 )
-
-WRITE_TOKEN = "wt"
+from stdio_control import RequestError  # noqa: E402
 
 
 def _indexer(tmp_path: Path) -> LocalIndexer:
@@ -140,27 +139,22 @@ def test_request_model_applies_the_provider_naming_rule() -> None:
         SetImageCaptioningRequest(enabled=True, provider="local")
 
 
-# ── HTTP route ────────────────────────────────────────────────────────────
+# ── control method ────────────────────────────────────────────────────────
 @pytest.fixture
-def worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, LocalIndexer]:
-    monkeypatch.setattr("local_indexer_worker.SHUTDOWN_TOKEN", WRITE_TOKEN)
+def worker(tmp_path: Path) -> tuple[dict, LocalIndexer]:
     idx = _indexer(tmp_path)
     state = AppState(indexer=idx, search=object(), runtime_info={}, openai_api_key="")  # type: ignore[arg-type]
-    return TestClient(create_app(state)), idx
+    return build_handlers(state), idx
 
 
-def _push(client: TestClient, body: Dict[str, Any]) -> Any:
-    return client.post(
-        "/indexer/set_image_captioning",
-        headers={"x-ave-shutdown-token": WRITE_TOKEN},
-        json=body,
-    )
+def _push(handlers: dict, body: Dict[str, Any]) -> Any:
+    return asyncio.run(handlers["indexer_set_image_captioning"](body))
 
 
-def test_route_null_keeps_and_empty_resets(worker: tuple[TestClient, LocalIndexer]) -> None:
-    client, idx = worker
-    resp = _push(
-        client,
+def test_method_null_keeps_and_empty_resets(worker: tuple[dict, LocalIndexer]) -> None:
+    handlers, idx = worker
+    data = _push(
+        handlers,
         {
             "enabled": True,
             "provider": "azure-openai-chat",
@@ -169,42 +163,38 @@ def test_route_null_keeps_and_empty_resets(worker: tuple[TestClient, LocalIndexe
             "api_version": "2024-08-01-preview",
         },
     )
-    assert resp.status_code == 200
-    assert resp.json()["data"]["model"] == "vision-deploy"
+    assert data["model"] == "vision-deploy"
 
     # Explicit null and an omitted field both keep the value.
-    resp = _push(client, {"enabled": True, "provider": "azure-openai-chat", "model": None})
-    assert resp.status_code == 200
-    assert resp.json()["data"]["model"] == "vision-deploy"
+    data = _push(handlers, {"enabled": True, "provider": "azure-openai-chat", "model": None})
+    assert data["model"] == "vision-deploy"
     assert idx.get_image_captioning()["endpoint"] == "https://r.openai.azure.com/"
 
     # The provider switch: empty strings clear what the previous provider set.
-    resp = _push(
-        client,
+    data = _push(
+        handlers,
         {"enabled": True, "provider": "openai", "model": "", "endpoint": "", "api_version": ""},
     )
-    assert resp.status_code == 200
-    data = resp.json()["data"]
     assert data["provider"] == "openai"
     assert data["model"] == ""
     assert data["endpoint"] == ""
     assert data["apiVersion"] == ""
 
 
-def test_route_rejects_a_model_the_provider_cannot_name(
-    worker: tuple[TestClient, LocalIndexer],
+def test_method_rejects_a_model_the_provider_cannot_name(
+    worker: tuple[dict, LocalIndexer],
 ) -> None:
-    client, idx = worker
-    resp = _push(
-        client,
-        {"enabled": True, "provider": "azure-openai-responses", "model": "vendor/model"},
-    )
-    assert resp.status_code == 422
+    handlers, idx = worker
+    with pytest.raises(RequestError) as excinfo:
+        _push(handlers, {"enabled": True, "provider": "azure-openai-responses", "model": "vendor/model"})
+    assert excinfo.value.code == -32602
     assert idx.get_image_captioning()["enabled"] is False
 
 
-def test_route_rejects_the_removed_local_provider(
-    worker: tuple[TestClient, LocalIndexer],
+def test_method_rejects_the_removed_local_provider(
+    worker: tuple[dict, LocalIndexer],
 ) -> None:
-    client, _ = worker
-    assert _push(client, {"enabled": True, "provider": "local"}).status_code == 422
+    handlers, _ = worker
+    with pytest.raises(RequestError) as excinfo:
+        _push(handlers, {"enabled": True, "provider": "local"})
+    assert excinfo.value.code == -32602

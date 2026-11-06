@@ -1,50 +1,36 @@
 import type { PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
 import type { EgressChannel, EgressUpstreamFetch } from "./egressBroker.js";
 
-export type { PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
+export type {
+  PluginWorkerExitInfo,
+  PluginWorkerSpec,
+  SpawnedPluginWorker,
+  StdioControlPluginWorker,
+} from "@ave/plugin-contract";
 
 export type IndexMode = "auto" | "pdf" | "md" | "docx" | "pptx" | "xlsx" | "txt" | "html" | "image";
 
 export interface LocalIndexerWorkerOptions {
   /**
-   * 호스트-중재 워커 spawn primitive (`hostApi.spawnWorker`). 주입되면 워커는
-   * 호스트가 ASRT-confined로 띄운다. socketPath가 있으면 mac/linux UDS
-   * control을 사용하고, null이면 TCP control을 사용한다(gate-OFF plain spawn
-   * 또는 Windows ASRT-wrapped TCP control). transport 값으로 sandbox 여부를
-   * 추론하지 않는다.
+   * 호스트-중재 워커 spawn primitive (`hostApi.spawnWorker`). 워커는 호스트가
+   * (gate ON 이면 confined 로) 띄우고, plugin 과는 worker stdio control v1
+   * (`control: "stdio-control-v1"`) 으로만 대화한다. socket·port 는 없다.
    */
   spawnWorker?: (spec: PluginWorkerSpec) => Promise<SpawnedPluginWorker>;
   pythonExecutable?: string;
   workerScriptPath?: string;
   indexStorageRoot?: string;
   testMode?: boolean;
-  host?: string;
-  port?: number;
   workspace?: string;
   /**
    * Plugin-scoped data directory supplied by the host via
-   * `PluginRuntimeContext.pluginDataDir`. When provided, index DB and worker
-   * scratch files are stored under `<pluginDataDir>/index/`.
+   * `PluginRuntimeContext.pluginDataDir`. The worker's scratch workspace
+   * defaults to `<pluginDataDir>/.local-indexer-workspace`; the index itself
+   * lives in the worker's host-made state directory, not here. Before 0.8.0
+   * the index was `<pluginDataDir>/index/`, which an upgrade rebuilds from and
+   * then removes.
    */
   pluginDataDir?: string;
-  /**
-   * The one directory this plugin may bind a Unix-domain socket in, supplied by
-   * the host via `PluginRuntimeContext.pluginSocketDir`.
-   *
-   * The egress broker binds there instead of on loopback TCP. A confined plugin
-   * child cannot bind loopback: on macOS the bind is refused, and on Linux it
-   * succeeds into a network namespace the worker is not in — which is worse,
-   * because the failure then arrives at the worker's first request rather than
-   * at the bind. A Unix socket is a filesystem object and has neither problem.
-   *
-   * Required in practice on those platforms rather than optional: the host
-   * supplies it on every context, and `requires.minAppVersion` is what enforces
-   * that. Typed optional only because the whole options bag is. Unread on
-   * Windows, where the broker binds loopback TCP because `listen(path)` there is
-   * a named pipe rather than a Unix socket — `egressBrokerTransportFor` holds
-   * that decision.
-   */
-  pluginSocketDir?: string;
   apiKey?: string;
   model?: string;
   retrieveModel?: string;
@@ -85,13 +71,12 @@ export interface LocalIndexerWorkerOptions {
    */
   maxChunksPerDoc?: number;
   /**
-   * Host-mediated egress broker channel resolvers (P3 ⑬). Optional only for
-   * config-only construction paths that never call start(); start() requires
-   * these channels and rejects direct worker provider egress when they are
-   * absent. With channels present, the plugin starts a loopback `EgressBroker`
-   * BEFORE spawning the worker, passes the worker only a per-session broker
-   * token (never the provider key), and the worker reaches the provider
-   * exclusively through the broker. Each resolver is a thunk re-running the
+   * Plugin-mediated egress channel resolvers. Optional only for config-only
+   * construction paths that never call start(); start() requires these
+   * channels and rejects direct worker provider egress when they are absent.
+   * The worker holds no provider key and no token: it relays each provider
+   * request to this plugin over its control channel, and the `EgressBroker`
+   * answers it with these resolvers. Each resolver is a thunk re-running the
    * host's P0 trust chokepoint
    * (`resolveEmbeddingKeyForEndpoint` / `resolveCaptionKeyForEndpoint`) fresh
    * per request, so a custom untrusted endpoint still gets the plugin-own key,
@@ -108,17 +93,18 @@ export interface LocalIndexerWorkerOptions {
   isUpstreamAllowed?: (url: string) => boolean;
   /**
    * Corporate-CA PEM under the host's storage root, or `null` when it is not
-   * there. Resolved and existence-checked ONCE by the host entry, because it
-   * has two consumers that must agree: the broker's upstream provider TLS, and
-   * the worker's `SSL_CERT_FILE` for the model downloads it still makes
-   * directly. Two resolutions of one path is how those two come to disagree
-   * about whether corporate TLS is being intercepted.
+   * there. Resolved and existence-checked ONCE by the host entry; the worker
+   * gets it as `SSL_CERT_FILE` for the model downloads it still makes
+   * directly. (Provider egress goes through hostFetch, which owns its TLS.)
    */
   corpCaPath?: string | null;
   /** Host-owned upstream transport. Optional only until start(); start() requires it. */
   egressUpstreamFetch?: EgressUpstreamFetch;
   onEgressEvent?: (level: "info" | "warn" | "error", event: string, fields: Record<string, unknown>) => void;
-  onWorkerStdout?: (line: string) => void;
+  /**
+   * One worker log line. stdout carries control frames only, so every log
+   * line, the JSON events the warning banner reads included, arrives here.
+   */
   onWorkerStderr?: (line: string) => void;
   /**
    * #955 round-2 architect Minor: surface azure-inherit config-missing
@@ -211,7 +197,22 @@ export interface FolderAutoIndexerResult {
   totalIndexed: number;
   scanned: number;
   indexed: number;
+  /** Files that failed this scan, of either kind. */
   failed: number;
+  /**
+   * Of `failed`, those that may succeed on a retry (worker lost, request
+   * cancelled or backed up, unrecognised error). The rest are the worker's
+   * own verdict on the file and fail again the same way.
+   */
+  failedTransient?: number;
+  /** Each file that failed this scan, and whether that failure may pass. */
+  failures?: Array<{ path: string; retryable: boolean; failureKind?: string }>;
+  /** Files the walk saw, before the supported-type filter. */
+  walked?: number;
+  /** The same, per scanned folder (keyed as the folder was given). */
+  walkedByFolder?: Record<string, number>;
+  /** Directories whose listing failed (unmounted, permission denied, gone). */
+  unreadableFolders?: string[];
   canceled?: boolean;
 }
 

@@ -50,10 +50,11 @@ mkdirSync(dst, { recursive: true });
 
 const KEEP_EXTS = new Set([".py", ".sql"]);
 // All sibling modules `local_indexer_worker.py` reaches at runtime — directly
-// (`local_indexer`, `local_indexer_search`) or via lazy imports inside
-// indexer/search (`korean_tokenizer`, `embedding_client`, `user_dict_loader`
-// via korean_tokenizer). Plus `schema.sql` consumed by `local_indexer.py`
-// via `Path(__file__).with_name`.
+// (`stdio_control` for the control channel, `stdio_egress` for the relayed
+// provider calls, `local_indexer`, `local_indexer_search`) or via lazy
+// imports inside indexer/search (`korean_tokenizer`, `embedding_client`,
+// `image_captioner`, `user_dict_loader` via korean_tokenizer). Plus
+// `schema.sql` consumed by `local_indexer.py` via `Path(__file__).with_name`.
 //
 // If any of these is missing post-copy, Python `ImportError` ships green
 // from this script and surfaces to the host as
@@ -62,10 +63,13 @@ const KEEP_EXTS = new Set([".py", ".sql"]);
 // `worker/` actual contents whenever a module is added/renamed.
 const REQUIRED_FILES = [
   "local_indexer_worker.py",
+  "stdio_control.py",
+  "stdio_egress.py",
   "local_indexer.py",
   "local_indexer_search.py",
   "korean_tokenizer.py",
   "embedding_client.py",
+  "image_captioner.py",
   "user_dict_loader.py",
   "schema.sql",
 ];

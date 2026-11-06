@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /** Run the package's declared checks using the shared vendored contract. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 export async function runPluginChecks(directory, { helperOnly = false, execute = execFileSync } = {}) {
-  const source = resolve(ROOT, directory);
+  const requested = resolve(ROOT, directory);
+  const source = existsSync(join(requested, "package.json")) ? requested : join(requested, "source");
   const path = relative(ROOT, source);
   if (!path || path === ".." || path.startsWith(`..${sep}`) || path.includes(`${sep}node_modules${sep}`)) throw new Error("plugin directory must be inside this marketplace");
   const helper = join(ROOT, "tools/plugin-build");

@@ -1,725 +1,443 @@
 /**
- * LocalIndexerPlugin 스모크 테스트
+ * LocalIndexerPlugin over worker stdio control v1.
  *
- * Python worker 프로세스는 실제로 spawn하지 않음 — hostApi.spawnWorker를
- * 모킹한 SpawnedPluginWorker 핸들로 대체하여 lifecycle, tool 위임, stdout/stderr
- * 흐름을 검증한다. raw-spawn 경로는 제거됐으므로 child_process mock 불필요.
+ * No Python process is spawned: `spawnWorker` hands out fake
+ * `StdioControlPluginWorker` handles (test/support/fakeStdioWorker.ts) that
+ * behave as the host's handle is documented to. The tests cover the spawn
+ * spec, the lifecycle, the worker→plugin egress requests and the restart after
+ * an incarnation ends.
  */
-import { describe, expect, it, vi, beforeEach, afterEach, afterAll } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { request as httpRequest } from "node:http";
+import { describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { flattenAgentPluginsManifest } from "@ave/plugin-contract";
-import type { SpawnedPluginWorker } from "@ave/plugin-contract";
+import { flattenAgentPluginsManifest, type PluginWorkerSpec } from "@ave/plugin-contract";
+import {
+  LEGACY_INDEX_DIR_NAME,
+  LOCAL_INDEXER_WORKER_ID,
+  LocalIndexerPlugin,
+} from "../src/localIndexerPlugin";
+import { CAPTION_REQUEST_BYTES_MAX } from "../src/egressBroker";
+import type { LocalIndexerWorkerOptions } from "../src/types";
+import { FakeStdioWorker, readyWorker, spawnSequence } from "./support/fakeStdioWorker";
 
-function assertStringArray(value: unknown, label: string): string[] {
-  expect(value, `${label} should exist`).not.toBeUndefined();
-  expect(value, `${label} should be an array`).toEqual(expect.any(Array));
-  const valueAsArray = value as unknown[];
-  expect(valueAsArray.every((entry) => typeof entry === "string"), `${label} should contain only strings`).toBe(true);
-  return valueAsArray as string[];
-}
+const HOST_KEY = "fake-host-provider-token";
 
-// ─── SpawnedPluginWorker mock 헬퍼 ───────────────────────────
-/**
- * 테스트용 SpawnedPluginWorker 핸들을 생성한다.
- * - socketPath: null → TCP transport (gate-OFF plain spawn or Windows ASRT-wrapped)
- * - socketPath: "/tmp/x.sock" → UDS control mode
- */
-function makeHandle(opts: {
-  socketPath?: string | null;
-  pid?: number;
-} = {}): SpawnedPluginWorker & {
-  stdoutListeners: Array<(chunk: string) => void>;
-  stderrListeners: Array<(chunk: string) => void>;
-  exitListeners: Array<(info: { code: number | null; signal: NodeJS.Signals | null }) => void>;
-  stopMock: ReturnType<typeof vi.fn>;
-  emitStdout(chunk: string): void;
-  emitStderr(chunk: string): void;
-  emitExit(info?: { code: number | null; signal: NodeJS.Signals | null }): void;
-} {
-  const stdoutListeners: Array<(chunk: string) => void> = [];
-  const stderrListeners: Array<(chunk: string) => void> = [];
-  const exitListeners: Array<(info: { code: number | null; signal: NodeJS.Signals | null }) => void> = [];
-  const stopMock = vi.fn();
-  const handle = {
-    socketPath: opts.socketPath ?? null,
-    pid: opts.pid ?? 12345,
-    stop: stopMock,
-    onStdout(listener: (chunk: string) => void) { stdoutListeners.push(listener); },
-    onStderr(listener: (chunk: string) => void) { stderrListeners.push(listener); },
-    onExit(listener: (info: { code: number | null; signal: NodeJS.Signals | null }) => void) { exitListeners.push(listener); },
-    stdoutListeners,
-    stderrListeners,
-    exitListeners,
-    stopMock,
-    emitStdout(chunk: string) { stdoutListeners.forEach((l) => l(chunk)); },
-    emitStderr(chunk: string) { stderrListeners.forEach((l) => l(chunk)); },
-    emitExit(info: { code: number | null; signal: NodeJS.Signals | null } = { code: 0, signal: null }) {
-      exitListeners.forEach((l) => l(info));
-    },
-  };
-  return handle;
-}
-
-/**
- * macOS caps `sockaddr_un.sun_path` at 104 bytes including the NUL, and a
- * per-test `/var/folders/...` tmpdir already spends most of that — an
- * over-long address makes `bind()` answer `EINVAL`, which names no length.
- * `/private/tmp` is the real path `/tmp` resolves to, so it survives the
- * sandbox's canonicalisation too.
- */
-const SHORT_TMP_ROOT = process.platform === "darwin" ? "/private/tmp" : tmpdir();
-const createdSocketDirs: string[] = [];
-
-function makeSocketDir(): string {
-  const dir = mkdtempSync(join(SHORT_TMP_ROOT, "ave-sock-"));
-  createdSocketDirs.push(dir);
-  return dir;
-}
-
-afterAll(() => {
-  for (const dir of createdSocketDirs) rmSync(dir, { recursive: true, force: true });
-});
-
-/**
- * Dial the broker over its Unix socket. `fetch()` cannot reach it: the broker
- * has no TCP authority to name any more, and `--egress-broker-url` carries
- * only the dummy authority the provider SDKs insist on parsing.
- */
-function brokerProbe(socketPath: string, headers: Record<string, string> = {}): Promise<number> {
-  return new Promise((settle, reject) => {
-    const req = httpRequest(
-      {
-        socketPath,
-        path: "/egress/embedding/embeddings",
-        method: "POST",
-        headers: { "content-type": "application/json", ...headers },
-      },
-      (res) => {
-        res.resume();
-        settle(res.statusCode ?? 0);
-      },
-    );
-    req.on("error", reject);
-    req.end("{}");
-  });
-}
-
-function testBrokerOptions() {
+function brokerOptions(upstreamCalls: string[] = []): Pick<
+  LocalIndexerWorkerOptions,
+  "egressChannels" | "isUpstreamAllowed" | "egressUpstreamFetch"
+> {
   const channel = async () => ({
     upstreamBaseUrl: "https://api.openai.com/v1",
-    apiKey: "fake-host-provider-token",
+    apiKey: HOST_KEY,
     authScheme: "bearer" as const,
   });
   return {
     egressChannels: { embedding: channel, caption: channel },
-    isUpstreamAllowed: () => true,
-    egressUpstreamFetch: async () => ({
-      status: 200,
-      headers: { "content-type": "application/json" },
-      body: Buffer.from("{}"),
-    }),
-    pluginSocketDir: makeSocketDir(),
+    isUpstreamAllowed: (url: string) => new URL(url).host === "api.openai.com",
+    egressUpstreamFetch: async (url: string) => {
+      upstreamCalls.push(url);
+      return { status: 200, headers: { "content-type": "application/json" }, body: Buffer.from('{"ok":true}') };
+    },
   };
 }
 
-// ─── 테스트 ──────────────────────────────────────────────────
+async function withTempDir<T>(prefix: string, run: (dir: string) => Promise<T>): Promise<T> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  try {
+    return await run(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 
-describe("LocalIndexerPlugin", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function makePlugin(
+  spawnWorker: (spec: PluginWorkerSpec) => Promise<FakeStdioWorker | unknown>,
+  options: Partial<LocalIndexerWorkerOptions> = {},
+): LocalIndexerPlugin {
+  return new LocalIndexerPlugin({
+    pythonExecutable: "/usr/bin/python3",
+    startupTimeoutMs: 500,
+    shutdownGraceMs: 50,
+    spawnWorker: spawnWorker as LocalIndexerWorkerOptions["spawnWorker"],
+    ...brokerOptions(),
+    ...options,
   });
+}
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("인스턴스 생성: isRunning 초기값 false", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+describe("LocalIndexerPlugin — lifecycle", () => {
+  it("is not running before start, and stop() is a no-op then", async () => {
+    const plugin = makePlugin(async () => readyWorker(), { pluginDataDir: "/unused" });
     expect(plugin.isRunning).toBe(false);
-  });
-
-  it("getWorkerClient(): WorkerClient 인스턴스 반환", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const { WorkerClient } = await import("../src/workerClient");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
-    expect(plugin.getWorkerClient()).toBeInstanceOf(WorkerClient);
-  });
-
-  it("getShutdownToken(): start 전 null", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
-    // token은 startInternal()에서 생성되므로 start 전에는 null
-    // (실제로는 constructor에서 생성하지 않음)
-    // start()를 호출하지 않으면 null이어야 함
-    expect(plugin.getShutdownToken()).toBeNull();
-  });
-
-  it("pythonExecutable 미설정 시 start() → Error throw", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    // pythonExecutable 없이 생성
-    const plugin = new LocalIndexerPlugin({});
-
-    // health check가 오기 전에 에러가 발생해야 하므로 fetch는 stub하지 않음
-    await expect(plugin.start()).rejects.toThrow("pythonExecutable");
-  });
-
-  it("stop(): 실행 중이 아닌 상태에서 호출해도 에러 없음", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+    expect(plugin.getIndexLocation()).toBeNull();
     await expect(plugin.stop()).resolves.toBeUndefined();
   });
 
-  it("indexDocument(): workerClient에 위임 → 결과 반환", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
-
-    // workerClient.indexDocument를 spy
-    const wc = plugin.getWorkerClient();
-    vi.spyOn(wc, "indexDocument").mockResolvedValue("doc-mocked");
-
-    const result = await plugin.indexDocument("/path/to/doc.pdf", "auto");
-    expect(result).toBe("doc-mocked");
-    expect(wc.indexDocument).toHaveBeenCalledWith("/path/to/doc.pdf", "auto");
-  });
-
-  it("listDocuments(): workerClient에 위임 → 배열 반환", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
-
-    const wc = plugin.getWorkerClient();
-    const mockDocs = [{
-      docId: "d1",
-      docName: "a.pdf",
-      type: "pdf",
-      pageCount: 5,
-      indexedAt: "2026-04-01",
-      path: "/a.pdf",
-      mtimeMs: 1234,
-      status: "indexed",
-    }];
-    vi.spyOn(wc, "listDocuments").mockResolvedValue(mockDocs as any);
-
-    const result = await plugin.listDocuments();
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      id: "d1",
-      doc_id: "d1",
-      doc_name: "a.pdf",
-      doc_type: "pdf",
-      type: "pdf",
-      path: "/a.pdf",
-      page_count: 5,
-      mtime_ms: 1234,
-      indexed_at: "2026-04-01",
-      status: "indexed",
+  it("refuses to start without a python executable, spawnWorker or egress channels", async () => {
+    await withTempDir("ave-li-req-", async (dir) => {
+      const noPython = new LocalIndexerPlugin({ pluginDataDir: dir, spawnWorker: async () => readyWorker(), ...brokerOptions() });
+      await expect(noPython.start()).rejects.toThrow(/pythonExecutable/);
+      const noSpawn = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3", pluginDataDir: dir, ...brokerOptions() });
+      await expect(noSpawn.start()).rejects.toThrow(/spawnWorker capability/);
+      const noChannels = makePlugin(async () => readyWorker(), { pluginDataDir: dir, egressChannels: undefined });
+      await expect(noChannels.start()).rejects.toThrow(/egressChannels/);
+      const noUpstream = makePlugin(async () => readyWorker(), { pluginDataDir: dir, egressUpstreamFetch: undefined });
+      await expect(noUpstream.start()).rejects.toThrow(/egressUpstreamFetch/);
     });
-    expect(wc.listDocuments).toHaveBeenCalledOnce();
   });
 
-  it("removeDocument(): workerClient.removeDocument에 위임", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+  it("starts once, attaches the worker client, and stops in order: worker_shutdown, then handle.stop()", async () => {
+    await withTempDir("ave-li-life-", async (dir) => {
+      const worker = readyWorker({
+        documents_list: () => ({ documents: [{ doc_id: "d1", path: "/a.md", doc_name: "a.md", doc_type: "md" }], next_after: null }),
+      });
+      const { spawnWorker, specs } = spawnSequence(worker);
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir });
+      await Promise.all([plugin.start(), plugin.start()]);
+      expect(specs).toHaveLength(1);
+      expect(plugin.isRunning).toBe(true);
+      expect(plugin.getWorkerClient().attached).toBe(true);
+      const docs = await plugin.listDocuments();
+      expect(docs[0]).toMatchObject({ id: "d1", doc_id: "d1", path: "/a.md", doc_type: "md" });
 
-    const wc = plugin.getWorkerClient();
-    vi.spyOn(wc, "removeDocument").mockResolvedValue(undefined);
-
-    await expect(plugin.removeDocument("doc-1")).resolves.toBeUndefined();
-    expect(wc.removeDocument).toHaveBeenCalledWith("doc-1");
+      await plugin.stop();
+      expect(worker.callsOf("worker_shutdown")).toHaveLength(1);
+      expect(worker.callsOf("worker_shutdown")[0]!.options?.signal).toBeInstanceOf(AbortSignal);
+      expect(worker.stopCalls).toBe(1);
+      expect(plugin.isRunning).toBe(false);
+      expect(plugin.getWorkerClient().attached).toBe(false);
+    });
   });
 
-  it("getDocumentStructure(): workerClient.getStructure에 위임", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
-
-    const wc = plugin.getWorkerClient();
-    const tree = { nodes: [{ title: "서론", page: 1 }] };
-    vi.spyOn(wc, "getStructure").mockResolvedValue(tree);
-
-    const result = await plugin.getDocumentStructure("doc-1");
-    expect(result).toEqual(tree);
-    expect(wc.getStructure).toHaveBeenCalledWith("doc-1");
+  it("delegates document calls to the worker methods", async () => {
+    await withTempDir("ave-li-deleg-", async (dir) => {
+      const worker = readyWorker({
+        indexer_reindex: () => ({ doc_id: "d9", doc_name: "x.md", doc_type: "md", chunk_count: 1, status: "indexed" }),
+        documents_delete: () => ({ removed: true, doc_id: "d9" }),
+        document_get: () => ({ doc_id: "d9", doc_name: "x.md" }),
+        document_structure: () => ({ nodes: [] }),
+        page_content: () => [{ page: 1, text: "p1" }],
+      });
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir });
+      await plugin.start();
+      await expect(plugin.indexDocument("/x.md", "md")).resolves.toBe("d9");
+      await plugin.removeDocument("d9");
+      await expect(plugin.getDocument("d9")).resolves.toEqual({ doc_id: "d9", doc_name: "x.md" });
+      await expect(plugin.getDocumentStructure("d9")).resolves.toEqual({ nodes: [] });
+      await expect(plugin.getPageContent("d9", "1")).resolves.toEqual([{ page: 1, text: "p1" }]);
+      expect(worker.requests.map((r) => r.method)).toEqual([
+        "runtime_info", "indexer_reindex", "documents_delete", "document_get", "document_structure", "page_content",
+      ]);
+      await plugin.stop();
+    });
   });
 
-  it("getPageContent(): workerClient에 위임 → 응답 반환", async () => {
-    const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-    const plugin = new LocalIndexerPlugin({ pythonExecutable: "/usr/bin/python3" });
+  it("a start that never becomes ready stops the handle and reports why", async () => {
+    await withTempDir("ave-li-fail-", async (dir) => {
+      const worker = new FakeStdioWorker({
+        runtime_info: () => new Promise(() => {}),
+        worker_shutdown: () => ({ bye: true }),
+      });
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir, startupTimeoutMs: 20 });
+      await expect(plugin.start()).rejects.toThrow(/failed to become ready within 20ms/);
+      expect(worker.stopCalls).toBe(1);
+      expect(plugin.isRunning).toBe(false);
+    });
+  });
 
-    const wc = plugin.getWorkerClient();
-    const mockPages = [{ page: 1, content: "페이지 내용" }];
-    vi.spyOn(wc, "getPageContent").mockResolvedValue(mockPages as any);
+  it("a worker that exits during startup fails start() with the exit, not a timeout", async () => {
+    await withTempDir("ave-li-exit-", async (dir) => {
+      const worker = new FakeStdioWorker({ runtime_info: () => new Promise(() => {}) });
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir, startupTimeoutMs: 5_000 });
+      const starting = plugin.start();
+      await new Promise((r) => setTimeout(r, 5));
+      worker.end("exited", 1);
+      await expect(starting).rejects.toThrow(/exited before becoming ready/);
+      expect(plugin.getLastWorkerExit()).toEqual({ code: 1, signal: null, reason: "exited" });
+    });
+  });
 
-    const result = await plugin.getPageContent("doc-1", "1-3");
-    expect(result).toEqual(mockPages);
-    expect(wc.getPageContent).toHaveBeenCalledWith("doc-1", "1-3");
+  it("refuses a handle whose control is not stdio-control-v1, and stops it", async () => {
+    await withTempDir("ave-li-ctl-", async (dir) => {
+      const stop = vi.fn();
+      const legacy = { control: undefined, socketPath: null, pid: 1, stop, onStdout() {}, onStderr() {}, onExit() {} };
+      const plugin = makePlugin(async () => legacy, { pluginDataDir: dir });
+      await expect(plugin.start()).rejects.toThrow(/stdio-control-v1 spec/);
+      expect(stop).toHaveBeenCalled();
+      expect(plugin.isRunning).toBe(false);
+    });
+  });
+
+  it("restarts with a new incarnation after worker-incarnation-ended", async () => {
+    await withTempDir("ave-li-restart-", async (dir) => {
+      const first = readyWorker({ indexer_reindex: () => new Promise(() => {}) });
+      const second = readyWorker({ metrics: () => ({ processed: 2 }) });
+      const { spawnWorker, specs } = spawnSequence(first, second);
+      const onWorkerStderr = vi.fn();
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir, onWorkerStderr });
+      await plugin.start();
+
+      const pending = plugin.indexDocument("/slow.md");
+      await new Promise((r) => setTimeout(r, 1));
+      first.end("control-violation", 137);
+      // The call in flight is not replayed: it fails with the control error.
+      await expect(pending).rejects.toThrow(/worker-incarnation-ended/);
+      expect(plugin.isRunning).toBe(false);
+      expect(onWorkerStderr.mock.calls.some(([l]) => /worker exited \(control-violation, code 137\)/.test(String(l)))).toBe(true);
+      await expect(plugin.getWorkerClient().getMetrics()).rejects.toThrow(/not running/);
+
+      await plugin.start();
+      expect(specs).toHaveLength(2);
+      expect(plugin.isRunning).toBe(true);
+      await expect(plugin.getWorkerClient().getMetrics()).resolves.toEqual({ processed: 2 });
+      expect(first.callsOf("metrics")).toHaveLength(0);
+      // The second incarnation registered its own request handler.
+      expect(second.requestHandler).not.toBeNull();
+      await plugin.stop();
+    });
+  });
+
+  it("splits worker stderr into lines and flushes a trailing partial line on exit", async () => {
+    await withTempDir("ave-li-stderr-", async (dir) => {
+      const worker = readyWorker();
+      const onWorkerStderr = vi.fn();
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir, onWorkerStderr });
+      await plugin.start();
+      onWorkerStderr.mockClear();
+      worker.emitStderr('{"event":"one"}\n{"event":');
+      worker.emitStderr('"two"}\r\n\n  \npartial');
+      expect(onWorkerStderr.mock.calls.map(([l]) => l)).toEqual(['{"event":"one"}', '{"event":"two"}']);
+      worker.end("exited", 0);
+      expect(onWorkerStderr.mock.calls.map(([l]) => l)).toContain("partial");
+    });
+  });
+});
+
+describe("LocalIndexerPlugin — spawn spec", () => {
+  it("asks for stdio control v1 and a state directory, with no socket, port or token", async () => {
+    await withTempDir("ave-li-spec-", async (dir) => {
+      const { spawnWorker, specs } = spawnSequence(readyWorker());
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir });
+      await plugin.start();
+      const spec = specs[0]!;
+      expect(spec.workerId).toBe(LOCAL_INDEXER_WORKER_ID);
+      expect(spec.workerId).toMatch(/^[a-z0-9][a-z0-9-]*$/);
+      expect(spec.control).toBe("stdio-control-v1");
+      expect(spec.stateDirectory).toBe(true);
+      const workspace = resolve(dir, ".local-indexer-workspace");
+      expect(spec.allowWritePaths).toEqual([workspace]);
+      expect(spec.args).toEqual(expect.arrayContaining(["--workspace", workspace]));
+      // The index is the worker's state directory; nothing names a location for it.
+      for (const flag of ["--index-root", "--sqlite", "--lance", "--port", "--uds", "--host", "--egress-broker-url"]) {
+        expect(spec.args, flag).not.toContain(flag);
+      }
+      expect(JSON.stringify(spec)).not.toMatch(/token|socket|127\.0\.0\.1/i);
+      await plugin.stop();
+    });
+  });
+
+  it("a user-chosen indexStorageRoot is passed as --index-root and keeps its write grant", async () => {
+    await withTempDir("ave-li-root-", async (root) => {
+      const { spawnWorker, specs } = spawnSequence(readyWorker({}, { index_root: resolve(root), state_dir: "/state" }));
+      const plugin = makePlugin(spawnWorker, { indexStorageRoot: root, pluginDataDir: join(root, "pdd") });
+      await plugin.start();
+      const spec = specs[0]!;
+      const args = spec.args ?? [];
+      expect(args[args.indexOf("--index-root") + 1]).toBe(resolve(root));
+      expect(args[args.indexOf("--workspace") + 1]).toBe(resolve(root, "workspace"));
+      expect(spec.allowWritePaths).toEqual([resolve(root), resolve(root, "workspace")]);
+      expect(spec.stateDirectory).toBe(true);
+      expect(plugin.getIndexLocation()).toEqual({
+        indexRoot: resolve(root),
+        documentCount: 0,
+        inStateDirectory: false,
+        legacyIndexDir: null,
+      });
+      await plugin.stop();
+    });
+  });
+
+  it("grants read access to the interpreter and the worker script only", async () => {
+    await withTempDir("ave-li-read-", async (dir) => {
+      const { spawnWorker, specs } = spawnSequence(readyWorker());
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir });
+      await plugin.start();
+      const reads = specs[0]!.allowReadPaths ?? [];
+      expect(reads).toHaveLength(2);
+      expect(reads[0]).toBe("/usr/bin/python3");
+      expect(reads[1]).toMatch(/[\\/]local_indexer_worker\.py$/);
+      await plugin.stop();
+    });
   });
 
   it("grants and injects the corp CA the host resolved, and only that one", async () => {
-    // The path comes from the HOST entry, which resolved it under `aveHome`
-    // and checked once that it exists. The plugin no longer rebuilds it from
-    // `homedir()` — inside a confined child that answers with the sandbox's
-    // throwaway, and the worker would silently fall back to the default trust
-    // store on a network that intercepts TLS.
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-ca-"));
-    const corpCaPath = join(root, "corp-ca.pem");
-    await writeFile(corpCaPath, "-----BEGIN CERTIFICATE-----\n");
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      let capturedSpec: Record<string, unknown> | null = null;
-      const handle = makeHandle({ socketPath: null });
-      const spawnWorker = vi.fn().mockImplementation(async (spec: any) => {
-        capturedSpec = spec;
-        return handle;
-      });
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        shutdownGraceMs: 0,
-        spawnWorker,
-        corpCaPath,
-        ...testBrokerOptions(),
-      });
+    await withTempDir("ave-li-ca-", async (dir) => {
+      const corpCaPath = join(dir, "corp-ca.pem");
+      await writeFile(corpCaPath, "-----BEGIN CERTIFICATE-----\n");
+      const { spawnWorker, specs } = spawnSequence(readyWorker());
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir, corpCaPath });
       await plugin.start();
-
-      const spec = capturedSpec as unknown as {
-        allowReadPaths: string[];
-        env: Record<string, string>;
-      };
+      const spec = specs[0]!;
       expect(spec.allowReadPaths).toContain(corpCaPath);
-      // All three, because the worker's Python reaches the trust store through
-      // three different libraries and a PEM named to only some of them is a
-      // trust store that disagrees with itself.
-      expect(spec.env.SSL_CERT_FILE).toBe(corpCaPath);
-      expect(spec.env.REQUESTS_CA_BUNDLE).toBe(corpCaPath);
-      expect(spec.env.CURL_CA_BUNDLE).toBe(corpCaPath);
+      expect(spec.allowReadPaths!.filter((p) => p.endsWith(".pem"))).toEqual([corpCaPath]);
+      expect(spec.env?.SSL_CERT_FILE).toBe(corpCaPath);
+      expect(spec.env?.REQUESTS_CA_BUNDLE).toBe(corpCaPath);
+      expect(spec.env?.CURL_CA_BUNDLE).toBe(corpCaPath);
       await plugin.stop();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+    });
   });
 
-  it("indexStorageRoot는 worker 저장 경로로만 반영하고 미지원 CLI 플래그를 전달하지 않는다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-storage-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      let capturedArgs: string[] = [];
-      let capturedSpec: Record<string, unknown> | null = null;
-      const handle = makeHandle({ socketPath: null, pid: 12345 });
-      const spawnWorker = vi.fn().mockImplementation(async (spec: any) => {
-        capturedSpec = spec;
-        capturedArgs = spec.args ?? [];
-        return handle;
-      });
-
-      // workerClient.health()를 즉시 true 반환으로 패치해 waitUntilHealthy 통과
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      // workerClient.shutdown()도 패치 (stop 시 호출)
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        shutdownGraceMs: 0,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-
-      const expectedRoot = resolve(root);
-      expect(capturedArgs).toContain("--workspace");
-      expect(capturedArgs).toContain(resolve(expectedRoot, "workspace"));
-      expect(capturedArgs).toContain("--sqlite");
-      expect(capturedArgs).toContain(resolve(expectedRoot, "fts5.sqlite"));
-      expect(capturedArgs).toContain("--lance");
-      expect(capturedArgs).toContain(resolve(expectedRoot, "vectors.lance"));
-
-      expect(capturedSpec).not.toBeNull();
-      expect(capturedSpec).toEqual(
-        expect.objectContaining({
-          allowReadPaths: expect.any(Array),
-          allowWritePaths: expect.any(Array),
-        }),
-      );
-      const capturedReadPaths = assertStringArray(capturedSpec.allowReadPaths, "allowReadPaths");
-      const capturedWritePaths = assertStringArray(capturedSpec.allowWritePaths, "allowWritePaths");
-
-      const expectedReadPaths = new Set<string>([
-        "/usr/bin/python3",
-      ]);
-      const workerGrantPath = capturedReadPaths.find((value) =>
-        /[\\/]local_indexer_worker\.py$/.test(value)
-      );
-      expect(workerGrantPath).toBeDefined();
-      if (workerGrantPath) expectedReadPaths.add(workerGrantPath);
-
-      // No `corpCaPath` option was given, so no PEM is granted. This used to
-      // read the developer's own `~/.ave/certs/` and assert conditionally,
-      // which made the outcome depend on the machine rather than on the input.
-      expect(capturedReadPaths.filter((value) => value.endsWith(".pem"))).toEqual([]);
-
-      const forbiddenEntries = [
-        "--workspace",
-        "--sqlite",
-        "--lance",
-        "--embedding-endpoint",
-        "--embedding-api-key",
-        "fake",
-      ];
-      for (const forbidden of forbiddenEntries) {
-        expect(capturedReadPaths).not.toContain(forbidden);
-      }
-
-      expect(capturedReadPaths).toEqual(expect.arrayContaining(Array.from(expectedReadPaths)));
-      expect(capturedReadPaths.every((value) => expectedReadPaths.has(value))).toBe(true);
-      expect(capturedReadPaths).toHaveLength(expectedReadPaths.size);
-
-      const expectedWritePaths = new Set<string>([
-        resolve(expectedRoot),
-        resolve(expectedRoot, "workspace"),
-      ]);
-      expect(capturedWritePaths).toEqual(expect.arrayContaining(Array.from(expectedWritePaths)));
-      expect(capturedWritePaths).toHaveLength(expectedWritePaths.size);
-      await plugin.stop();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  // SECURITY (P1 item 9): the embedding API key must NEVER be placed on the
-  // worker's spawn env. The host-injected API-key env channel was
-  // removed because it exposed the key via /proc/<pid>/environ, child-process
-  // inheritance, and crash dumps. The key is pushed to the running worker over
-  // the control channel instead, so even with an apiKey configured the spawn
-  // env must carry no *_API_KEY variable at all.
-  it("spawn env에 API 키 변수를 주입하지 않는다 (키는 런타임 push 전용)", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-noenvkey-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      let capturedEnv: Record<string, string | undefined> = {};
-      const handle = makeHandle({ socketPath: null, pid: 12345 });
-      const spawnWorker = vi.fn().mockImplementation(async (spec: any) => {
-        capturedEnv = spec.env ?? {};
-        return handle;
-      });
-
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        shutdownGraceMs: 0,
+  it("puts no API key in the spawn env or args, even with one configured", async () => {
+    await withTempDir("ave-li-nokey-", async (dir) => {
+      const { spawnWorker, specs } = spawnSequence(readyWorker());
+      const secret = "fake-provider-token-must-not-leak";
+      const plugin = makePlugin(spawnWorker, {
+        pluginDataDir: dir,
         embeddingProvider: "openai",
         embeddingModel: "text-embedding-3-small",
-        apiKey: "fake-provider-token-must-not-leak-into-env",
-        spawnWorker,
-        ...testBrokerOptions(),
+        apiKey: secret,
       });
       await plugin.start();
-
-      expect(Object.keys(capturedEnv).filter((name) => /API_KEY/u.test(name))).toEqual([]);
-      // Defense in depth: no env value should equal the configured key.
-      expect(Object.values(capturedEnv)).not.toContain("fake-provider-token-must-not-leak-into-env");
+      const spec = specs[0]!;
+      expect(Object.keys(spec.env ?? {}).filter((n) => /API_KEY/u.test(n))).toEqual([]);
+      expect(JSON.stringify(spec)).not.toContain(secret);
+      expect(spec.env?.PYTHONDONTWRITEBYTECODE).toBe("1");
       await plugin.stop();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+    });
   });
 
-  // #955 round-2 architect Minor: onConfigWarning surfaces azure-inherit
-  // missing-config as a structured callback so the host can emit a UI-visible
-  // event (forwarded to `index.warning` with kind="azure-inherit-missing-config"
-  // in hostPlugin.ts).
-  //
-  // The callback fires inside `startInternal()` during arg construction,
-  // before the worker health check. We use a tight startupTimeoutMs so the
-  // start() promise rejects quickly rather than hanging, then assert the
-  // callback was invoked with the expected shape.
   it("azure provider with missing endpoint/apiKey invokes onConfigWarning", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-config-warn-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      // health() never resolves within 0ms timeout → start() rejects as intended.
-      vi.spyOn(WorkerClient.prototype, "health").mockRejectedValue(new Error("health unavailable"));
-
-      const handle = makeHandle({ socketPath: null });
-      const spawnWorker = vi.fn().mockResolvedValue(handle);
-
+    await withTempDir("ave-li-warn-", async (dir) => {
       const onConfigWarning = vi.fn();
       const onWorkerStderr = vi.fn();
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 0,
-        shutdownGraceMs: 0,
+      const plugin = makePlugin(spawnSequence(readyWorker()).spawnWorker, {
+        pluginDataDir: dir,
         embeddingProvider: "azure",
         embeddingModel: "text-embedding-3-small",
-        // endpoint + apiKey intentionally omitted to trigger CONFIG REQUIRED branch.
         hostVendor: "azure-foundry",
         onConfigWarning,
         onWorkerStderr,
-        spawnWorker,
-        ...testBrokerOptions(),
       });
-      // start() will fail health check — the onConfigWarning fires during arg-building,
-      // before waitUntilHealthy is reached.
-      await expect(plugin.start()).rejects.toThrow();
-
-      // Stderr path still fires (log archival).
-      const stderrMessages = onWorkerStderr.mock.calls.map(([line]) => line);
-      expect(stderrMessages.some((line) => String(line).includes("CONFIG REQUIRED"))).toBe(true);
-
-      // New structured callback fires once with exact shape.
+      await plugin.start();
+      expect(onWorkerStderr.mock.calls.some(([l]) => String(l).includes("CONFIG REQUIRED"))).toBe(true);
       expect(onConfigWarning).toHaveBeenCalledTimes(1);
       expect(onConfigWarning).toHaveBeenCalledWith({
         reason: "azure-inherit-missing-config",
         missing: ["embeddingEndpoint", "apiKey"],
-        // explicit embeddingProvider="azure" → inheritedFrom describes explicit path.
         inheritedFrom: "explicit embeddingProvider=azure",
       });
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("start() 실패 시 handle.stop()이 호출되고 isRunning이 false다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-start-fail-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      vi.spyOn(WorkerClient.prototype, "health").mockRejectedValue(new Error("health unavailable"));
-
-      const handle = makeHandle({ socketPath: null });
-      const spawnWorker = vi.fn().mockResolvedValue(handle);
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 0,
-        shutdownGraceMs: 0,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-
-      await expect(plugin.start()).rejects.toThrow(/failed health check/);
-      expect(handle.stopMock).toHaveBeenCalled();
-      expect(plugin.isRunning).toBe(false);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("worker stdout/stderr shutdown token 로그를 host callback으로 전달하지 않는다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-token-redaction-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const onWorkerStdout = vi.fn();
-      const onWorkerStderr = vi.fn();
-      const handle = makeHandle({ socketPath: null, pid: 12345 });
-      const spawnWorker = vi.fn().mockResolvedValue(handle);
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 100,
-        shutdownGraceMs: 0,
-        onWorkerStdout,
-        onWorkerStderr,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-
-      // Emit via the handle's registered listeners (mirrors what host UDS bridge does).
-      handle.emitStdout("[Worker] shutdown_token=secret\n");
-      handle.emitStderr("AVE_SHUTDOWN_TOKEN=secret\n");
-      handle.emitStdout("ordinary stdout\n");
-      handle.emitStderr("ordinary stderr\n");
-      handle.emitStdout("line one\nline two\n");
-      handle.emitStderr("err one\nerr two\n");
-
-      const stdoutMessages = onWorkerStdout.mock.calls.map(([line]) => line);
-      const stderrMessages = onWorkerStderr.mock.calls.map(([line]) => line);
-      expect(stdoutMessages).toContain("ordinary stdout");
-      expect(stdoutMessages).toContain("line one");
-      expect(stdoutMessages).toContain("line two");
-      expect(stderrMessages).toContain("ordinary stderr");
-      expect(stderrMessages).toContain("err one");
-      expect(stderrMessages).toContain("err two");
-      expect(stdoutMessages.some((line) => String(line).includes("shutdown_token"))).toBe(false);
-      expect(stderrMessages.some((line) => String(line).includes("AVE_SHUTDOWN_TOKEN"))).toBe(false);
       await plugin.stop();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("worker가 crash하면 onExit가 isRunning을 false로 돌려 재시작을 가능케 한다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-crash-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-
-      const onWorkerStdout = vi.fn();
-      const handle = makeHandle({ socketPath: "/tmp/ave-crash.sock", pid: 12345 });
-      const spawnWorker = vi.fn().mockResolvedValue(handle);
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 100,
-        onWorkerStdout,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-      expect(plugin.isRunning).toBe(true);
-
-      // 미완(개행 없는) 마지막 라인은 종종 crash 사유 — exit 시 flush 돼야 한다.
-      handle.emitStdout("worker crashed: OOM");
-      // 워커 비정상 종료 → 호스트 핸들 onExit 발화.
-      handle.emitExit({ code: 1, signal: null });
-
-      // isRunning=false → host ensureStarted()의 auto-restart 가 재진입 가능
-      // (onExit 가 없으면 죽은 워커가 영구 isRunning=true 로 남아 재시작 불가).
-      expect(plugin.isRunning).toBe(false);
-      // exit 직전 미완 라인이 flush 됐다.
-      expect(onWorkerStdout.mock.calls.map(([line]) => line)).toContain("worker crashed: OOM");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  // ─── spawnWorker capability tests ───────────────────────────────────────────
-
-  it("spawnWorker 없이 start()하면 minAppVersion 가이드 에러를 던진다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-no-spawn-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 100,
-        shutdownGraceMs: 0,
-        // spawnWorker intentionally omitted
-      });
-      await expect(plugin.start()).rejects.toThrow(/spawnWorker/);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("egressChannels 없이 start()하면 direct worker provider egress를 거부한다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-no-egress-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const spawnWorker = vi.fn().mockResolvedValue(makeHandle({ socketPath: null }));
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 100,
-        shutdownGraceMs: 0,
-        spawnWorker,
-      });
-      await expect(plugin.start()).rejects.toThrow(/egressChannels|direct worker provider egress/i);
-      expect(spawnWorker).not.toHaveBeenCalled();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("handle.socketPath === null → TCP transport으로 workerClient를 구성한다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-tcp-transport-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      const configureSpy = vi.spyOn(WorkerClient.prototype, "configureTransport");
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const handle = makeHandle({ socketPath: null, pid: 0 }); // pid=0 → no session file
-      const spawnWorker = vi.fn().mockResolvedValue(handle);
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 200,
-        shutdownGraceMs: 0,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-
-      // configureTransport called with null socketPath → TCP mode preserved
-      expect(configureSpy).toHaveBeenCalledWith(null, expect.stringContaining("http://"));
-      expect(plugin.isRunning).toBe(true);
-      await plugin.stop();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("handle.socketPath non-null → UDS transport으로 workerClient를 구성한다", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-local-indexer-uds-transport-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-
-      const configureSpy = vi.spyOn(WorkerClient.prototype, "configureTransport");
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const sockPath = "/tmp/ave-test-worker.sock";
-      const handle = makeHandle({ socketPath: sockPath, pid: 0 }); // pid=0 → no session file
-      const spawnWorker = vi.fn().mockResolvedValue(handle);
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 200,
-        shutdownGraceMs: 0,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-
-      // configureTransport called with the real socketPath → UDS mode
-      expect(configureSpy).toHaveBeenCalledWith(sockPath, expect.stringContaining("http://"));
-      expect(plugin.isRunning).toBe(true);
-      await plugin.stop();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+    });
   });
 });
 
-// ─── manifest contract: UI-only tools off the LLM schema ──────────────────────
+describe("LocalIndexerPlugin — worker egress requests", () => {
+  it("answers an allowed egress_embedding from the broker, with the key injected upstream only", async () => {
+    await withTempDir("ave-li-egress-", async (dir) => {
+      const worker = readyWorker();
+      const upstreamCalls: string[] = [];
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir, ...brokerOptions(upstreamCalls) });
+      await plugin.start();
+      const answer = await worker.askPlugin("egress_embedding", {
+        method: "POST", path: "/embeddings", headers: { "content-type": "application/json" }, body: "{}",
+      });
+      expect(answer).toEqual({ status: 200, headers: { "content-type": "application/json" }, body: '{"ok":true}' });
+      expect(upstreamCalls).toEqual(["https://api.openai.com/v1/embeddings"]);
+      expect(JSON.stringify(answer)).not.toContain(HOST_KEY);
+      await plugin.stop();
+    });
+  });
+
+  it("refuses an upstream off the allow-list with 403 and relays nothing", async () => {
+    await withTempDir("ave-li-egress-deny-", async (dir) => {
+      const worker = readyWorker();
+      const upstreamCalls: string[] = [];
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, {
+        pluginDataDir: dir,
+        ...brokerOptions(upstreamCalls),
+        isUpstreamAllowed: () => false,
+      });
+      await plugin.start();
+      const answer = (await worker.askPlugin("egress_embedding", { method: "POST", path: "/embeddings", body: "{}" })) as { status: number };
+      expect(answer.status).toBe(403);
+      expect(upstreamCalls).toEqual([]);
+      await plugin.stop();
+    });
+  });
+
+  it("refuses a caption over the 11 MiB cap with a visible 413", async () => {
+    await withTempDir("ave-li-egress-cap-", async (dir) => {
+      const worker = readyWorker();
+      const upstreamCalls: string[] = [];
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir, ...brokerOptions(upstreamCalls) });
+      await plugin.start();
+      const answer = (await worker.askPlugin("egress_caption", {
+        method: "POST", path: "/responses", body: "x".repeat(CAPTION_REQUEST_BYTES_MAX + 1),
+      })) as { status: number; body: string };
+      expect(answer.status).toBe(413);
+      expect(answer.body).toMatch(/11 MiB/);
+      expect(upstreamCalls).toEqual([]);
+      await plugin.stop();
+    });
+  });
+
+  it("refuses a worker request it does not answer", async () => {
+    await withTempDir("ave-li-egress-unknown-", async (dir) => {
+      const worker = readyWorker();
+      const plugin = makePlugin(spawnSequence(worker).spawnWorker, { pluginDataDir: dir });
+      await plugin.start();
+      await expect(worker.askPlugin("read_host_file", { path: "/etc/passwd" })).rejects.toThrow(/answers no worker request named read_host_file/);
+      await plugin.stop();
+    });
+  });
+});
+
+describe("LocalIndexerPlugin — index location", () => {
+  it("reports the pre-0.8.0 index directory when it still holds an index", async () => {
+    await withTempDir("ave-li-legacy-", async (dir) => {
+      const legacy = join(dir, LEGACY_INDEX_DIR_NAME);
+      await mkdir(legacy, { recursive: true });
+      await writeFile(join(legacy, "fts5.sqlite"), "");
+      const plugin = makePlugin(spawnSequence(readyWorker({}, { document_count: 3 })).spawnWorker, { pluginDataDir: dir });
+      await plugin.start();
+      expect(plugin.getIndexLocation()).toEqual({
+        indexRoot: "/state/workers/local-indexer-worker/index",
+        documentCount: 3,
+        inStateDirectory: true,
+        legacyIndexDir: resolve(legacy),
+      });
+      await plugin.stop();
+    });
+  });
+
+  it("reports no legacy directory when it is absent, empty, or the index is still there", async () => {
+    await withTempDir("ave-li-nolegacy-", async (dir) => {
+      const first = makePlugin(spawnSequence(readyWorker()).spawnWorker, { pluginDataDir: dir });
+      await first.start();
+      expect(first.getIndexLocation()?.legacyIndexDir).toBeNull();
+      await first.stop();
+
+      // A directory without fts5.sqlite holds no index worth rebuilding from.
+      await mkdir(join(dir, LEGACY_INDEX_DIR_NAME), { recursive: true });
+      const second = makePlugin(spawnSequence(readyWorker()).spawnWorker, { pluginDataDir: dir });
+      await second.start();
+      expect(second.getIndexLocation()?.legacyIndexDir).toBeNull();
+      await second.stop();
+
+      // The worker still resolved its index to the old directory: nothing moved.
+      await writeFile(join(dir, LEGACY_INDEX_DIR_NAME, "fts5.sqlite"), "");
+      const third = makePlugin(
+        spawnSequence(readyWorker({}, { index_root: resolve(dir, LEGACY_INDEX_DIR_NAME) })).spawnWorker,
+        { pluginDataDir: dir },
+      );
+      await third.start();
+      expect(third.getIndexLocation()?.legacyIndexDir).toBeNull();
+      await third.stop();
+    });
+  });
+});
+
 describe("manifest contract — UI-only tools are uiActions, not LLM tools", () => {
   type PureTool = {
     name: string;
@@ -813,228 +531,3 @@ describe("manifest contract — UI-only tools are uiActions, not LLM tools", () 
 });
 
 // ─── Egress broker lifecycle (P3 ⑬) ──────────────────────────────────────
-describe("LocalIndexerPlugin — egress broker", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("broker is listening BEFORE spawnWorker resolves, and passes the broker URL via --egress-broker-url (never the real key)", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-broker-life-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-      const { EGRESS_TOKEN_HEADER } = await import("../src/egressBroker");
-
-      let capturedArgs: string[] = [];
-      let brokerReachableAtSpawn = false;
-      const handle = makeHandle({ socketPath: null });
-      const spawnWorker = vi.fn().mockImplementation(async (spec: any) => {
-        capturedArgs = spec.args ?? [];
-        const idx = capturedArgs.indexOf("--egress-broker-uds");
-        const socketPath = idx >= 0 ? capturedArgs[idx + 1] : "";
-        // The broker must already be listening at spawn time.
-        brokerReachableAtSpawn = (await brokerProbe(socketPath)) === 403; // up, but no token
-        return handle;
-      });
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        shutdownGraceMs: 0,
-        embeddingEndpoint: "https://api.openai.com",
-        apiKey: "fake-real-provider-token-must-not-reach-worker",
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-
-      expect(brokerReachableAtSpawn).toBe(true);
-      expect(capturedArgs).toContain("--egress-broker-uds");
-      // The URL is still passed because the provider SDKs insist on parsing an
-      // authority — but it names no port, so nothing can be dialled through it.
-      // The socket arg above is the only address that reaches the broker.
-      expect(capturedArgs).toContain("--egress-broker-url");
-      expect(capturedArgs[capturedArgs.indexOf("--egress-broker-url") + 1]).toBe("http://localhost");
-      // In broker mode the real --embedding-endpoint is NOT passed to the worker.
-      expect(capturedArgs).not.toContain("--embedding-endpoint");
-      // No spawn arg or env carries the real key.
-      expect(capturedArgs).not.toContain("fake-real-provider-token-must-not-reach-worker");
-      expect(plugin.isEgressBrokered).toBe(true);
-      expect(plugin.getEgressToken()).toBeTruthy();
-      // The token is NOT the provider key.
-      expect(plugin.getEgressToken()).not.toBe("fake-real-provider-token-must-not-reach-worker");
-
-      const idx = capturedArgs.indexOf("--egress-broker-uds");
-      const socketPath = capturedArgs[idx + 1];
-      expect(existsSync(socketPath)).toBe(true);
-      await plugin.stop();
-      // After stop the socket is both unbound AND unlinked — a stale node left
-      // behind would make the next start() fail with EADDRINUSE.
-      await expect(brokerProbe(socketPath, { [EGRESS_TOKEN_HEADER]: "x" })).rejects.toThrow();
-      expect(existsSync(socketPath)).toBe(false);
-      expect(plugin.isEgressBrokered).toBe(false);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("worker onExit tears down the pinned broker", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-broker-exit-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-      const { EGRESS_TOKEN_HEADER } = await import("../src/egressBroker");
-
-      let brokerSocketPath = "";
-      const handle = makeHandle({ socketPath: null });
-      const spawnWorker = vi.fn().mockImplementation(async (spec: any) => {
-        const args: string[] = spec.args ?? [];
-        const idx = args.indexOf("--egress-broker-uds");
-        brokerSocketPath = args[idx + 1];
-        return handle;
-      });
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await plugin.start();
-      expect(plugin.isEgressBrokered).toBe(true);
-
-      handle.emitExit({ code: 1, signal: null });
-      // Allow the async stopEgressBroker() to settle.
-      await new Promise((r) => setTimeout(r, 50));
-      expect(plugin.isEgressBrokered).toBe(false);
-      await expect(brokerProbe(brokerSocketPath, { [EGRESS_TOKEN_HEADER]: "x" })).rejects.toThrow();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("on win32 binds loopback TCP, hands the worker the real bound URL and no socket, and still refuses an untokened caller", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-broker-win32-"));
-    // `listen(path)` on Windows creates a named pipe under `\\.\pipe\`, so a
-    // socket path is refused (EACCES) and there is nothing for the worker's
-    // httpx transport to pin to either. The platform is stubbed rather than
-    // detected so this runs on the CI hosts we actually have.
-    const realPlatform = process.platform;
-    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { WorkerClient } = await import("../src/workerClient");
-      const { EGRESS_TOKEN_HEADER } = await import("../src/egressBroker");
-
-      let capturedArgs: string[] = [];
-      const handle = makeHandle({ socketPath: null });
-      const spawnWorker = vi.fn().mockImplementation(async (spec: any) => {
-        capturedArgs = spec.args ?? [];
-        return handle;
-      });
-      vi.spyOn(WorkerClient.prototype, "health").mockResolvedValue(true);
-      vi.spyOn(WorkerClient.prototype, "shutdown").mockResolvedValue({ bye: true });
-
-      const brokerOptions = testBrokerOptions();
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        shutdownGraceMs: 0,
-        spawnWorker,
-        ...brokerOptions,
-        // Windows binds nothing in the socket directory, so the host not having
-        // one must not stop the plugin.
-        pluginSocketDir: undefined,
-      });
-      await plugin.start();
-
-      expect(capturedArgs).not.toContain("--egress-broker-uds");
-      const brokerUrl = capturedArgs[capturedArgs.indexOf("--egress-broker-url") + 1];
-      // The real bound address, not the dummy authority the UDS path passes.
-      expect(brokerUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-
-      // Loopback is reachable by any local process, so the token is the whole
-      // of the control there — exactly as it is over the socket.
-      const denied = await fetch(`${brokerUrl}/egress/embedding/embeddings`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-      expect(denied.status).toBe(403);
-      const allowed = await fetch(`${brokerUrl}/egress/embedding/embeddings`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [EGRESS_TOKEN_HEADER]: plugin.getEgressToken() ?? "",
-        },
-        body: "{}",
-      });
-      expect(allowed.status).toBe(200);
-
-      await plugin.stop();
-      expect(plugin.isEgressBrokered).toBe(false);
-      await expect(fetch(`${brokerUrl}/egress/embedding/embeddings`, { method: "POST" })).rejects.toThrow();
-    } finally {
-      Object.defineProperty(process, "platform", { value: realPlatform, configurable: true });
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it.runIf(process.platform !== "win32")(
-    "still refuses to start without pluginSocketDir where the broker binds a Unix socket",
-    async () => {
-      const root = await mkdtemp(join(tmpdir(), "ave-broker-nosock-"));
-      try {
-        const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-        const spawnWorker = vi.fn();
-        const plugin = new LocalIndexerPlugin({
-          pythonExecutable: "/usr/bin/python3",
-          indexStorageRoot: root,
-          startupTimeoutMs: 500,
-          spawnWorker,
-          ...testBrokerOptions(),
-          pluginSocketDir: undefined,
-        });
-        await expect(plugin.start()).rejects.toThrow(/pluginSocketDir|minAppVersion/);
-        expect(spawnWorker).not.toHaveBeenCalled();
-      } finally {
-        await rm(root, { recursive: true, force: true });
-      }
-    },
-  );
-
-  it("a broker-start failure fails start() deterministically (worker not spawned)", async () => {
-    const root = await mkdtemp(join(tmpdir(), "ave-broker-fail-"));
-    try {
-      const { LocalIndexerPlugin } = await import("../src/localIndexerPlugin");
-      const { EgressBroker } = await import("../src/egressBroker");
-
-      const spawnWorker = vi.fn();
-      // Force broker.start() to throw — start() must reject before spawnWorker.
-      const startSpy = vi.spyOn(EgressBroker.prototype, "start").mockRejectedValue(new Error("broker bind failed"));
-
-      const plugin = new LocalIndexerPlugin({
-        pythonExecutable: "/usr/bin/python3",
-        indexStorageRoot: root,
-        startupTimeoutMs: 500,
-        spawnWorker,
-        ...testBrokerOptions(),
-      });
-      await expect(plugin.start()).rejects.toThrow(/broker bind failed/);
-      expect(spawnWorker).not.toHaveBeenCalled();
-      expect(plugin.isEgressBrokered).toBe(false);
-      startSpy.mockRestore();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-});
