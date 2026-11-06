@@ -3174,8 +3174,7 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
     regenSameItem.textContent = "이 프롬프트로 다시 생성";
     regenSameItem.addEventListener("click", () => {
       dismiss();
-      // No lengthTier override — host falls back to the persisted
-      // finalSummary.lengthTier (see meeting_regenerate_summary).
+      // Reuse the displayed summary's tier explicitly, or "medium" if absent.
       doRegenerate(undefined);
     });
     pop.appendChild(editPromptItem);
@@ -3334,11 +3333,13 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
   }
 
   async function doRegenerate(tier) {
+    const requestedTier = tier ?? snapshot?.lengthTier;
+    const lengthTier = ["short", "medium", "long"].includes(requestedTier) ? requestedTier : "medium";
     busyText = "회의록 다시 생성 중… (LLM 호출)";
     mode = "busy"; render();
     try {
       const updated = await bridge.callTool("meeting_regenerate_summary", {
-        sessionId, lengthTier: tier,
+        sessionId, lengthTier,
       });
       snapshot = updated;
       if (typeof onChanged === "function") onChanged(updated);
@@ -3968,11 +3969,9 @@ async function mount() {
   }
 
   // ─── Length-tier shared state + radio helper ──────────
-  // Persists across view switches in this session. Default "medium"
-  // matches plugin.json's configSchema default; the plugin settings UI
-  // can change the configSchema default but this in-memory value is
-  // the per-window picked tier (carried into meeting_start
-  // context.lengthTier and ultimately into summarizeFinal).
+  // Summary length is convenience state for one Ave run: it survives panel
+  // reopen and resets to "medium" when Ave restarts. The view sends the
+  // selected tier or that default explicitly when recording or uploading starts.
   const LENGTH_TIER_KEY = "ave.meeting.summaryLengthTier";
   // UI-only convenience state: survives panel reopen within one Ave run and resets on restart.
   const SESSION_CATEGORY_FILTER_KEY = "ave.meeting.sessionCategoryFilter";
@@ -5091,7 +5090,7 @@ async function mount() {
             regenBtn.textContent = "생성 중…";
             try {
               const created = await bridge.callTool("meeting_regenerate_summary", {
-                sessionId,
+                sessionId, lengthTier: pickedLengthTier,
               });
               snapshot.finalSummary = created;
               renderSubTab();

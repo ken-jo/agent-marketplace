@@ -519,10 +519,11 @@ function clearSttError() {
   errorBanner.style.display = "none";
 }
 
-// Mic device picker + Mic-only / Mix toggle. Both persist to localStorage
-// so the user's preference survives window close/reopen. Inserting the
-// controls inline rather than a settings popover keeps the floating
-// window single-pane without nested modals.
+// Microphone ID is convenience state for one Ave run: it survives panel
+// reopen and resets to "" (the default microphone) when Ave restarts.
+// Capture mode is convenience state for one Ave run: it survives panel
+// reopen and resets to "mix" (microphone + system audio) when Ave restarts.
+// Both values are sent explicitly when capture starts or restarts.
 const PREF_MIC_KEY = "ave.meeting.preferredMicId";
 const PREF_MODE_KEY = "ave.meeting.captureMode";
 let preferredMicId = "";
@@ -797,9 +798,10 @@ doneBtn.addEventListener("click", async () => {
   // Forward the length tier the user picked on the prep/instant-record
   // screen (carried into this window via init payload context) so the
   // host's meeting_stop sets the matching summarizeFinal verbosity.
-  const tier = context && typeof context === "object" ? context.lengthTier : undefined;
+  const requestedTier = context && typeof context === "object" ? context.lengthTier : undefined;
+  const tier = ["short", "medium", "long"].includes(requestedTier) ? requestedTier : "medium";
   try {
-    await host.stop(sessionId, tier ? { lengthTier: tier } : undefined);
+    await host.stop(sessionId, { lengthTier: tier });
   } catch (err) { console.error("stop failed"); }
   await host.close();
 });
