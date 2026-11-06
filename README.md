@@ -57,7 +57,7 @@ node tools/plugin-check.mjs tools/plugin-build --helper
 node tools/plugin-check.mjs plugins/<name>/source
 ```
 
-The plugin check runner installs frozen dependencies, then runs typecheck, build, tests, and any declared `validate:events` and `validate:hostapi` scripts. The helper runs typecheck and tests only.
+The plugin check runner installs frozen dependencies, then runs typecheck, build, tests, and any declared `validate:events`, `validate:hostapi`, and `validate:manifest` scripts. The helper runs typecheck and tests only.
 
 `node tools/release.mjs verify --base origin/main` downloads plugin releases, checks their asset hashes and tagged manifests, then runs repository validation. Without a base it checks all pinned releases. `validate` needs each required released manifest supplied as `--released <plugin>@<version>=<path>`; when one is missing it prints a command to obtain it. Plugin release asset hashes remain part of the catalog's artifact pins.
 

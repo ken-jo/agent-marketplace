@@ -15,7 +15,7 @@
  *      `extensions["ai.agent-connector.ave"].displayName` (what a person reads).
  *   2. Add one PluginToolHandler per tool name declared under
  *      `extensions["ai.agent-connector.ave"].tools[]` in the `handlers` map below.
- *   3. Register keywords / events via `context.hostApi` as needed.
+ *   3. Read settings and call the APIs declared by `context.hostApi` as needed.
  *   4. Author each tool's JSON Schema directly in its `tools[]` entry;
  *      filesystem inputs use `_meta["ave/pathFields"]`.
  */
@@ -31,17 +31,11 @@ export const createPlugin: RuntimePluginFactory = async (
   context: PluginRuntimeContext,
 ): Promise<RuntimePlugin> => {
   // TODO: initialize extension state, open stores, subscribe to events.
-  context.log("plugin:boot", { id: "__PLUGIN_NAME__" });
+  // stdout is reserved for the host protocol. Send diagnostics to stderr.
+  console.error("plugin:boot", { id: "__PLUGIN_NAME__" });
 
-  // §9.2 Track B: read configSchema-declared values via `hostApi.config.get`.
-  // 호스트 SDK 의 canonical accessor 는 `hostApi.config.{get,set,onChange}`.
-  // 과거 가이드의 `hostApi.getConfig` extension cast 는 호스트가 노출한 적
-  // 없는 가짜 이름이라 silently undefined 반환 — 답습 금지.
-  // Example:
-  //   const getConfig = context.hostApi.config?.get
-  //     ? context.hostApi.config.get.bind(context.hostApi.config)
-  //     : undefined;
-  //   const mySetting = (getConfig?.("exampleSetting") as string | undefined) ?? "default";
+  // Read configSchema-declared values through the typed host API:
+  // const mySetting = context.hostApi.config.get<string>("exampleSetting") ?? "default";
 
   const handlers: Record<string, PluginToolHandler> = {
     // TODO: implement tool handlers. Names MUST match plugin.json `tools[]`.
@@ -55,7 +49,10 @@ export const createPlugin: RuntimePluginFactory = async (
   return {
     handlers,
     async start() {
-      // TODO: wire timers, subscriptions, watchers here.
+      // TODO: prepare in-memory state; start externally visible work in onPublished.
+    },
+    async onPublished() {
+      // TODO: start timers, workers, or watchers after activation.
     },
     async stop() {
       // TODO: release resources, unsubscribe from events.

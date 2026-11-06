@@ -18,7 +18,7 @@ export async function runPluginChecks(directory, { helperOnly = false, execute =
   for (const script of helperOnly ? ["typecheck", "test"] : ["typecheck", "build", "test"]) command(["run", script], source);
   if (!helperOnly) {
     const pkg = JSON.parse(readFileSync(join(source, "package.json"), "utf8"));
-    for (const script of ["validate:events", "validate:hostapi"]) if (pkg.scripts?.[script]) command(["run", script], source);
+    for (const script of ["validate:events", "validate:hostapi", "validate:manifest"]) if (pkg.scripts?.[script]) command(["run", script], source);
   }
 }
 
