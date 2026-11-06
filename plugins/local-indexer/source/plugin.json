@@ -351,6 +351,9 @@
             "ai.agent-connector.ave/pathFields": [
               "folder"
             ]
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -420,6 +423,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         }
       ],

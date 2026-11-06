@@ -31,6 +31,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         }
       ],
