@@ -30,7 +30,7 @@ import type {
 export const createPlugin: RuntimePluginFactory = async (
   context: PluginRuntimeContext,
 ): Promise<RuntimePlugin> => {
-  // TODO: initialize extension state, open stores, subscribe to events.
+  // TODO: prepare extension state without starting external work.
   // stdout is reserved for the host protocol. Send diagnostics to stderr.
   console.error("plugin:boot", { id: "__PLUGIN_NAME__" });
 
