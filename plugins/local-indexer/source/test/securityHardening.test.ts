@@ -444,17 +444,12 @@ describe("manifest contract — runtime/startup hardening", () => {
     expect(manifest.startupTimeoutMs).toBeGreaterThanOrEqual(30000);
   });
 
-  it("eventSubscriptions declares the host theme broadcast only", () => {
-    expect(manifest.eventSubscriptions).toEqual([
-      { type: "host.theme.changed" },
-    ]);
-  });
-
-  it("emittedEvents stay under host-recognized PUBLIC index.* namespace (matches knowledge-index capability)", () => {
-    const events: string[] = manifest.emittedEvents;
-    for (const e of events) {
-      expect(e).toMatch(/^index\./);
-    }
+  it("declares an app-only change wait and served sidebar resource", () => {
+    expect(manifest.eventSubscriptions).toBeUndefined();
+    expect(manifest.emittedEvents).toBeUndefined();
+    expect(manifest.tools.find(t => t.name === "index_wait_changes")?._meta?.ui?.visibility).toEqual(["app"]);
+    expect(manifest.ui[0]).toMatchObject({ kind: "mcp-app", resourceUri: "ui://local-indexer/control" });
+    expect(manifest.uiResources).toEqual([{ uri: "ui://local-indexer/control" }]);
     expect(manifest.capabilities).toContain("knowledge-index");
   });
 
@@ -478,10 +473,7 @@ describe("manifest contract — opt-in index alerts", () => {
       expect(kind).not.toHaveProperty("osNotification");
       expect(kind.slots).toBeUndefined();
     }
-    expect(manifest.emittedEvents).toEqual(expect.arrayContaining([
-      "index.scan.completed",
-      "index.folders.changed",
-    ]));
+    expect(manifest.emittedEvents).toBeUndefined();
   });
 
   it("declares the existing one-time rescan suggestion source", () => {

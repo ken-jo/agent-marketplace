@@ -20,6 +20,7 @@ import {
   TEMP_FILE_PREFIXES,
 } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
+import { isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
 
 /** Simple ReDoS heuristic: detect nested quantifiers like (...+)+ or (...*)*. */
 const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*]/;
@@ -169,9 +170,13 @@ export class FolderAutoIndexer {
    * DB docs로 캐시를 보충한다 (IndexState에 없는 경로만).
    * DB mtime 단위(초 vs ms)가 불확실하므로 IndexState가 있는 경로는 건드리지 않는다.
    */
-  prePopulateCache(docs: Array<{ path?: string | null; mtime_ms?: number; doc_id?: string }>): void {
+  prePopulateCache(docs: Array<{ path?: string | null; mtime_ms?: number; doc_id?: string; status?: string }>): void {
     for (const doc of docs) {
       if (!doc.path) continue;
+      // A failed (or still pending) row records the attempt, not a result:
+      // seeding its mtime would make every later scan skip the file, so a
+      // failure that may pass would never be retried.
+      if (doc.status !== undefined && doc.status !== "indexed") continue;
       const absPath = resolve(doc.path);
       // IndexState가 이미 채운 경로는 건드리지 않음
       if (!this.mtimeByPath.has(absPath)) {
@@ -295,6 +300,11 @@ export class FolderAutoIndexer {
       let processed = 0;
       let indexed = 0;
       let failed = 0;
+      let failedTransient = 0;
+      const failures: Array<{ path: string; retryable: boolean; failureKind?: string }> = [];
+      let walked = 0;
+      let walkedByFolder: Record<string, number> = {};
+      let unreadableFolders: string[] = [];
       let lastError: string | undefined;
       let canceled = false;
 
@@ -324,7 +334,11 @@ export class FolderAutoIndexer {
 
       try {
         const { readdir } = await import("node:fs/promises");
-        const allFiles = await this.collectSupportedFiles(readdir, foldersOverride);
+        const collected = await this.collectSupportedFiles(readdir, foldersOverride);
+        const allFiles = collected.files;
+        walked = collected.walked;
+        walkedByFolder = collected.walkedByFolder;
+        unreadableFolders = collected.unreadable;
 
         // Pre-filter: 이미 캐시에 있고 mtime이 동일한(up-to-date) 파일은 제외.
         // total이 실제로 처리해야 할 파일 수만 반영되도록 한다.
@@ -404,6 +418,10 @@ export class FolderAutoIndexer {
             }
           } catch (err) {
             failed += 1;
+            const retryable = isTransientIndexFailure(err);
+            if (retryable) failedTransient += 1;
+            const failureKind = err instanceof WorkerIndexFailure ? err.failureKind : undefined;
+            failures.push(failureKind === undefined ? { path: filePath, retryable } : { path: filePath, retryable, failureKind });
             if (counters) counters.failed += 1;
             lastError = (err as Error).message;
             // Capture docId before clearing maps so the callback can remove the DB record too.
@@ -480,6 +498,11 @@ export class FolderAutoIndexer {
           scanned: files.length,
           indexed,
           failed,
+          failedTransient,
+          failures,
+          walked,
+          walkedByFolder,
+          unreadableFolders,
           totalIndexed: this.docIdByPath.size,
           canceled,
         } satisfies FolderAutoIndexerResult;
@@ -682,6 +705,20 @@ export class FolderAutoIndexer {
     return true;
   }
 
+  /**
+   * Whether a scan of `folder` would hand `filePath` to the worker under the
+   * current settings: the walk does not skip a directory on the way to it,
+   * and its type is one the indexer takes (images only with image embedding
+   * on). Says nothing about whether the file exists.
+   */
+  wouldIndex(filePath: string, folder: string): boolean {
+    const rel = relative(resolve(folder), resolve(filePath));
+    if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return false;
+    const dirs = rel.split(sep).slice(0, -1);
+    if (dirs.some((name) => SKIP_DIR_NAMES.has(name))) return false;
+    return this.isSupportedFile(resolve(filePath));
+  }
+
   private isSupportedFile(filePath: string): boolean {
     const name = basename(filePath);
     if (TEMP_FILE_PREFIXES.some((p) => name.startsWith(p))) return false;
@@ -691,18 +728,36 @@ export class FolderAutoIndexer {
     return isIndexableFilePath(filePath, { includeImages: this.imageEmbeddingEnabled });
   }
 
+  /**
+   * Walk the folders. `walked` counts every file seen before the supported-type
+   * filter; `unreadable` lists each directory whose listing failed, so a scan
+   * over an unmounted volume or a folder the OS refuses is not mistaken for an
+   * empty one.
+   */
   private async collectSupportedFiles(
     readdir: typeof import("node:fs/promises").readdir,
     foldersOverride?: string[],
-  ): Promise<string[]> {
+  ): Promise<{ files: string[]; walked: number; walkedByFolder: Record<string, number>; unreadable: string[] }> {
     const folders = foldersOverride ?? this.folders;
-    const allFiles = await Promise.all(folders.map((folder) => this.walkDir(folder, readdir)));
-    return allFiles.flat().filter((filePath) => this.isSupportedFile(filePath));
+    const unreadable: string[] = [];
+    const allFiles = await Promise.all(folders.map((folder) => this.walkDir(folder, readdir, unreadable)));
+    const walkedByFolder: Record<string, number> = {};
+    folders.forEach((folder, i) => {
+      walkedByFolder[folder] = (walkedByFolder[folder] ?? 0) + (allFiles[i]?.length ?? 0);
+    });
+    const walkedFiles = [...new Set(allFiles.flat())];
+    return {
+      files: walkedFiles.filter((filePath) => this.isSupportedFile(filePath)),
+      walked: walkedFiles.length,
+      walkedByFolder,
+      unreadable,
+    };
   }
 
   private async walkDir(
     dirPath: string,
     readdir: typeof import("node:fs/promises").readdir,
+    unreadable: string[],
   ): Promise<string[]> {
     try {
       const entries = await readdir(dirPath, { withFileTypes: true });
@@ -713,7 +768,7 @@ export class FolderAutoIndexer {
         }
         const fullPath = resolve(dirPath, entry.name);
         if (entry.isDirectory()) {
-          files.push(...(await this.walkDir(fullPath, readdir)));
+          files.push(...(await this.walkDir(fullPath, readdir, unreadable)));
         } else if (entry.isFile()) {
           files.push(fullPath);
         }
@@ -721,6 +776,7 @@ export class FolderAutoIndexer {
       return files;
     } catch (err) {
       console.warn(`[FolderAutoIndexer] walkDir: readdir failed for ${dirPath}:`, err);
+      unreadable.push(dirPath);
       return [];
     }
   }

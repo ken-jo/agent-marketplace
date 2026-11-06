@@ -1,8 +1,7 @@
-fastapi==0.141.1
-# worker/embedding_client.py `broker_http_client` imports httpx2 itself to pin
-# the provider SDKs to the host egress broker's Unix socket
-# (`httpx2.HTTPTransport(uds=...)`). openai 3 installs httpx2 too, but the
-# worker's own import makes it a direct dependency.
+# worker/stdio_egress.py subclasses `httpx2.BaseTransport` to relay the
+# provider SDKs' requests to the plugin over the worker control channel.
+# openai 3 installs httpx2 too, but the worker's own import makes it a direct
+# dependency.
 httpx2==2.13.1
 kiwipiepy==0.23.2
 lancedb==0.38.0
@@ -17,11 +16,11 @@ python-docx>=1.2.0
 # worker/image_captioner.py import `openai`). Previously only pulled in transitively
 # via the now-removed `pageindex` cloud SDK; declared directly to keep the worker's
 # OpenAI/Azure egress path intact.
-# openai 3 uses HTTPX2 and no longer installs `httpx`, so the broker transport
-# moved to httpx2 with it (see httpx2 above). HTTPX2 verifies TLS against the
-# operating-system trust store instead of certifi; that applies to the
-# non-broker paths that reach a provider directly.
-# test/egress_broker_uds_transport.test.py drives the real SDK over the socket.
+# openai 3 uses HTTPX2 and no longer installs `httpx`, so the relay transport
+# is an httpx2 one (see httpx2 above). HTTPX2 verifies TLS against the
+# operating-system trust store instead of certifi; that applies to the direct
+# paths (eval harness) that reach a provider themselves.
+# test/stdio_egress.test.py drives the real SDK through the relay.
 openai==3.14.1
 openpyxl==3.1.5
 # worker/image_extractor.py re-encodes the images openpyxl finds in a workbook
@@ -30,9 +29,11 @@ openpyxl==3.1.5
 # without this line the XLSX image path exists in code and never runs.
 pillow==12.3.0
 pyarrow==25.0.1
+# worker/local_indexer_worker.py validates every control method's params with
+# pydantic models. openai depends on it too; the direct import makes it ours.
+pydantic==2.13.0
 pymupdf==1.27.2.2
 pymupdf4llm==1.27.2.2
 rank-bm25==0.2.2
 structlog==26.1.0
 tenacity==9.1.4
-uvicorn==0.53.0

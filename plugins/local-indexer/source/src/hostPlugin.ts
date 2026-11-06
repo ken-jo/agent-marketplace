@@ -1,5 +1,6 @@
-import { lstat, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { copyFile, lstat, mkdir, opendir, readFile, readdir, realpath, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { ChangeStream } from "./changeStream.js";
+import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep as pathSep } from "node:path";
 import { platform as osPlatform, tmpdir as osTmpdir } from "node:os";
@@ -70,6 +71,18 @@ import {
   RESCAN_LEDGER_FILENAME,
 } from "./rescanSuggestion.js";
 import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
+import { isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
+import {
+  MigrationDeferred,
+  migrateLegacyIndex,
+  type DirectIndexResult,
+  type EmbeddingState,
+  type FolderSource,
+  type LegacyManifest,
+  type IndexMigrationStatus,
+  type LegacyManifestDocument,
+  type MigrationAttempts,
+} from "./indexMigration.js";
 import { LruCache } from "./lruCache.js";
 import { getIndexModeForPath, isImageFilePath, isIndexableFilePath } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
@@ -83,6 +96,7 @@ import type {
 } from "./types.js";
 
 const FOLDER_SUMMARY_CACHE_TTL_MS = 8_000;
+export const MAX_PREVIEW_ENTRIES = 2_000;
 
 function bufferToArrayBuffer(body: Buffer): ArrayBuffer {
   const copy = new Uint8Array(body.byteLength);
@@ -95,6 +109,9 @@ function bufferToArrayBuffer(body: Buffer): ArrayBuffer {
 // docs; the remainder are already marked for re-embed (content_hash NULL +
 // content_state='embed_failed') and heal on the next cycle.
 const RECONCILE_HEAL_CAP = 50;
+// Heal failures in a row after which the provider is taken to be down for
+// this start.
+const HEAL_STOP_AFTER = 3;
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -662,7 +679,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const legacyExists = await stat(legacyWorkspace).then(() => true, () => false);
       const targetExists = await stat(workspace).then(() => true, () => false);
       if (legacyExists && !targetExists) {
-        context.log(`migrating workspace from ${legacyWorkspace} to ${workspace}`);
+        console.error(`migrating workspace from ${legacyWorkspace} to ${workspace}`);
         // Ensure target parent (pluginDataDir or absolute parent) exists so
         // rename does not fail with ENOENT when the host has not yet created
         // pluginDataDir on first boot.
@@ -677,7 +694,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // scratch, all of it REBUILDABLE. The cost of not migrating is one full
       // re-scan, not lost data, which is why nothing here falls back to copying
       // the tree out. Logged with the path so the leftover is findable.
-      context.log(
+      console.error(
         `workspace migration skipped (${legacyWorkspace} → ${workspace}); `
           + `the index rebuilds from scratch. reason: ${(err as Error).message}`,
       );
@@ -839,7 +856,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const key = `caption:${raw}`;
       if (!_warnedEndpoints.has(key)) {
         _warnedEndpoints.add(key);
-        hostApi.logEvent("warn", "imageCaptionEndpoint rejected by SSRF guard", {
+        console.error("warn", "imageCaptionEndpoint rejected by SSRF guard", {
           value: raw,
           reason: allowLoopback
             ? "scheme must be https, or http+loopback"
@@ -965,7 +982,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       await lease.release();
       return lease;
     } catch (err) {
-      hostApi.logEvent("warn", "local_indexer.resolve_api_key.failed", {
+      console.error("warn", "local_indexer.resolve_api_key.failed", {
         purpose,
         reason: err instanceof EgressLeaseDenied ? err.reason : "transport-failure",
       });
@@ -1002,7 +1019,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     const dedupeKey = `host-key-withheld:${kind}:${host}`;
     if (_warnedEndpoints.has(dedupeKey)) return;
     _warnedEndpoints.add(dedupeKey);
-    hostApi.logEvent("warn", "local_indexer.host_key_withheld_custom_endpoint", {
+    console.error("warn", "local_indexer.host_key_withheld_custom_endpoint", {
       kind,
       endpointHost: host,
       reason:
@@ -1052,7 +1069,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   };
 
   // A returned lease is a presence marker for existing worker configuration
-  // checks. The worker receives the broker token; only the broker uses the
+  // checks. The worker receives no credential; only the broker uses the
   // lease with hostFetch. A denied host lease never switches to plugin key.
   const resolveEmbeddingKeyForEndpoint = async (
     endpoint: unknown,
@@ -1121,7 +1138,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         await rename(tmpPath, imageSettingsPath);
         imageSettingsCache = next;
       } catch (err) {
-        hostApi.logEvent("warn", "image_settings.write_failed", {
+        console.error("warn", "image_settings.write_failed", {
           path: imageSettingsPath,
           error: (err as Error).message,
         });
@@ -1139,7 +1156,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // plugin-config / secret-store flow.
           await setConfig("imageEmbeddingEnabled", next.imageEmbeddingEnabled);
         } catch (err) {
-          hostApi.logEvent("warn", "image_settings.config_set_failed", {
+          console.error("warn", "image_settings.config_set_failed", {
             error: (err as Error).message,
           });
         }
@@ -1211,7 +1228,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   if (!embeddingApiKey
       && process.env.AVE_ALLOW_ENV_API_KEY !== "1"
       && process.env.OPENAI_API_KEY) {
-    hostApi.logEvent("warn", "local_indexer.api_key.env_ignored", {
+    console.error("warn", "local_indexer.api_key.env_ignored", {
       reason: "OPENAI_API_KEY in env but AVE_ALLOW_ENV_API_KEY!=1; not used",
     });
   }
@@ -1245,7 +1262,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     const key = `embedding:${_embeddingEndpointRaw}`;
     if (!_warnedEndpoints.has(key)) {
       _warnedEndpoints.add(key);
-      hostApi.logEvent("warn", "embeddingEndpoint rejected by SSRF guard", {
+      console.error("warn", "embeddingEndpoint rejected by SSRF guard", {
         value: _embeddingEndpointRaw,
         reason: _embeddingAllowLoopback
           ? "scheme must be https, or http+loopback"
@@ -1268,11 +1285,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       : validatedEmbeddingEndpoint;
   const embeddingApiVersion = readEmbeddingApiVersion();
 
-  // Worker stdout warning surfacer ─────────────────────────────────────
+  // Worker stderr warning surfacer ─────────────────────────────────────
   // Known event types and a human-readable label. The worker emits one
   // JSON object per line at INFO level; everything else (non-JSON, debug
   // chatter) is ignored. We dedupe by `${event}:${path}` so a single
-  // misconfigured folder doesn't spam the host event bus 100 times.
+  // misconfigured folder doesn't repeat the same warning 100 times.
   type IndexWarningPayload = {
     kind: string;
     path?: string;
@@ -1319,9 +1336,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       }
     }
   };
+  const changes = new ChangeStream();
   const emitIndexWarning = (warning: IndexWarningPayload): void => {
     rememberIndexWarning(warning);
-    hostApi.emitEvent("index.warning", warning);
+    changes.publish("index.warning", warning);
   };
   const _surfacedWarningKeys = new Set<string>();
   const _surfaceWarning = (w: WorkerWarning): void => {
@@ -1334,10 +1352,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       _surfacedWarningKeys.clear();
       _surfacedWarningKeys.add(dedupeKey);
     }
-    hostApi.logEvent("warn", `local_indexer.worker.${w.kind}`, w);
+    console.error("warn", `local_indexer.worker.${w.kind}`, w);
     emitIndexWarning(w);
   };
-  const handleWorkerStdoutLine = (line: string): void => {
+  const handleWorkerLogLine = (line: string): void => {
     // Fast path: only inspect lines that mention one of our known events.
     if (
       !line.includes("caption.rejected_path")
@@ -1423,25 +1441,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     typeof _maxChunksPerDocRaw === "number" && Number.isFinite(_maxChunksPerDocRaw) && _maxChunksPerDocRaw >= 1
       ? Math.floor(_maxChunksPerDocRaw)
       : undefined;
-  // The worker's TCP port. Left unset this falls through to localIndexerPlugin's
-  // 43129, which is fine for one instance and fatal for a second: the port is
-  // what the worker binds, so a second Ave on the same machine could not start
-  // local-indexer at all, and there was no way to say otherwise. Out-of-range
-  // values fall through to undefined rather than being clamped — a nonsensical
-  // port is a configuration mistake worth leaving at the default, not worth
-  // silently rewriting into a different port than the user asked for.
-  const _workerPortRaw = getConfig("workerPort") ?? config.workerPort;
-  const workerPort =
-    typeof _workerPortRaw === "number" &&
-    Number.isFinite(_workerPortRaw) &&
-    _workerPortRaw >= 1024 &&
-    _workerPortRaw <= 65535
-      ? Math.floor(_workerPortRaw)
-      : undefined;
-
-  // 호스트-중재 워커 spawn capability. 주입되면 워커는 host가 ASRT-confined로
-  // 띄운다. socketPath가 있으면 UDS control, null이면 TCP control(gate-off
-  // plain spawn 또는 Windows ASRT-wrapped)이다.
+  // 호스트-중재 워커 spawn capability. 워커는 host가 (gate ON 이면 confined 로)
+  // 띄우고, plugin 과는 worker stdio control v1 으로만 대화한다.
   const spawnWorker =
     typeof hostApi.spawnWorker === "function"
       ? hostApi.spawnWorker.bind(hostApi)
@@ -1484,8 +1485,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   //     resource root), resolved host-side from config;
   //   - host mode resolves a new lease and lets hostFetch attach its key;
   //     plugin mode reads only the plugin-owned key slot;
-  //   - authScheme selects the plugin-owned key header. The worker carries
-  //     only the x-ave-egress-token and cannot name the upstream authority.
+  //   - authScheme selects the plugin-owned key header. The worker sends only
+  //     a path and a body over its control channel and cannot name the
+  //     upstream authority.
   const OPENAI_DEFAULT_BASE = "https://api.openai.com/v1";
   const safeOrigin = (value: unknown): string => {
     if (typeof value !== "string" || value.length === 0) return "";
@@ -1556,25 +1558,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     }
     return false;
   };
-  // Corp-CA trust moves to the broker's upstream client (it terminates provider
-  // TLS now). Mirror the worker's optional-corp-CA presence check.
-  // ONE resolution, ONE existence check, for BOTH consumers: the broker's
-  // upstream TLS and the worker's `SSL_CERT_FILE`. It used to be computed
-  // twice — here and again in `localIndexerPlugin` — and two copies of a path
-  // is how the broker and the worker come to disagree about whether corporate
-  // TLS is being intercepted.
+  // The corporate CA, resolved and existence-checked once here: the worker gets
+  // it as `SSL_CERT_FILE` for the model downloads it still makes directly.
+  // Provider egress goes through hostFetch, which owns its own TLS trust.
   const corpCaPemPath = resolve(aveHome, "certs", "corp-ca.pem");
   const corpCaPath = existsSync(corpCaPemPath) ? corpCaPemPath : null;
 
   const plugin = new LocalIndexerPlugin({
     workspace,
     pluginDataDir: context.pluginDataDir,
-    // Where the egress broker binds its Unix socket. The host creates this
-    // directory and registers it with the sandbox before the child starts; a
-    // socket anywhere else — this plugin's own writable `data` dir included —
-    // is refused. Passed on every platform; the broker reads it only on the
-    // ones that bind a Unix socket.
-    pluginSocketDir: context.pluginSocketDir,
     indexStorageRoot: typeof config.indexStorageRoot === "string" ? config.indexStorageRoot : process.env.LOCAL_INDEXER_ROOT,
     apiKey: embeddingApiKey,
     pythonExecutable,
@@ -1586,43 +1578,33 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     embeddingApiVersion,
     maxFileSize,
     maxChunksPerDoc,
-    port: workerPort,
-    // P3 ⑬: host-mediated egress broker. With this wired the worker never
-    // receives the provider key — only a per-session broker token.
+    // Plugin-mediated egress: the worker relays each provider request to this
+    // plugin and never receives the provider key or any token.
     egressChannels: { embedding: embeddingChannel, caption: captionChannel },
     isUpstreamAllowed: isEgressUpstreamAllowed,
     corpCaPath,
     egressUpstreamFetch,
-    onEgressEvent: (level, event, fields) => hostApi.logEvent(level, event, fields),
+    onEgressEvent: (level, event, fields) => console.error(level, event, fields),
     // #955: forward the host's active LLM vendor so the embedding/captioning
     // provider auto-inherits Azure when the host is Azure AI Foundry. Plugin-
     // level explicit overrides (embeddingProvider / embeddingModel prefix)
     // still take precedence inside resolveEmbeddingProvider.
     hostVendor: readActiveVendor(),
-    onWorkerStdout: (line) => {
-      context.log(line);
+    onWorkerStderr: (line) => {
+      // stdout carries control frames only, so every worker log line — the
+      // JSON events included — arrives on stderr.
+      console.error(`[worker] ${line}`);
       // Surface critical worker events as UI-visible warnings. The worker
       // logs path-confinement failures (`caption.rejected_path`) and other
       // soft errors at INFO level only, which means a misconfigured allowed-
       // roots / embedding endpoint / API key silently produces `file.empty`
       // results and the user has no idea why indexing keeps failing.
-      // We parse only the known event types and forward them as a single
-      // `index.warning` host event so the UI can render an actionable banner.
-      handleWorkerStdoutLine(line);
+      // Known worker log types update the warning snapshot and wake app waits.
+      handleWorkerLogLine(line);
     },
-    onWorkerStderr: (line) => context.log(`[stderr] ${line}`),
-    // #955 round-2 architect Minor: forward azure-inherit config warnings
-    // as a host event so the UI can render an actionable banner. Stderr
-    // remains the log archival path.
-    //
-    // We reuse the existing `index.warning` channel (declared in plugin.json
-    // emittedEvents) with a `kind` discriminator instead of introducing a
-    // new event name — the host's emittedEvents contract restricts plugins
-    // to the public `index.*` namespace (knowledge-index capability), so a
-    // new `local_indexer.*` event would be rejected at the manifest layer
-    // (see test/securityHardening.test.ts).
+    // Record configuration warnings for the app snapshot; stderr retains diagnostics.
     onConfigWarning: (warning) => {
-      hostApi.logEvent("warn", "local_indexer.azure_inherit_missing_config", {
+      console.error("warn", "local_indexer.azure_inherit_missing_config", {
         missing: warning.missing,
         inheritedFrom: warning.inheritedFrom,
       });
@@ -1640,19 +1622,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // workerClient — WorkerClient 인스턴스
   const workerClient = plugin.getWorkerClient();
 
-  // ── Egress credential push (P3 ⑬) ──────────────────────────────────────
-  // What the host pushes to the worker over the control channel:
-  // Always the per-session BROKER TOKEN, never the provider key. The worker
-  // presents it as `x-ave-egress-token`; the broker injects the real provider
-  // auth host-side through hostApi.hostFetch. The token is always present, so
-  // query-time vector search and key rotation work through the broker without a
-  // worker restart (the broker resolves the real key fresh per request).
-  const embeddingCredentialFor = (
-    _handle: ApiKeyLease | null,
-  ): string => plugin.getEgressToken() ?? "";
-  const captionCredentialFor = (
-    _handle: ApiKeyLease | null,
-  ): string => plugin.getEgressToken() ?? "";
+  // ── Egress availability push ───────────────────────────────────────────
+  // No credential ever crosses to the worker: it relays each provider request
+  // to this plugin, and the broker resolves the real key fresh per request
+  // through hostApi.hostFetch. What the host pushes is only whether a key
+  // exists (`setEmbeddingEgress(true)`), so a keyless install stays BM25-only
+  // instead of sending a refused request per chunk.
 
   // §4.4 LRU Query Cache — 반복 쿼리 최적화
   const structureCache = new LruCache<unknown>({ maxSize: 32, ttlMs: 5 * 60_000 });
@@ -1691,9 +1666,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       invalidateFolderSummaryCache();
       try {
         await recordIndexedState(filePath, docId);
-        hostApi.logEvent("info", "local_indexer.record_state_ok", { filePath, docId });
+        console.error("info", "local_indexer.record_state_ok", { filePath, docId });
       } catch (err) {
-        hostApi.logEvent("warn", "local_indexer.record_state_failed", {
+        console.error("warn", "local_indexer.record_state_failed", {
           filePath,
           docId,
           error: (err as Error).message,
@@ -1701,7 +1676,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       }
       structureCache.invalidate(docId);
       contentCache.invalidate(docId);
-      hostApi.emitEvent("index.document.updated", {
+      changes.publish("index.document.updated", {
         docId,
         path: filePath,
         message: `문서 인덱싱 완료: ${filePath}`,
@@ -1712,18 +1687,18 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const stateResults = await Promise.allSettled(indexStateStores.map((store) => store.removeEntry(filePath)));
       const stateFails = stateResults.filter((r) => r.status === "rejected").length;
       if (stateFails > 0) {
-        hostApi.logEvent("warn", "local_indexer.remove_failed_file_state_partial_failure", { filePath, failed: stateFails });
+        console.error("warn", "local_indexer.remove_failed_file_state_partial_failure", { filePath, failed: stateFails });
       } else {
-        hostApi.logEvent("info", "local_indexer.remove_failed_file_state_ok", { filePath, docId });
+        console.error("info", "local_indexer.remove_failed_file_state_ok", { filePath, docId });
       }
       // Also remove from DB so the folder summary (built from DB when worker is running)
       // shows the file as pending rather than indexed.
       if (docId) {
         try {
           await plugin.removeDocument(docId);
-          hostApi.logEvent("info", "local_indexer.remove_failed_file_db_ok", { filePath, docId });
+          console.error("info", "local_indexer.remove_failed_file_db_ok", { filePath, docId });
         } catch (err) {
-          hostApi.logEvent("warn", "local_indexer.remove_failed_file_db_failure", { filePath, docId, error: (err as Error).message });
+          console.error("warn", "local_indexer.remove_failed_file_db_failure", { filePath, docId, error: (err as Error).message });
         }
       }
       // Surface the per-file failure to the UI warning banner so the top
@@ -1746,13 +1721,13 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const results = await Promise.allSettled(indexStateStores.map((store) => store.removeEntry(filePath)));
       const failCount = results.filter((r) => r.status === "rejected").length;
       if (failCount > 0) {
-        hostApi.logEvent("warn", "local_indexer.remove_state_partial_fail", { filePath, failed: failCount });
+        console.error("warn", "local_indexer.remove_state_partial_fail", { filePath, failed: failCount });
       } else {
-        hostApi.logEvent("info", "local_indexer.remove_state_ok", { filePath });
+        console.error("info", "local_indexer.remove_state_ok", { filePath });
       }
     };
     indexer.onScanProgress = (snapshot: ScanProgressSnapshot) => {
-      hostApi.emitEvent("index.scan.progress", snapshot);
+      changes.publish("index.scan.progress", snapshot);
     };
   };
 
@@ -1760,6 +1735,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
   // ─── 폴더 영속화 (foldersConfigPath는 createPlugin 첫 부분에서 정의됨) ──
   async function loadPersistedFolders(): Promise<string[]> {
+    return (await loadPersistedFolderSet()).folders;
+  }
+
+  /**
+   * The registered folders, and whether they came from the saved list
+   * (`folders.json`, an explicit empty list included) or from the default set
+   * used when that file is missing or unreadable.
+   */
+  async function loadPersistedFolderSet(): Promise<{ folders: string[]; source: FolderSource }> {
     // Tool handlers are reachable only after publication, but may be invoked
     // before onPublished has finished. Preserve that lazy-start contract while
     // keeping candidate start side-effect free.
@@ -1784,7 +1768,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             }
             const absPath = resolve(trimmed);
             if (isHighChurnFolderPath(absPath, userHome)) {
-              hostApi.logEvent("warn", "index_folders.skip_high_churn_folder", { folder: absPath });
+              console.error("warn", "index_folders.skip_high_churn_folder", { folder: absPath });
               needsRewrite = true;
               continue;
             }
@@ -1799,11 +1783,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // 명시적 빈 folders.json 도 그대로 존중 — 사용자가 모든 폴더를
           // 제거했는데 fixtures fallback 으로 자동 복원되면 의도가 깨진다.
           // 파일이 존재해 파싱에 성공했다면 길이와 무관하게 cleaned 를 반환.
-          return cleaned;
+          return { folders: cleaned, source: "saved" };
         }
       }
     } catch { /* 파싱 실패 시 기본값 사용 */ }
-    return scanFolders.length > 0 ? scanFolders : [resolve(context.hostRoot, "fixtures")];
+    return {
+      folders: scanFolders.length > 0 ? scanFolders : [resolve(context.hostRoot, "fixtures")],
+      source: "fallback",
+    };
   }
 
   // Registered-folder count for the nightly-rescan suggestion gate. Unlike
@@ -1843,11 +1830,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       hostApi,
       ledgerPath: join(pluginDataDir, RESCAN_LEDGER_FILENAME),
       countRegisteredFolders,
-      log: context.log,
+      log: console.error,
     })
       .then(() => undefined)
       .catch((err) => {
-        context.log("local-indexer:rescan-suggestion:unexpected", {
+        console.error("local-indexer:rescan-suggestion:unexpected", {
           error: (err as Error).message,
         });
       })
@@ -1908,7 +1895,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       if (result.status === "fulfilled") {
         entries.push(...result.value);
       } else {
-        hostApi.logEvent("warn", "indexState.store_load_failed", {
+        console.error("warn", "indexState.store_load_failed", {
           error: (result.reason as Error)?.message,
         });
       }
@@ -1918,8 +1905,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
   async function listIndexableFiles(
     folderPath: string,
-    options?: { includeImages?: boolean },
-  ): Promise<Array<{ filePath: string; mtimeMs: number }>> {
+    options?: { includeImages?: boolean; maxEntries?: number },
+  ): Promise<{ files: Array<{ filePath: string; mtimeMs: number }>; truncated: boolean }> {
+    let visitedEntries = 0;
+    let truncated = false;
     const files: Array<{ filePath: string; mtimeMs: number }> = [];
     // 호출자가 명시적 override 안 주면 현재 토글 상태를 따른다 (기존 동작 유지).
     // 미리보기 (`index_preview_folder`) 처럼 토글 무관하게 폴더 내용을 보여줘야
@@ -1951,11 +1940,20 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       if (metadata.isSymbolicLink()) return;
       if (metadata.isDirectory()) {
         try {
-          const entries = await readdir(currentPath, { withFileTypes: true });
-          for (const entry of entries) {
+          // Stream bounded previews so a huge directory cannot fill memory.
+          const entries = options?.maxEntries === undefined
+            ? await readdir(currentPath, { withFileTypes: true })
+            : await opendir(currentPath);
+          for await (const entry of entries) {
+            if (visitedEntries >= (options?.maxEntries ?? Infinity)) {
+              truncated = true;
+              break;
+            }
+            visitedEntries += 1;
             if (entry.name.startsWith(".")) continue;  // skip dotfiles/dotdirs
             if (entry.isDirectory() && SKIP_DIR_NAMES.has(entry.name)) continue;
             await walk(join(currentPath, entry.name));
+            if (truncated) break;
           }
         } catch (err) {
           // 루트 폴더 readdir 실패는 상위로 전파 — silent empty 방지.
@@ -1974,7 +1972,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     };
 
     await walk(folderPath, true);
-    return files.sort((a, b) => a.filePath.localeCompare(b.filePath));
+    return { files: files.sort((a, b) => a.filePath.localeCompare(b.filePath)), truncated };
   }
 
   async function buildFolderSummary(
@@ -2067,12 +2065,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     }
 
     try {
-      currentFiles = await listIndexableFiles(folderPath, {
+      ({ files: currentFiles } = await listIndexableFiles(folderPath, {
         includeImages: imageEmbeddingEnabled,
-      });
+      }));
       visibleFiles = imageEmbeddingEnabled
         ? currentFiles
-        : await listIndexableFiles(folderPath, { includeImages: true });
+        : (await listIndexableFiles(folderPath, { includeImages: true })).files;
     } catch {
       const summary: FolderIndexSummary = {
         folder: folderPath,
@@ -2115,7 +2113,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         disabledFiles += 1;
       }
     }
-    hostApi.logEvent("info", "buildFolderSummary.detail", {
+    console.error("info", "buildFolderSummary.detail", {
       folder: folderPath,
       stateMapSize: mergedState.size,
       folderStateEntries: folderStateEntries.length,
@@ -2182,7 +2180,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     } catch {
       // Keep the current timestamp if the file disappeared immediately after indexing.
     }
-    hostApi.logEvent("info", "local_indexer.record_state", { filePath, docId, mtimeMs });
+    console.error("info", "local_indexer.record_state", { filePath, docId, mtimeMs });
     await Promise.all(indexStateStores.map((store) => store.addEntry(filePath, docId, mtimeMs, "mtime-only")));
   }
 
@@ -2225,7 +2223,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         await plugin.removeDocument(doc.doc_id);
         structureCache.invalidate(doc.doc_id);
         contentCache.invalidate(doc.doc_id);
-        hostApi.emitEvent("index.document.updated", {
+        changes.publish("index.document.updated", {
           docId: doc.doc_id,
           path: doc.path,
           message: `문서 제거: ${doc.path}`,
@@ -2233,7 +2231,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         removed += 1;
       } catch (err) {
         failed += 1;
-        hostApi.logEvent("warn", "index_remove_folder.document_remove_failed", {
+        console.error("warn", "index_remove_folder.document_remove_failed", {
           docId: doc.doc_id,
           path: doc.path,
           error: (err as Error).message,
@@ -2282,7 +2280,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     void Promise.resolve()
       .then(() => hostApi.raiseAlert({ kind, key: randomUUID() }))
       .catch((error: unknown) => {
-        hostApi.logEvent("warn", "local_indexer.alert_failed", {
+        console.error("warn", "local_indexer.alert_failed", {
           kind,
           error: error instanceof Error ? error.name : "unknown",
         });
@@ -2290,13 +2288,13 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   }
 
   function emitFolderChange(payload: Record<string, unknown>): void {
-    hostApi.emitEvent("index.folders.changed", payload);
+    changes.publish("index.folders.changed", payload);
     raiseIndexAlert("index-folders-changed");
   }
 
   function emitScanCompletion(snapshot: ScanProgressSnapshot): void {
     if (snapshot.status !== "done" && snapshot.status !== "failed") return;
-    hostApi.emitEvent("index.scan.completed", {
+    changes.publish("index.scan.completed", {
       title: "Local Indexer",
       message: buildScanCompletionMessage(snapshot),
       status: snapshot.status,
@@ -2314,15 +2312,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
    * ensureStarted에서 호출하여, 런타임에 새 폴더를 추가했을 때 worker가 해당
    * 폴더 내 파일을 422로 거부하지 않도록 한다.
    *
-   * 실패는 non-fatal: 로그만 남기고 후속 동작을 막지 않는다 (예: 토큰 미보유).
+   * 실패는 non-fatal: 로그만 남기고 후속 동작을 막지 않는다 (예: 워커 미실행).
    */
   async function syncAllowedRootsToWorker(
     folders: string[],
     extraRoots: string[] = [],
   ): Promise<void> {
-    const token = plugin.getShutdownToken();
-    if (!token) {
-      context.log("syncAllowedRootsToWorker: shutdown token missing, skipping");
+    if (!plugin.isRunning) {
+      console.error("syncAllowedRootsToWorker: worker not running, skipping");
       return;
     }
     // Why: Windows mapped network drives (e.g. `D:\업무\…` 가 `\\server\share\…`
@@ -2362,10 +2359,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       ]),
     );
     try {
-      await workerClient.setAllowedRoots(roots, token);
-      hostApi.logEvent("info", "local_indexer.allowed_roots.synced", { count: roots.length });
+      await workerClient.setAllowedRoots(roots);
+      console.error("info", "local_indexer.allowed_roots.synced", { count: roots.length });
     } catch (err) {
-      hostApi.logEvent("warn", "local_indexer.allowed_roots.sync_failed", {
+      console.error("warn", "local_indexer.allowed_roots.sync_failed", {
         error: (err as Error).message,
       });
     }
@@ -2421,29 +2418,94 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     });
   }
 
+  /**
+   * Whether embedding is available now, as the rebuild's coverage check needs
+   * it. "off" only when the settings make embedding unusable: host-key mode
+   * with a custom endpoint the host key is withheld from. The settings have
+   * no switch that turns embedding off and no "no provider" choice
+   * (embeddingProvider is openai or azure, default openai), so plugin-key
+   * mode is never "off": a key the store does not return, or a store that
+   * throws, is "no-key" (undecided; the user can re-enter it). A refused or
+   * failed host lease is "unknown". resolveHostKeyHandle folds a refusal
+   * into null for its other callers; this asks the host directly.
+   */
+  async function embeddingStateNow(): Promise<EmbeddingState> {
+    if (isUntrustedHostEndpoint(getConfig("embeddingEndpoint"))) return "off";
+    if (readApiKeySource() === "plugin") {
+      let stored: unknown;
+      try {
+        stored = await hostApi.getSecret(`plugin.${context.pluginId}.embeddingApiKey`);
+      } catch {
+        return "no-key";
+      }
+      if (typeof stored === "string" && stored.length > 0) return "on";
+      if (process.env.AVE_ALLOW_ENV_API_KEY === "1" && process.env.OPENAI_API_KEY) return "on";
+      // Null may be a key never entered, or one the host withholds for now
+      // (a gate denial, a key being restored): not proof embedding is off.
+      return "no-key";
+    }
+    try {
+      const lease = await requestHostLease("embedding");
+      try { await lease.release(); } catch { /* best effort */ }
+      return "on";
+    } catch {
+      return "unknown";
+    }
+  }
+
+  // Per-document heal failures, so documents that fail every time (a provider
+  // that rejects them) go to the back of the queue instead of taking the
+  // whole per-start budget.
+  const healAttemptsPath = join(pluginDataDir, "heal-attempts.json");
+  async function readHealAttempts(): Promise<Record<string, number>> {
+    try {
+      const parsed = JSON.parse(await readFile(healAttemptsPath, "utf-8")) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return Object.fromEntries(
+          Object.entries(parsed as Record<string, unknown>).filter(
+            (entry): entry is [string, number] => typeof entry[1] === "number",
+          ),
+        );
+      }
+    } catch {
+      // No ledger yet, or unreadable: every document starts even.
+    }
+    return {};
+  }
+
   async function runStartupWarmup(folders: string[]): Promise<void> {
+    // Documents indexed without vectors (an embedding outage, a missing key),
+    // which the heal below re-embeds once a key is available.
+    let embedFailedPaths: string[] = [];
     try {
       const existingDocs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);
-      hostApi.logEvent("info", "local_indexer.cache_from_db", { count: existingDocs.length });
+      console.error("info", "local_indexer.cache_from_db", { count: existingDocs.length });
+      embedFailedPaths = existingDocs
+        .filter((doc) => doc.path && doc.status === "indexed" && doc.content_state === "embed_failed")
+        .map((doc) => resolve(doc.path));
 
-      if (existingDocs.length > 0) {
+      // Only indexed rows may make a scan skip a file. The worker keeps a
+      // failed row (with the file's mtime) for each failed attempt; seeding
+      // from it would mean a failure that may pass is never retried.
+      const indexedDocs = existingDocs.filter((doc) => doc.status === undefined || doc.status === "indexed");
+      if (indexedDocs.length > 0) {
         // DB에 실제로 있는 파일만 스캔 skip 대상으로. DB가 비어있으면
         // IndexState가 stale일 수 있으므로 pre-population 건너뜀 → 전체 재스캔.
-        const dbPaths = new Set(existingDocs.map((d) => d.path ? resolve(d.path) : "").filter(Boolean));
+        const dbPaths = new Set(indexedDocs.map((d) => d.path ? resolve(d.path) : "").filter(Boolean));
         const state = await loadMergedIndexState().catch(() => new Map<string, { docId: string; mtimeMs: number; indexedAt: string }>());
         const validState = new Map([...state].filter(([p]) => dbPaths.has(p)));
         autoIndexer.prePopulateCacheFromState(validState);
-        hostApi.logEvent("info", "local_indexer.cache_from_state", { total: state.size, valid: validState.size });
-        autoIndexer.prePopulateCache(existingDocs);
+        console.error("info", "local_indexer.cache_from_state", { total: state.size, valid: validState.size });
+        autoIndexer.prePopulateCache(indexedDocs);
       } else {
-        hostApi.logEvent("warn", "local_indexer.cache_skipped_db_empty", {});
+        console.error("warn", "local_indexer.cache_skipped_db_empty", {});
       }
 
       // DB → IndexState 동기화: IndexState에 없는 DB 항목을 기록.
       // 폴더 remove로 IndexState가 비워진 뒤 앱 재시작 시에도 정확한 상태를 표시하도록.
       // Math.floor 정렬을 위해 DB의 truncated int mtime을 그대로 저장.
       const currentState = await loadMergedIndexState().catch(() => new Map<string, unknown>());
-      const syncDocs = existingDocs.filter(
+      const syncDocs = indexedDocs.filter(
         (doc) => doc.path && doc.doc_id && doc.mtime_ms != null && doc.mtime_ms > 0 && !currentState.has(resolve(doc.path)),
       );
       if (syncDocs.length > 0) {
@@ -2456,7 +2518,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             ),
           );
         }
-        hostApi.logEvent("info", "local_indexer.db_to_state_sync", { count: syncDocs.length });
+        console.error("info", "local_indexer.db_to_state_sync", { count: syncDocs.length });
       }
     } catch {
       // worker 미응답 시 무시
@@ -2464,7 +2526,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     if (realtimeWatchEnabled) {
       await autoIndexer.ensureWatching();
     } else {
-      hostApi.logEvent("info", "local_indexer.realtime_watch_disabled", {
+      console.error("info", "local_indexer.realtime_watch_disabled", {
         reason: "config.realtimeWatch=false",
       });
     }
@@ -2487,54 +2549,91 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     // the heal reindex paths pass the worker's within-roots validation.
     try {
       const report = await workerClient.reconcile();
-      hostApi.logEvent("info", "local_indexer.reconcile", {
+      console.error("info", "local_indexer.reconcile", {
         checked: report.checked,
         drifted: report.drifted_doc_count,
         orphanVectorsDeleted: report.orphan_vectors_deleted,
       });
-      const drifted = report.drifted_docs ?? [];
-      if (drifted.length > 0) {
-        const healHandle = await resolveHostKeyHandle("embedding");
-        try {
-          const bearer = await resolveEmbeddingKeyForEndpoint(
-            getConfig("embeddingEndpoint"),
-            healHandle,
-          );
-          if (!bearer) {
-            // No embedding key yet — re-embed is impossible. The docs are
-            // already marked for re-embed, so a later cycle (after a key push)
-            // heals them. They remain BM25-only meanwhile (graceful).
-            hostApi.logEvent("info", "local_indexer.reconcile_heal_deferred", {
-              drifted: drifted.length,
-              reason: "no embedding key",
-            });
-          } else {
-            const toHeal = drifted.slice(0, RECONCILE_HEAL_CAP);
-            let healed = 0;
-            for (const doc of toHeal) {
-              try {
-                await workerClient.reindex(doc.path);
-                healed += 1;
-              } catch (err) {
-                hostApi.logEvent("warn", "local_indexer.reconcile_heal_failed", {
-                  path: doc.path,
-                  error: (err as Error).message,
+      // Heal both the drifted documents and those indexed without vectors:
+      // a scan skips a file it already holds at that mtime, so nothing else
+      // ever re-embeds them.
+      const toHealAll: string[] = [];
+      const seen = new Set<string>();
+      for (const path of [...(report.drifted_docs ?? []).map((doc) => doc.path), ...embedFailedPaths]) {
+        const key = resolve(path);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        toHealAll.push(path);
+      }
+      if (toHealAll.length > 0) {
+        if ((await embeddingStateNow()) !== "on") {
+          // No embedding key yet — re-embed is impossible. The docs are
+          // already marked for re-embed, so a later cycle (after a key push)
+          // heals them. They remain BM25-only meanwhile (graceful).
+          console.error("info", "local_indexer.reconcile_heal_deferred", {
+            drifted: report.drifted_docs?.length ?? 0,
+            embedFailed: embedFailedPaths.length,
+            reason: "no embedding key",
+          });
+        } else {
+          // Least-failed first (stable), so a document that fails every
+          // time cannot starve the rest; stop after HEAL_STOP_AFTER failures
+          // in a row (the provider is down) and leave the rest for next start.
+          const failures = await readHealAttempts();
+          const ordered = toHealAll
+            .map((path, index) => ({ path, index, failed: failures[resolve(path)] ?? 0 }))
+            .sort((a, b) => a.failed - b.failed || a.index - b.index)
+            .map((entry) => entry.path);
+          const toHeal = ordered.slice(0, RECONCILE_HEAL_CAP);
+          let healed = 0;
+          let attempted = 0;
+          let failedInARow = 0;
+          for (const path of toHeal) {
+            attempted += 1;
+            let ok = false;
+            try {
+              const result = await workerClient.reindex(path);
+              ok = result.status === "indexed" && result.embedded === true;
+              if (!ok) {
+                console.error("warn", "local_indexer.reconcile_heal_failed", {
+                  path,
+                  error: result.errors?.join(", ") || "indexed without vectors",
                 });
               }
+            } catch (err) {
+              console.error("warn", "local_indexer.reconcile_heal_failed", {
+                path,
+                error: (err as Error).message,
+              });
             }
-            hostApi.logEvent("info", "local_indexer.reconcile_healed", {
-              healed,
-              remaining: Math.max(0, drifted.length - toHeal.length),
-            });
+            const key = resolve(path);
+            if (ok) {
+              healed += 1;
+              failedInARow = 0;
+              delete failures[key];
+            } else {
+              failures[key] = (failures[key] ?? 0) + 1;
+              if (++failedInARow >= HEAL_STOP_AFTER) break;
+            }
           }
-        } finally {
-          if (healHandle) {
-            try { await healHandle.release(); } catch { /* best effort */ }
+          // Keep entries only for documents still waiting to heal.
+          const waiting = new Set(toHealAll.map((path) => resolve(path)));
+          const kept = Object.fromEntries(Object.entries(failures).filter(([path]) => waiting.has(path)));
+          try {
+            await writeFile(healAttemptsPath, JSON.stringify(kept), "utf-8");
+          } catch {
+            // The ledger only orders the queue; losing it costs fairness, not data.
           }
+          console.error("info", "local_indexer.reconcile_healed", {
+            healed,
+            attempted,
+            stoppedEarly: failedInARow >= HEAL_STOP_AFTER,
+            remaining: Math.max(0, toHealAll.length - healed),
+          });
         }
       }
     } catch (err) {
-      hostApi.logEvent("warn", "local_indexer.reconcile_failed", {
+      console.error("warn", "local_indexer.reconcile_failed", {
         error: (err as Error).message,
       });
     }
@@ -2548,13 +2647,384 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   let startingPromise: Promise<void> | null = null;
   let teardownPromise: Promise<void> | null = null;
 
+  // ── Index location upgrade (0.8.0) ─────────────────────────────────────
+  // The index moved from `<pluginDataDir>/index` to the worker's host-made
+  // state directory, which this plugin cannot write. It is rebuilt there by a
+  // full scan the user can see (index.scan.progress + the warning banner +
+  // index_scan_status.indexMigration), and the old directory is removed only
+  // after a clean, verified rebuild (src/indexMigration.ts).
+  let indexMigrationStatus: IndexMigrationStatus | null = null;
+  // The attempt ledger lives beside the old index, never inside it.
+  const indexMigrationAttemptsPath = join(pluginDataDir, "index-migration-attempts.json");
+  const indexMigrationAttempts = {
+    read: async (): Promise<MigrationAttempts> => {
+      try {
+        const parsed = JSON.parse(await readFile(indexMigrationAttemptsPath, "utf-8")) as Partial<MigrationAttempts>;
+        const attempts = typeof parsed.attempts === "number" && Number.isInteger(parsed.attempts) && parsed.attempts >= 0
+          ? parsed.attempts
+          : 0;
+        return typeof parsed.lastReason === "string" ? { attempts, lastReason: parsed.lastReason } : { attempts };
+      } catch {
+        return { attempts: 0 };
+      }
+    },
+    write: async (next: MigrationAttempts) => {
+      // A rebuild cut short by stopping the plugin is not a failed attempt.
+      if (teardownPromise) return;
+      await writeFile(indexMigrationAttemptsPath, JSON.stringify(next), "utf-8");
+    },
+    clear: async () => {
+      await rm(indexMigrationAttemptsPath, { force: true });
+    },
+  };
+  let indexMigrationPromise: Promise<void> | null = null;
+
+  // The old index's manifest (what it held, and which documents had
+  // vectors), read once and kept beside the old directory so a retry, or a
+  // start after the user moved files, measures against the same list.
+  const indexMigrationManifestPath = join(pluginDataDir, "index-migration-manifest.json");
+
+  async function loadLegacyManifest(legacyIndexDir: string): Promise<LegacyManifest> {
+    try {
+      const saved = JSON.parse(await readFile(indexMigrationManifestPath, "utf-8")) as {
+        version?: unknown;
+        documents?: unknown;
+        folders?: unknown;
+      };
+      if (saved.version === 2 && Array.isArray(saved.documents)) {
+        const documents = (saved.documents as LegacyManifestDocument[]).filter(
+          (doc) => typeof doc?.path === "string" && typeof doc.mtimeMs === "number" && typeof doc.hadVectors === "boolean",
+        );
+        const folders = Array.isArray(saved.folders) && saved.folders.every((f) => typeof f === "string")
+          ? (saved.folders as string[])
+          : null;
+        return { documents, folders };
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error("warn", "local_indexer.index_migration.manifest_unreadable", {
+          error: (err as Error).message,
+        });
+      }
+    }
+    // The folder list the old index was built from: the evidence that a
+    // folder missing from a later list was removed by the user.
+    const folderSet = await loadPersistedFolderSet();
+    const folders = folderSet.source === "saved" ? [...folderSet.folders] : null;
+    const copyDir = join(workspace, ".legacy-index-manifest");
+    await rm(copyDir, { recursive: true, force: true });
+    await mkdir(copyDir, { recursive: true });
+    try {
+      const copyPath = await copyLegacyIndex(legacyIndexDir, copyDir);
+      const rows = await workerClient.legacyIndexManifest(copyPath);
+      const documents: LegacyManifestDocument[] = rows.map((row) => ({
+        path: row.path,
+        mtimeMs: row.mtimeMs,
+        hadVectors: row.hadVectors,
+      }));
+      await writeFile(indexMigrationManifestPath, JSON.stringify({ version: 2, documents, folders }), "utf-8");
+      console.error("info", "local_indexer.index_migration.manifest", {
+        documents: documents.length,
+        withVectors: documents.filter((doc) => doc.hadVectors).length,
+        folders: folders?.length ?? null,
+      });
+      return { documents, folders };
+    } finally {
+      await rm(copyDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+
+  const LEGACY_INDEX_PARTS = ["fts5.sqlite", "fts5.sqlite-wal", "fts5.sqlite-shm"] as const;
+  const LEGACY_COPY_TRIES = 3;
+  // Free space kept beyond the copy itself.
+  const LEGACY_COPY_HEADROOM = 64 * 1024 * 1024;
+
+  /** Size and mtime of each part of the old index (absent parts included). */
+  async function legacyIndexShape(dir: string): Promise<{ key: string; bytes: number }> {
+    const parts: string[] = [];
+    let bytes = 0;
+    for (const name of LEGACY_INDEX_PARTS) {
+      try {
+        const st = await stat(join(dir, name));
+        parts.push(`${name}:${st.size}:${st.mtimeMs}`);
+        bytes += st.size;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        parts.push(`${name}:absent`);
+      }
+    }
+    return { key: parts.join("|"), bytes };
+  }
+
+  /**
+   * Whether names under `folder` compare case-insensitively, measured on the
+   * filesystem that holds its contents: one entry's name with its case
+   * swapped must name the same file (dev and ino). False when no entry has a
+   * letter to swap, or the folder cannot be read; the platform default is
+   * not evidence (case-sensitive APFS volumes exist).
+   */
+  async function measureCaseInsensitive(folder: string): Promise<boolean> {
+    const swap = (name: string) =>
+      [...name].map((ch) => (ch === ch.toLowerCase() ? ch.toUpperCase() : ch.toLowerCase())).join("");
+    let names: string[];
+    try {
+      names = await readdir(folder);
+    } catch {
+      return false;
+    }
+    const name = names.find((entry) => swap(entry) !== entry);
+    if (name === undefined) return false;
+    try {
+      const [a, b] = await Promise.all([lstat(join(folder, name)), lstat(join(folder, swap(name)))]);
+      return a.dev === b.dev && a.ino === b.ino;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Index files outside a scan, the way document_index_scan does: blocked
+   * paths are refused, the files' directories are added to the worker's
+   * allowed roots for this call, and each result is recorded.
+   */
+  async function indexFilesDirectly(paths: string[]): Promise<DirectIndexResult[]> {
+    const folders = await loadPersistedFolders();
+    const includeImages = isImageEmbeddingEnabled();
+    const { files, roots, blocked } = await expandDroppedPaths(paths, folders, { ...blockOpts, includeImages });
+    const results: DirectIndexResult[] = blocked.map((path) => ({
+      path, indexed: false, retryable: false, failureKind: "blocked",
+    }));
+    if (files.length === 0) return results;
+    await syncAllowedRootsToWorker(folders, roots);
+    for (const filePath of files) {
+      try {
+        const docId = await workerClient.indexDocument(
+          filePath,
+          getIndexModeForPath(filePath, { includeImages }) ?? "auto",
+        );
+        await recordIndexedState(filePath, docId).catch(() => {});
+        results.push({ path: filePath, indexed: true });
+      } catch (err) {
+        const failureKind = err instanceof WorkerIndexFailure ? err.failureKind : undefined;
+        results.push({
+          path: filePath,
+          indexed: false,
+          retryable: isTransientIndexFailure(err),
+          ...(failureKind !== undefined ? { failureKind } : {}),
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Copy the old index (main file, -wal, -shm) into the worker's workspace as
+   * one consistent set. A checkpoint between copying the main file and the
+   * -wal would lose rows silently, so every part's size and mtime must be the
+   * same before and after the copy; otherwise it is retried, and after
+   * LEGACY_COPY_TRIES the read waits for the next start without using up an
+   * attempt. So does a disk without room for the copy.
+   */
+  async function copyLegacyIndex(legacyIndexDir: string, copyDir: string): Promise<string> {
+    const copyPath = join(copyDir, "fts5.sqlite");
+    for (let attempt = 1; attempt <= LEGACY_COPY_TRIES; attempt += 1) {
+      const before = await legacyIndexShape(legacyIndexDir);
+      const space = await statfs(copyDir);
+      const free = Number(space.bavail) * Number(space.bsize);
+      if (free < before.bytes + LEGACY_COPY_HEADROOM) {
+        throw new MigrationDeferred(
+          "no-space",
+          `not enough free disk space to read the old index (${before.bytes} bytes to copy, ${free} free)`,
+        );
+      }
+      try {
+        for (const name of LEGACY_INDEX_PARTS) {
+          await rm(join(copyDir, name), { force: true });
+          try {
+            await copyFile(join(legacyIndexDir, name), join(copyDir, name));
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== "ENOENT" || name === "fts5.sqlite") throw err;
+          }
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOSPC") {
+          throw new MigrationDeferred("no-space", "the disk filled up while reading the old index");
+        }
+        throw err;
+      }
+      const after = await legacyIndexShape(legacyIndexDir);
+      if (after.key === before.key) return copyPath;
+      console.error("warn", "local_indexer.index_migration.copy_torn", { attempt });
+    }
+    throw new MigrationDeferred(
+      "index-busy",
+      `the old index kept changing while it was copied (${LEGACY_COPY_TRIES} tries); is another copy of the app running?`,
+    );
+  }
+
+  const indexMigrationNotice = (status: IndexMigrationStatus): IndexWarningPayload | null => {
+    switch (status.phase) {
+      case "rebuilding":
+        return {
+          kind: "index-migration",
+          path: status.legacyIndexDir,
+          message:
+            "인덱스 저장 위치가 바뀌어 전체 재인덱싱을 진행합니다. " +
+            "재인덱싱이 끝나고 확인되면 이전 인덱스(" + status.legacyIndexDir + ")를 삭제합니다.",
+        };
+      case "kept-old":
+        if (status.deferred) {
+          return {
+            kind: "index-migration",
+            path: status.legacyIndexDir,
+            reason: status.reason,
+            message:
+              (status.deferred === "no-space"
+                ? "디스크 공간이 부족해 이전 인덱스를 읽지 못했습니다 (" + (status.reason ?? "") + "). 공간을 확보하면 "
+                : "이전 인덱스를 읽는 동안 파일이 계속 바뀌었습니다 (" + (status.reason ?? "") + "). ") +
+              "다음 시작 때 다시 시도하며, 이번 시도는 자동 재시도 횟수에 넣지 않습니다. 이전 인덱스는 보존합니다.",
+          };
+        }
+        return {
+          kind: "index-migration",
+          path: status.legacyIndexDir,
+          reason: status.reason,
+          message:
+            "인덱스 재구축이 완료되지 않아 이전 인덱스를 보존합니다 (" + (status.reason ?? "원인 불명") + "). " +
+            (status.retriesExhausted
+              ? `자동 재시도 ${status.maxAttempts}회를 모두 썼으므로 더 시도하지 않습니다. ` +
+                "원인을 해결한 뒤 이전 인덱스(" + status.legacyIndexDir + ")를 직접 지우십시오."
+              : `다음 시작 때 다시 시도합니다 (${status.attempt}/${status.maxAttempts}).`),
+        };
+      case "completed":
+        return {
+          kind: "index-migration",
+          path: status.legacyIndexDir,
+          message:
+            "인덱스 재구축 완료 (" + String(status.documentsAfter ?? 0) + "개 문서). " +
+            "이전 인덱스(" + status.legacyIndexDir + ")를 삭제했습니다." +
+            (status.coverage && status.coverage.excludedCorrupt.length > 0
+              ? " 새 파서가 읽지 못한 문서 " + String(status.coverage.excludedCorrupt.length) +
+                "개는 제외했습니다 (" + status.coverage.excludedCorrupt.slice(0, 3).join(", ") + ")."
+              : ""),
+        };
+      default:
+        return null;
+    }
+  };
+
+  function reportIndexMigration(status: IndexMigrationStatus): void {
+    indexMigrationStatus = status;
+    console.error(
+      status.phase === "kept-old" ? "warn" : "info",
+      `local_indexer.index_migration.${status.phase}`,
+      {
+        legacyIndexDir: status.legacyIndexDir,
+        indexRoot: status.indexRoot,
+        attempt: status.attempt,
+        maxAttempts: status.maxAttempts,
+        retriesExhausted: status.retriesExhausted,
+        documentsBefore: status.documentsBefore,
+        documentsAfter: status.documentsAfter,
+        scan: status.scan,
+        legacyDocuments: status.legacyDocuments,
+        coverage: status.coverage
+          ? { ...status.coverage, excludedCorrupt: status.coverage.excludedCorrupt.length }
+          : undefined,
+        deferred: status.deferred,
+        notes: status.notes,
+        reason: status.reason,
+      },
+    );
+    // The rebuilding notice is raised by index_scan itself, after it clears
+    // the previous scan's warnings; the outcome is raised here.
+    if (status.phase !== "rebuilding") {
+      const notice = indexMigrationNotice(status);
+      if (notice) emitIndexWarning(notice);
+    }
+  }
+
+  function startIndexMigration(): void {
+    const location = plugin.getIndexLocation();
+    if (!location?.legacyIndexDir || indexMigrationPromise) return;
+    // Nothing left to migrate once a rebuild, or the user, removed it (the
+    // location is read at start). A kept-old status about it is stale then.
+    if (!existsSync(join(location.legacyIndexDir, "fts5.sqlite"))) {
+      void rm(indexMigrationManifestPath, { force: true }).catch(() => {});
+      if (indexMigrationStatus?.phase === "kept-old") {
+        console.error("info", "local_indexer.index_migration.cleared", { legacyIndexDir: location.legacyIndexDir });
+        indexMigrationStatus = null;
+      }
+      return;
+    }
+    console.error(
+      `index location changed: rebuilding ${location.indexRoot} from the registered folders; ` +
+        `${location.legacyIndexDir} is removed once the rebuild is verified`,
+    );
+    const warmup = startupWarmupPromise;
+    indexMigrationPromise = (async () => {
+      // The warmup syncs the worker's allowed roots; the scan needs them.
+      if (warmup) await warmup;
+      await migrateLegacyIndex({
+        location,
+        workspace,
+        loadManifest: () => loadLegacyManifest(location.legacyIndexDir!),
+        discardManifest: () => rm(indexMigrationManifestPath, { force: true }),
+        runFullScan: async (status) => {
+          let folderSet: { source: FolderSource; folders: string[] } | null = null;
+          const result = await handlerImpls.index_scan({
+            migration: status,
+            onFolderSet: (set) => { folderSet = set; },
+          });
+          if (!folderSet) throw new Error("index_scan did not report its folder list");
+          const used = folderSet as { source: FolderSource; folders: string[] };
+          return { result, folderSource: used.source, folders: used.folders };
+        },
+        coverage: {
+          listNewDocuments: async () =>
+            ((await plugin.listDocuments()) as LocalIndexerDocumentMeta[])
+              .filter((doc) => typeof doc.path === "string" && doc.path.length > 0)
+              .map((doc) => ({ path: doc.path!, status: doc.status, contentState: doc.content_state })),
+          embeddingState: embeddingStateNow,
+          realpath: (path) => realpath(path),
+          caseInsensitive: measureCaseInsensitive,
+          indexDirect: indexFilesDirectly,
+          fileMtime: async (path) => {
+            try {
+              return (await stat(path)).mtimeMs;
+            } catch (err) {
+              const code = (err as NodeJS.ErrnoException).code;
+              if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+              throw err;
+            }
+          },
+          wouldIndex: (path, folder) => autoIndexer.wouldIndex(path, folder),
+          reindex: async (path) => {
+            const result = await workerClient.reindex(path);
+            return result.status === "indexed" && result.embedded === true;
+          },
+        },
+        documentCount: async () => (await workerClient.runtimeInfo()).document_count,
+        removeDirectory: (path) => rm(path, { recursive: true }),
+        attempts: indexMigrationAttempts,
+        report: reportIndexMigration,
+      });
+    })()
+      .catch((err) => {
+        console.error("warn", "local_indexer.index_migration.failed", { error: (err as Error).message });
+      })
+      .finally(() => {
+        indexMigrationPromise = null;
+      });
+  }
+
   async function ensureStarted(): Promise<void> {
     if (teardownPromise) {
       throw new Error("Local Indexer runtime is stopping or stopped");
     }
     if (started && plugin.isRunning) return;
     if (started && !plugin.isRunning) {
-      hostApi.logEvent("warn", "local_indexer.worker_restart_required", {
+      console.error("warn", "local_indexer.worker_restart_required", {
         reason: "started flag set but worker process is not running",
       });
       started = false;
@@ -2607,37 +3077,32 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           captionProvider,
           captionModel,
           captionEndpoint,
-          captionCredentialFor(captionHandle),
           captionApiVersion,
         );
         if (captionHandle) {
           try { await captionHandle.release(); } catch { /* best effort */ }
         }
       } catch (err) {
-        hostApi.logEvent("warn", "local_indexer.image_captioning_sync_failed", {
+        console.error("warn", "local_indexer.image_captioning_sync_failed", {
           error: (err as Error).message,
         });
       }
-      // Push the embedding key to the freshly-started worker so query-time
-      // vector search has a credential immediately. The env key channel was
-      // removed (no *_INDEXER_API_KEY in the worker process), so without
-      // this warmup push the SearchService would boot with an empty key and
-      // silently degrade to BM25-only for any query that runs outside an
-      // index_scan window. The bearer is supplied as a thunk and flows through
-      // the same trust chokepoint as the per-scan push, so an untrusted custom
-      // embeddingEndpoint still withholds the host key. The per-scan re-push
-      // (below, at index_scan entry) and rotation re-pushes still apply.
+      // Tell the freshly-started worker that embedding may go through, so
+      // query-time vector search works immediately. Without this warmup push
+      // the SearchService stays BM25-only for any query that runs outside an
+      // index_scan window. The per-scan re-push (below, at index_scan entry)
+      // still applies.
       try {
         const warmupEmbeddingHandle = await resolveHostKeyHandle("embedding");
         try {
-          // Push the session token (always present); the provider key stays
-          // host-side in the broker/hostFetch path.
+          // No credential crosses; the provider key stays host-side in the
+          // broker/hostFetch path.
           //
           // Gated on the trust chokepoint, which this push previously claimed
           // to honour and did not: it read the handle directly, so a user in
           // `apiKeySource: "plugin"` mode with no key of their own — or one
           // pointing embeddings at an untrusted custom endpoint — still had a
-          // credential pushed to the worker at boot, and the worker then
+          // go-ahead pushed to the worker at boot, and the worker then
           // embedded through the broker on the host key. The per-scan push
           // below already asks this question; asking it here too is what makes
           // "no host key" mean no host key.
@@ -2645,13 +3110,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             getConfig("embeddingEndpoint"),
             warmupEmbeddingHandle,
           )).length > 0;
-          const warmupCredential = warmupHasKey
-            ? embeddingCredentialFor(warmupEmbeddingHandle)
-            : "";
-          if (warmupCredential) {
-            await workerClient.setEgressToken(() =>
-              embeddingCredentialFor(warmupEmbeddingHandle),
-            );
+          if (warmupHasKey) {
+            await workerClient.setEmbeddingEgress(true);
           }
         } finally {
           if (warmupEmbeddingHandle) {
@@ -2659,7 +3119,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
         }
       } catch (err) {
-        hostApi.logEvent("warn", "local_indexer.embedding_key_warmup_failed", {
+        console.error("warn", "local_indexer.embedding_key_warmup_failed", {
           error: (err as Error).message,
         });
       }
@@ -2669,7 +3129,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       if (!startupWarmupPromise) {
         startupWarmupPromise = runStartupWarmup(folders)
           .catch((err) => {
-            hostApi.logEvent("warn", "local_indexer.startup_warmup_failed", {
+            console.error("warn", "local_indexer.startup_warmup_failed", {
               error: (err as Error).message,
             });
           })
@@ -2677,6 +3137,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             startupWarmupPromise = null;
           });
       }
+      startIndexMigration();
     })();
     try {
       await startingPromise;
@@ -2706,6 +3167,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // ensureWatching() could recreate a watcher after teardown returned.
       const warmup = startupWarmupPromise;
       if (warmup) await warmup;
+      // A rebuild still running is cancelled; its old index stays in place.
+      const migration = indexMigrationPromise;
+      if (migration) {
+        autoIndexer.cancelScan();
+        await migration;
+      }
       const results = await Promise.allSettled([autoIndexer.stop(), plugin.stop()]);
       started = false;
       const failures = results
@@ -2721,19 +3188,6 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     return teardownPromise;
   }
 
-  // Both host shutdown and public stop share the same retained teardown
-  // promise, so concurrent lifecycle exits cannot stop either component twice.
-  hostApi.onShutdown(async () => {
-    try {
-      await teardown();
-      hostApi.logEvent("info", "local_indexer.shutdown.completed");
-    } catch (err) {
-      hostApi.logEvent("error", "local_indexer.shutdown.failed", {
-        error: (err as Error).message,
-      });
-    }
-  });
-
   // ── Consolidated LLM tool surface (12→6, BREAKING hard-cut) ──
   // The 9 absorbed tool implementations stay here verbatim under their
   // original names and are reused (never rewritten) by the 3 consolidated
@@ -2744,9 +3198,20 @@ export default async function createPlugin(context: PluginRuntimeContext) {
   // index_add_folder, index_add_folders, index_remove_folder) hard-fail —
   // no alias handlers (owner decision A).
   const handlerImpls = {
-      index_scan: async () => {
+      index_scan: async (opts: {
+        migration?: IndexMigrationStatus;
+        /** Told which folder list this scan used (the migration needs to know). */
+        onFolderSet?: (set: { source: FolderSource; folders: string[] }) => void;
+      } = {}) => {
         clearRecentIndexWarnings();
+        changes.publish("warnings.cleared", {});
         _surfacedWarningKeys.clear();
+        if (opts.migration) {
+          // The index-location rebuild: say why this scan is running and what
+          // happens to the old index, in the banner the scan's own warnings use.
+          const notice = indexMigrationNotice(opts.migration);
+          if (notice) emitIndexWarning(notice);
+        }
 
         // 워커가 silent "embedding client unavailable" 로 끝나기 전에
         // 명백한 misconfig 는 user-visible 에러로 즉시 throw 한다.
@@ -2865,7 +3330,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             }
           }
           if (embeddingMissing.length > 0) {
-            hostApi.logEvent("warn", "index_scan.embedding_config_missing", {
+            console.error("warn", "index_scan.embedding_config_missing", {
               provider: liveEmbeddingProvider,
               missing: embeddingMissing,
               keySource: readApiKeySource(),
@@ -2950,7 +3415,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
                 ? "Azure OpenAI"
                 : "OpenAI";
             scanImageEmbeddingEnabled = false;
-            hostApi.logEvent("warn", "index_scan.image_captioning_disabled", {
+            console.error("warn", "index_scan.image_captioning_disabled", {
               provider: captionProvider,
               missing: captionMissing,
               keySource: readApiKeySource(),
@@ -3021,21 +3486,21 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
         try {
         // Capture provider metadata and key-source mode for this scan. The
-        // worker receives only its broker token; the broker resolves each
-        // upstream lease afresh after this configuration snapshot.
+        // worker receives no credential; the broker resolves each upstream
+        // lease afresh after this configuration snapshot.
         const capturedVendor = embeddingHandle?.vendor ?? readActiveVendor();
         const capturedKeySource = readApiKeySource();
         // Use the trust chokepoint so the "has key" flag describes provider
-        // credential availability, not broker-token availability. The worker is
-        // still pushed only the broker session token below; the real provider
-        // key stays host-side in the egress channel resolver.
+        // credential availability. The worker is pushed only the go-ahead flag
+        // below; the real provider key stays host-side in the egress channel
+        // resolver.
         const hasEmbeddingKey =
           (await resolveEmbeddingKeyForEndpoint(getConfig("embeddingEndpoint"), embeddingHandle)).length > 0;
         const hasCaptionKey =
           currentSettings.imageEmbeddingEnabled
             ? (await resolveCaptionKeyForEndpoint(getConfig("imageCaptionEndpoint"), captionHandle)).length > 0
             : false;
-        hostApi.logEvent("info", "index_scan.key_capture", {
+        console.error("info", "index_scan.key_capture", {
           vendor: capturedVendor,
           hasEmbeddingKey,
           hasCaptionKey,
@@ -3043,22 +3508,19 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           via: embeddingHandle ? "lease-metadata" : "plugin-key",
         });
 
-        // Push the embedding key to the worker so the running scan uses a
-        // consistent credential regardless of mid-flight toggle changes.
-        // The bearer is supplied as a thunk so workerClient never holds it
-        // as a long-lived field (#893 Stage 3).
+        // Tell the worker embedding may go through for this scan. No key
+        // crosses: the broker resolves the credential per request.
         if (hasEmbeddingKey) {
-          const getEmbeddingCredential = (): string => embeddingCredentialFor(embeddingHandle);
           try {
-            await workerClient.setEgressToken(getEmbeddingCredential);
+            await workerClient.setEmbeddingEgress(true);
           } catch (err) {
-            hostApi.logEvent("warn", "index_scan.embedding_key_sync_failed", {
+            console.error("warn", "index_scan.embedding_key_sync_failed", {
               error: (err as Error).message,
             });
           }
         }
 
-        // Push the caption key to the worker. Same thunk pattern.
+        // Push the caption settings to the worker (no credential).
         const currentSettingsForCapture = await loadImageSettings();
         if (currentSettingsForCapture.imageEmbeddingEnabled) {
           const captionHostBaseUrl = captionHandle?.baseUrl ?? embeddingHandle?.baseUrl;
@@ -3081,18 +3543,16 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           const captionApiVersion = scanCaptionConfig
             ? scanCaptionConfig.apiVersion
             : readCaptionApiVersion({ provider: captionProvider, hostBaseUrl: captionHostBaseUrl });
-          const getCaptionCredential = (): string => captionCredentialFor(captionHandle);
           try {
             await workerClient.setImageCaptioning(
               scanImageEmbeddingEnabled,
               captionProvider,
               captionModel,
               captionEndpoint,
-              scanImageEmbeddingEnabled ? getCaptionCredential : "",
               captionApiVersion,
             );
           } catch (err) {
-            hostApi.logEvent("warn", "index_scan.caption_key_sync_failed", {
+            console.error("warn", "index_scan.caption_key_sync_failed", {
               error: (err as Error).message,
             });
           }
@@ -3101,12 +3561,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         // "Indexed" 상태가 아닌 폴더만 스캔 대상으로 한정.
         // index_folders(UI)와 동일한 소스(DB 우선, 실패 시 IndexState 폴백)를 사용해야
         // UI에 "Indexed"로 표시된 폴더가 스캔 대상에서 정확히 제외된다.
-        const allFolders = await loadPersistedFolders();
+        const folderSet = await loadPersistedFolderSet();
+        const allFolders = folderSet.folders;
+        opts.onFolderSet?.({ source: folderSet.source, folders: [...allFolders] });
         let stateForScan: Map<string, { docId: string; mtimeMs: number; indexedAt: string }>;
         try {
           const docs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);
           stateForScan = buildStateMapFromDocs(docs);
-          hostApi.logEvent("info", "index_scan.state_source", {
+          console.error("info", "index_scan.state_source", {
             source: "db",
             docCount: docs.length,
             stateMapSize: stateForScan.size,
@@ -3114,7 +3576,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           });
         } catch (err) {
           stateForScan = await loadMergedIndexState();
-          hostApi.logEvent("warn", "index_scan.state_source", {
+          console.error("warn", "index_scan.state_source", {
             source: "indexState_fallback",
             stateMapSize: stateForScan.size,
             error: (err as Error).message,
@@ -3125,7 +3587,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         for (const folder of allFolders) {
           const folderKeys = [...stateForScan.keys()].filter((p) => isWithinFolder(p, folder));
           const currentPaths = new Set(
-            (await listIndexableFiles(folder).catch(() => [])).map((f) => f.filePath),
+            (await listIndexableFiles(folder).catch(() => ({ files: [] }))).files.map((f) => f.filePath),
           );
           const orphans = folderKeys.filter((p) => !currentPaths.has(p));
           if (orphans.length > 0) {
@@ -3140,7 +3602,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         const pendingFolders: string[] = [];
         for (const folder of allFolders) {
           const summary = await buildFolderSummary(folder, stateForScan);
-          hostApi.logEvent("info", "index_scan.folder_summary", {
+          console.error("info", "index_scan.folder_summary", {
             folder,
             status: summary.status,
             totalFiles: summary.totalFiles,
@@ -3158,8 +3620,13 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             pendingFolders.push(folder);
           }
         }
-        const foldersToScan = pendingFolders.length > 0 ? pendingFolders : allFolders;
-        hostApi.logEvent("info", "index_scan.target_folders", {
+        // The location rebuild walks every registered folder: a folder whose
+        // summary reads "empty" may be an unmounted volume, and only a walk
+        // reports it unreadable or empty.
+        const foldersToScan = opts.migration
+          ? allFolders
+          : pendingFolders.length > 0 ? pendingFolders : allFolders;
+        console.error("info", "index_scan.target_folders", {
           total: allFolders.length,
           pending: pendingFolders.length,
           scanning: foldersToScan,
@@ -3167,7 +3634,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
         const res = await autoIndexer.scanOnce(foldersToScan);
         invalidateFolderSummaryCache();
-        hostApi.logEvent("info", "index_scan.complete", {
+        console.error("info", "index_scan.complete", {
           scanned: res.scanned,
           indexed: res.indexed,
           failed: res.failed,
@@ -3193,7 +3660,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // out buffers, etc. `release()` may be sync or async per SDK 5.13.
           if (embeddingHandle) {
             try { await embeddingHandle.release(); } catch (err) {
-              hostApi.logEvent("warn", "local_indexer.resolve_api_key.release_failed", {
+              console.error("warn", "local_indexer.resolve_api_key.release_failed", {
                 purpose: "embedding",
                 error: (err as Error).message,
               });
@@ -3201,7 +3668,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
           if (captionHandle) {
             try { await captionHandle.release(); } catch (err) {
-              hostApi.logEvent("warn", "local_indexer.resolve_api_key.release_failed", {
+              console.error("warn", "local_indexer.resolve_api_key.release_failed", {
                 purpose: "vision",
                 error: (err as Error).message,
               });
@@ -3226,6 +3693,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         return {
           ...autoIndexer.getScanProgress(),
           warnings: recentIndexWarnings.map((warning) => ({ ...warning })),
+          indexMigration: indexMigrationStatus ? { ...indexMigrationStatus } : null,
         };
       },
 
@@ -3238,7 +3706,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       /**
        * D7 — On-demand indexing triggered by drag & drop.
        * Enqueues the given absolute paths into the existing indexing queue.
-       * Each path is indexed via the Python worker HTTP API.
+       * Each path is indexed through the Python worker (indexer_reindex).
        * Returns { indexed, failed, jobId } for caller feedback.
        */
       document_index_scan: async (payload?: unknown) => {
@@ -3261,7 +3729,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           includeImages,
         });
         if (blocked.length > 0) {
-          hostApi.logEvent("warn", "document_index_scan.blocked_paths_skipped", { blocked });
+          console.error("warn", "document_index_scan.blocked_paths_skipped", { blocked });
         }
         if (files.length === 0) {
           return { indexed: 0, failed: 0, jobId, message: "No indexable files found." };
@@ -3281,7 +3749,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             indexed += 1;
           } catch (err) {
             failed += 1;
-            context.log(`document_index_scan: failed to index ${filePath}`, err);
+            console.error(`document_index_scan: failed to index ${filePath}`, err);
             emitIndexWarning({
               kind: "indexDocument.failed",
               path: filePath,
@@ -3291,15 +3759,17 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
           if (docId) {
             await recordIndexedState(filePath, docId).catch((e) => {
-              context.log(`document_index_scan: state record failed for ${filePath}`, e);
+              console.error(`document_index_scan: state record failed for ${filePath}`, e);
             });
           }
         }
-        context.log(`document_index_scan: indexed=${indexed} failed=${failed}`, {
+        console.error(`document_index_scan: indexed=${indexed} failed=${failed}`, {
           inputPaths: paths,
           expandedFiles: files,
         });
         invalidateFolderSummaryCache();
+        changes.publish("index.document.updated");
+        changes.publish("index.scan.completed");
         return { indexed, failed, jobId, message: `Indexed ${indexed}, failed ${failed}.` };
       },
 
@@ -3322,20 +3792,20 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         let docs: LocalIndexerDocumentMeta[] = [];
         try {
           docs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);
-          hostApi.logEvent("info", "index_documents.worker_list_ok", { count: docs.length });
+          console.error("info", "index_documents.worker_list_ok", { count: docs.length });
         } catch (err) {
-          hostApi.logEvent("warn", "index_documents.worker_list_failed", { error: (err as Error).message });
+          console.error("warn", "index_documents.worker_list_failed", { error: (err as Error).message });
         }
 
         if (docs.length === 0) {
           // Worker가 이미 실행 중이었는데 DB가 비어있으면 IndexState도 stale일 가능성 높음.
           // index_folders(폴더 상태)와 일관성을 유지하기 위해 빈 envelope 반환 → 사용자가 Scan 필요성을 명확히 인지.
           if (started && workerWasRunning) {
-            hostApi.logEvent("warn", "index_documents.db_empty_while_running", {});
+            console.error("warn", "index_documents.db_empty_while_running", {});
           } else {
             // Worker 미실행(오프라인) → IndexState 폴백 (best-effort 오프라인 표시)
             const mergedState = await loadMergedIndexState();
-            hostApi.logEvent("info", "index_documents.index_state", { count: mergedState.size });
+            console.error("info", "index_documents.index_state", { count: mergedState.size });
             const fallbackDocs = synthesizeIndexedDocuments(
               [...mergedState.entries()].map(([filePath, entry]) => ({
                 filePath,
@@ -3344,12 +3814,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
               })),
             );
             if (fallbackDocs.length > 0) {
-              hostApi.logEvent("warn", "index_documents.fallback_to_indexer_state", {
+              console.error("warn", "index_documents.fallback_to_indexer_state", {
                 count: fallbackDocs.length,
               });
               docs = uniqueDocuments(fallbackDocs);
             } else {
-              hostApi.logEvent("warn", "index_documents.empty", { workerDocs: 0, stateDocs: mergedState.size });
+              console.error("warn", "index_documents.empty", { workerDocs: 0, stateDocs: mergedState.size });
             }
           }
         }
@@ -3409,10 +3879,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           try {
             const docs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);
             dbState = buildStateMapFromDocs(docs);
-            hostApi.logEvent("info", "index_folders.from_worker", { count: dbState.size });
+            console.error("info", "index_folders.from_worker", { count: dbState.size });
           } catch (err) {
             dbFailed = true;
-            hostApi.logEvent("warn", "index_folders.worker_failed", { error: (err as Error).message });
+            console.error("warn", "index_folders.worker_failed", { error: (err as Error).message });
           }
           if (dbState.size > 0) {
             // DB 항목에 IndexState mtime으로 정밀도 보정 (Python int→Node.js float 오차)
@@ -3423,18 +3893,18 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             }
           } else if (dbFailed) {
             // listDocuments() 네트워크 오류 → worker crash/포트 막힘 → IndexState 폴백
-            hostApi.logEvent("warn", "index_folders.fallback_to_index_state", {});
+            console.error("warn", "index_folders.fallback_to_index_state", {});
             stateByPath = await loadMergedIndexState();
           } else {
             // worker 응답 OK, DB 비어있음 → IndexState stale 가능성 → 빈 맵으로 재스캔 유도
             stateByPath = new Map();
-            hostApi.logEvent("warn", "index_folders.db_empty_while_running", {});
+            console.error("warn", "index_folders.db_empty_while_running", {});
           }
         } else {
           // worker 미실행 → IndexState fallback (오프라인 표시)
           stateByPath = await loadMergedIndexState();
         }
-        hostApi.logEvent("info", "index_folders.state", {
+        console.error("info", "index_folders.state", {
           started,
           stateSize: stateByPath.size,
         });
@@ -3470,7 +3940,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         for (const folder of allFolders) {
           const folderKeys = [...stateForRefresh.keys()].filter((p) => isWithinFolder(p, folder));
           const currentPaths = new Set(
-            (await listIndexableFiles(folder).catch(() => [])).map((f) => f.filePath),
+            (await listIndexableFiles(folder).catch(() => ({ files: [] }))).files.map((f) => f.filePath),
           );
           const orphans = folderKeys.filter((p) => !currentPaths.has(p));
           if (orphans.length > 0) {
@@ -3483,7 +3953,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
         }
 
-        hostApi.logEvent("info", "index_folders_purge_orphans.purged", { totalPurged });
+        console.error("info", "index_folders_purge_orphans.purged", { totalPurged });
 
         const summaries = await Promise.all(
           allFolders.map((folder) => buildFolderSummary(folder, stateForRefresh)),
@@ -3502,7 +3972,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         await syncAllowedRootsToWorker(folders, [folder]);
 
         const stateByPath = await loadMergedIndexState();
-        const currentFiles = await listIndexableFiles(folder);
+        const { files: currentFiles } = await listIndexableFiles(folder);
         const currentPaths = new Set(currentFiles.map((file) => file.filePath));
         const refreshTargets = currentFiles.filter((file) => {
           const entry = stateByPath.get(file.filePath);
@@ -3532,12 +4002,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           await Promise.all(indexStateStores.map((store) => store.removeEntry(filePath)));
         }
 
+        const summary = await buildFolderSummary(folder);
+        changes.publish("index.document.updated");
         return {
           folder,
           indexed,
           failed,
           removedDocuments: removedDocs.removed,
-          summary: await buildFolderSummary(folder),
+          summary,
           message: `Refreshed ${folder}: indexed ${indexed}, removed ${removedDocs.removed}.`,
         };
       },
@@ -3574,6 +4046,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         if (blockedMessage) {
           return { folder: absPath, total: 0, byType: {}, sample: [], error: blockedMessage };
         }
+        if (isOtherUserHome(absPath, userHome)) {
+          return {
+            folder: absPath, total: 0, byType: {}, sample: [],
+            error: `보안: 다른 사용자 홈 디렉터리는 인덱싱 폴더로 추가할 수 없습니다: ${absPath}`,
+          };
+        }
         if (isHighChurnFolderPath(absPath, userHome)) {
           return {
             folder: absPath,
@@ -3603,14 +4081,16 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // 미리보기 했는데 토글이 OFF 라 0 으로 보이면 혼란). 실제 인덱싱
           // 단계는 토글을 따라가므로 본 단계의 includeImages 강제가 인덱싱
           // 동작을 바꾸진 않는다.
-          const files = await listIndexableFiles(absPath, { includeImages: true });
+          const { files, truncated } = await listIndexableFiles(absPath, {
+            includeImages: true, maxEntries: MAX_PREVIEW_ENTRIES,
+          });
           const byType: Record<string, number> = {};
           for (const file of files) {
             const ext = extname(file.filePath).slice(1).toLowerCase();
             byType[ext] = (byType[ext] ?? 0) + 1;
           }
           const sample = files.slice(0, 5).map((f) => basename(f.filePath));
-          return { folder: absPath, total: files.length, byType, sample };
+          return { folder: absPath, total: files.length, byType, sample, truncated };
         } catch (err) {
           return {
             folder: absPath,
@@ -3653,7 +4133,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           invalidateFolderSummaryCache();
           if (started) {
             // Worker 허용 루트를 먼저 갱신해야 rebuild 직후의 scanOnce()가
-            // 새 폴더의 파일을 /indexer/reindex에 넣을 때 422로 거부되지 않음.
+            // 새 폴더의 파일을 indexer_reindex에 넣을 때 거부되지 않음.
             await syncAllowedRootsToWorker(folders);
             // IndexState 먼저 → DB로 보충 (이미 인덱싱된 파일 재스캔 방지).
             const addFolderState = await loadMergedIndexState().catch(() => new Map());
@@ -3671,7 +4151,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             folders,
             message: `폴더 추가: ${absPath}`,
           });
-          hostApi.logEvent("info", "index_add_folder", { folder: absPath, total: folders.length, allFolders: folders });
+          console.error("info", "index_add_folder", { folder: absPath, total: folders.length, allFolders: folders });
           const summary = await buildFolderSummary(absPath);
           return { folders, added: true, message: `폴더 추가: ${absPath}`, summary };
         });
@@ -3730,7 +4210,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             invalidateFolderSummaryCache();
             if (started) {
               // Worker 허용 루트를 먼저 갱신해야 rebuild 직후의 scanOnce()가
-              // 새 폴더 파일을 /indexer/reindex에 넣을 때 422로 거부되지 않음.
+              // 새 폴더 파일을 indexer_reindex에 넣을 때 거부되지 않음.
               await syncAllowedRootsToWorker(folders);
               const addState = await loadMergedIndexState().catch(() => new Map());
               let existingDocs: LocalIndexerDocumentMeta[] = [];
@@ -3748,7 +4228,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
               added,
               message: `폴더 ${added.length}개 추가`,
             });
-            hostApi.logEvent("info", "index_add_folders", { added, skipped, failures, total: folders.length });
+            console.error("info", "index_add_folders", { added, skipped, failures, total: folders.length });
           }
 
           return { folders, added, skipped, failures };
@@ -3797,7 +4277,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             folders,
             message,
           });
-          hostApi.logEvent("info", "index_remove_folder", { folder: absPath, total: folders.length });
+          console.error("info", "index_remove_folder", { folder: absPath, total: folders.length });
           return { folders, removed: true, removedDocuments: purgeResult.removed, failedDocuments: purgeResult.failed, message };
         });
       },
@@ -3833,7 +4313,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           };
         } catch (err) {
           const message = (err as Error).message;
-          context.log(`chat_preview bm25 search failed: ${message}`);
+          console.error(`chat_preview bm25 search failed: ${message}`);
           throw new Error(`chat_preview requires the Local Indexer worker BM25 search endpoint: ${message}`);
         }
       },
@@ -3882,7 +4362,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           };
         } catch (err) {
           const message = (err as Error).message;
-          context.log(`index_search worker search failed: ${message}`, { mode, query });
+          console.error(`index_search worker search failed: ${message}`, { mode, query });
           throw new Error(`index_search failed (${mode}): ${message}`);
         }
       },
@@ -4019,13 +4499,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         const provider = readCaptionProvider({ hostBaseUrl, hostVendor });
         const endpoint = readCaptionEndpoint({ provider, hostBaseUrl, hostVendor });
         const model = readCaptionModel({ provider, hostBaseUrl });
-        // Push the session token; the caption provider key stays host-side in
-        // the broker/hostFetch path.
-        const apiKey = captionCredentialFor(captionHandle);
+        // No credential is pushed; the caption provider key stays host-side in
+        // the broker/hostFetch path. Whether one exists is reported to the UI.
+        const hasCaptionKey =
+          (await resolveCaptionKeyForEndpoint(getConfig("imageCaptionEndpoint"), captionHandle)).length > 0;
         const apiVersion = readCaptionApiVersion({ provider, hostBaseUrl });
 
         // Sidecar 는 이미 위에서 영속화됨. worker push 는 best-effort —
-        // 워커가 죽어있거나 (port 충돌, 좀비 등) 시작 실패해도 토글 자체는
+        // 워커가 죽어있거나 시작 실패해도 토글 자체는
         // 성공으로 처리해야 다른 UI 동작이 줄줄이 차단되지 않는다. 다음
         // worker boot 의 startup-sync 가 디스크에서 다시 읽어 반영.
         let workerSynced = false;
@@ -4037,13 +4518,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             provider,
             model,
             endpoint,
-            apiKey,
             apiVersion,
           );
           workerSynced = true;
         } catch (err) {
           workerSyncError = (err as Error).message;
-          hostApi.logEvent("warn", "index_set_image_embedding.worker_sync_failed", {
+          console.error("warn", "index_set_image_embedding.worker_sync_failed", {
             error: workerSyncError,
           });
           // UI 경고 배너에도 표시 — 토글이 디스크엔 저장됐지만 다음 스캔까지
@@ -4069,7 +4549,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           invalidateFolderSummaryCache();
         }
 
-        hostApi.logEvent("info", "index_set_image_embedding", {
+        console.error("info", "index_set_image_embedding", {
           enabled: next.imageEmbeddingEnabled,
           previousEnabled: previous.imageEmbeddingEnabled,
           mode: next.imageCaptionMode,
@@ -4082,7 +4562,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // returned to the UI (caller-controlled) below.
           endpointHost: endpoint === null ? null : endpointHostForLog(endpoint),
           apiVersion,
-          hasApiKey: apiKey.length > 0,
+          hasApiKey: hasCaptionKey,
           workerSynced,
           invalidatedImageEntries,
         });
@@ -4096,7 +4576,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           imageCaptionModel: model,
           imageCaptionEndpoint: endpoint,
           imageCaptionApiVersion: apiVersion,
-          hasApiKey: apiKey.length > 0,
+          hasApiKey: hasCaptionKey,
           workerSynced,
           message: workerSynced
             ? baseMessage
@@ -4116,18 +4596,23 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     async onPublished() {
       try {
         await ensureStarted();
-        context.log("local-indexer plugin started");
+        console.error("local-indexer plugin started");
         // Propose the nightly-rescan routine once (fire-and-forget). Runs after
         // ensureStarted so registered folders are loaded before the gate check.
         void runRescanSuggestionOnLaunch();
       } catch (err) {
-        context.log("local-indexer plugin startup failed", err);
+        console.error("local-indexer plugin startup failed", err);
         throw err;
       }
     },
+    readUiResource(uri: string) {
+      if (uri !== "ui://local-indexer/control") throw new Error(`Unknown UI resource: ${uri}`);
+      return readFileSync(join(context.pluginRoot, "dist/ui/indexer-control.html"), "utf8");
+    },
     async stop() {
+      changes.close();
       await teardown();
-      context.log("local-indexer plugin stopped");
+      console.error("local-indexer plugin stopped");
     },
 
     handlers: {
@@ -4144,8 +4629,23 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         if (typeof p.folder === "string" && p.folder.length > 0) {
           return handlerImpls.index_refresh_folder(payload);
         }
-        return handlerImpls.index_scan();
+        const result = await handlerImpls.index_scan();
+        // A full scan the user asked for resets the rebuild's attempt bound:
+        // the cause may be fixed now (volume mounted, permission granted).
+        // When automatic retries had stopped, try the rebuild once more.
+        const stopped = indexMigrationStatus?.retriesExhausted === true;
+        try {
+          await indexMigrationAttempts.clear();
+        } catch (err) {
+          console.error("warn", "local_indexer.index_migration.ledger_reset_failed", { error: (err as Error).message });
+        }
+        if (stopped) {
+          console.error("info", "local_indexer.index_migration.manual_retry", {});
+          startIndexMigration();
+        }
+        return result;
       },
+      index_wait_changes: (input?: unknown) => changes.wait(input),
       index_scan_cancel: handlerImpls.index_scan_cancel,
       index_scan_status: handlerImpls.index_scan_status,
       index_clear_warnings: handlerImpls.index_clear_warnings,

@@ -1,7 +1,7 @@
 {
   "repository": "ken-jo/ave",
-  "ref": "f592578ca5bd4b37563ca196819e5480b8eb10d3",
-  "commit": "f592578ca5bd4b37563ca196819e5480b8eb10d3",
+  "ref": "a13fe59e418b43987dad321f87655c93b50a6647",
+  "commit": "a13fe59e418b43987dad321f87655c93b50a6647",
   "files": {
     "public-contract.ts": {
       "from": "src/plugins/public-contract.ts"

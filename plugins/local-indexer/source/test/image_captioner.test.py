@@ -3,7 +3,7 @@
 The captioner forwards a file's bytes to a cloud vision provider. Every
 provider path goes through ``_image_to_data_url``, so that one function is
 where the file is validated: the extension must be one the providers accept,
-the size must fit under ``MAX_IMAGE_BYTES`` (checked on ``st_size`` before
+the size must fit under ``CAPTION_IMAGE_BYTES_MAX`` (checked on ``st_size`` before
 the file is read), and the leading bytes must carry the signature the
 extension claims. A model identifier is checked against the naming rule of
 the provider that will receive it, before any SDK client is constructed.
@@ -107,27 +107,28 @@ def test_oversized_file_is_rejected_before_it_is_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     big = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG) - 1)
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG) - 1)
 
     def _no_read(*args: object, **kwargs: object) -> None:
-        raise AssertionError("file opened despite exceeding MAX_IMAGE_BYTES")
+        raise AssertionError("file opened despite exceeding CAPTION_IMAGE_BYTES_MAX")
 
     monkeypatch.setattr(Path, "open", _no_read)
-    with pytest.raises(ic.CaptionError, match="너무 큽니다"):
+    with pytest.raises(ic.CaptionError, match="캡션 한도"):
         ic._image_to_data_url(big)
 
 
-def test_size_cap_is_azure_openai_per_image_limit() -> None:
-    # 20 MB decimal — Azure OpenAI's documented per-image vision limit; a
-    # 20 MiB cap (20,971,520) would admit files Azure refuses.
-    assert ic.MAX_IMAGE_BYTES == 20_000_000
+def test_size_cap_is_the_relay_cap() -> None:
+    # 11 MiB: the largest image whose base64 data URL still fits one 16 MiB
+    # worker control frame with the request around it. It is below Azure's own
+    # 20 MB per-image limit, so it is the binding one.
+    assert ic.CAPTION_IMAGE_BYTES_MAX == 11 * 1024 * 1024
 
 
 def test_file_that_grows_after_the_stat_is_still_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     growing = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG) + 8)
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG) + 8)
     real_open = Path.open
 
     def grow_then_open(self: Path, *args: object, **kwargs: object) -> object:
@@ -145,7 +146,7 @@ def test_read_is_bounded_to_one_byte_over_the_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     png = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG))
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG))
     real_open = Path.open
     requested: list[object] = []
 
@@ -170,7 +171,7 @@ def test_read_is_bounded_to_one_byte_over_the_cap(
 
 def test_file_at_the_cap_is_accepted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     exact = _write(tmp_path, "img.png", PNG)
-    monkeypatch.setattr(ic, "MAX_IMAGE_BYTES", len(PNG))
+    monkeypatch.setattr(ic, "CAPTION_IMAGE_BYTES_MAX", len(PNG))
     assert ic._image_to_data_url(exact).startswith("data:image/png;base64,")
 
 
@@ -261,3 +262,40 @@ def test_local_provider_no_longer_exists(tmp_path: Path) -> None:
     png = _write(tmp_path, "img.png", PNG)
     with pytest.raises(ic.CaptionError, match="provider"):
         ic.caption_image(str(png), provider="local")  # type: ignore[arg-type]
+
+
+def test_azure_responses_config_errors_read_as_korean() -> None:
+    # These three messages had been saved through a CP949 round trip and read
+    # as mojibake; they must say what is missing, like the chat-path siblings.
+    with pytest.raises(ic.CaptionError, match="Azure OpenAI Responses 캡션을 사용하려면 endpoint"):
+        ic._caption_azure_openai_responses("data:image/png;base64,", None, "k", "m")
+    with pytest.raises(ic.CaptionError, match="Azure OpenAI Responses 캡션을 사용하려면 apiKey 가 필요합니다"):
+        ic._caption_azure_openai_responses("data:image/png;base64,", "https://r.openai.azure.com/", None, "m")
+    with pytest.raises(ic.CaptionError, match="deployment 이름\\) 이 필요합니다"):
+        ic._caption_azure_openai_responses("data:image/png;base64,", "https://r.openai.azure.com/", "k", None)
+
+
+def test_worker_and_plugin_sources_carry_no_cp949_mojibake() -> None:
+    import re
+
+    source_dir = Path(__file__).resolve().parent.parent
+    # Han ideographs, C1 controls, and a "?" glued to a Hangul syllable are what
+    # a UTF-8 → CP949 round trip leaves behind; none occurs in this code's
+    # Korean text.
+    pattern = re.compile("[\u4e00-\u9fff\u0080-\u009f]|\\?[가-힣]")
+    files = sorted(source_dir.glob("worker/*.py")) + sorted(
+        p for ext in ("ts", "js", "html") for p in (source_dir / "src").rglob(f"*.{ext}")
+    )
+    assert files
+    hits = [
+        f"{path.relative_to(source_dir)}:{number}"
+        for path in files
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if pattern.search(line)
+    ]
+    assert hits == []
+
+
+def test_provider_call_failures_read_as_korean_and_say_which_provider() -> None:
+    err = ic._provider_call_failed("Azure OpenAI Responses", RuntimeError("boom"))
+    assert str(err) == "Azure OpenAI Responses 호출 실패: boom"
