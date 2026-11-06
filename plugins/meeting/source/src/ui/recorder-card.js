@@ -84,10 +84,6 @@ function hostAdapter(bridge) {
       bridge.callTool("meeting_recorder_begin_capture", { context, ...(opts ?? {}) }),
     stop: (sessionId, opts) => bridge.callTool("meeting_stop", { sessionId, ...(opts ?? {}) }),
     cancel: (sessionId) => bridge.callTool("meeting_cancel", { sessionId }),
-    // The card measures its own content and asks; the host clamps and is the
-    // only thing that decides. A card cannot grow its slot past the dock cap
-    // however large a number it sends.
-    resize: (height) => bridge.app.sendSizeChanged({ height }),
     // Detaching the slot is the plugin's to do — the card asks, and
     // `hostPlugin.ts` releases the handle it holds.
     close: () => bridge.callTool("meeting_recorder_close", {}),
@@ -198,6 +194,9 @@ html, body { margin: 0; padding: 0; background: transparent; }
 .shell {
   width: 100%;
   height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px 18px 16px;
   background: var(--surface);
   border-radius: 18px;
@@ -276,7 +275,8 @@ html, body { margin: 0; padding: 0; background: transparent; }
   font-variant-numeric: tabular-nums;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
-.body { min-height: 56px; flex: 1 1 auto; -webkit-app-region: no-drag; }
+.shell > :not(.body) { flex-shrink: 0; }
+.body { min-height: 56px; flex: 1 1 auto; overflow-y: auto; overflow-wrap: anywhere; -webkit-app-region: no-drag; }
 .wave { height: 56px; width: 100%; display: block; color: var(--text-1); }
 .notes {
   background: var(--surface-2);
@@ -522,7 +522,7 @@ function clearSttError() {
 // Mic device picker + Mic-only / Mix toggle. Both persist to localStorage
 // so the user's preference survives window close/reopen. Inserting the
 // controls inline rather than a settings popover keeps the floating
-// window single-pane (UX target: no nested modals on a 380x240 surface).
+// window single-pane without nested modals.
 const PREF_MIC_KEY = "ave.meeting.preferredMicId";
 const PREF_MODE_KEY = "ave.meeting.captureMode";
 let preferredMicId = "";
@@ -689,53 +689,7 @@ function drawWave() {
   rafId = requestAnimationFrame(drawWave);
 }
 
-// Default compact size — used when we're on the Meeting tab (waveform only).
-const DEFAULT_WINDOW_HEIGHT = 240;
-// Shell layout constants — must mirror the .shell CSS rule for the
-// element-sum measurement to add up correctly.
-const SHELL_PADDING_Y = 14 + 16;     // top + bottom from .shell { padding }
-const SHELL_GAP_TOTAL = 10 * 4;      // .shell gap × (children − 1) — 5 children
-const SHELL_CHROME_BORDER = 2;       // 1px top + 1px bottom border on .shell
-
-/**
- * Ask for a taller slot to fit current shell content. Called on tab switch and
- * after note content updates. Debounced via rAF so a flurry of DOM mutations
- * coalesces into one round-trip.
- *
- * It ASKS. Width is not negotiable and the height is clamped by the host
- * against the whole dock, so the number that comes back is what was applied —
- * never assume the request was honoured.
- *
- * We sum each child element's rendered height directly rather than
- * reading documentElement.scrollHeight — with .shell pinned at
- * `height: 100vh` and .notes set to `overflow-y: auto`, the document
- * never reports overflow even when notes content exceeds the visible
- * shell, so the document-level measurement was always returning the
- * current viewport height. notes.scrollHeight, by contrast, reports
- * the intrinsic content size regardless of any clipping ancestor.
- */
-let resizeRafId = 0;
-function requestWindowResize() {
-  if (typeof host.resize !== "function") return;
-  cancelAnimationFrame(resizeRafId);
-  resizeRafId = requestAnimationFrame(() => {
-    let height;
-    if (activeTab === "note") {
-      const chromePx = header.offsetHeight
-        + captureBadge.offsetHeight
-        + micControls.offsetHeight
-        + actions.offsetHeight;
-      // notes.scrollHeight is intrinsic content height; falls back to
-      // a small min so the very-first call (before refreshNotes lands)
-      // doesn't request an absurdly small window.
-      const notesPx = Math.max(notes.scrollHeight, 56);
-      height = chromePx + notesPx + SHELL_PADDING_Y + SHELL_GAP_TOTAL + SHELL_CHROME_BORDER;
-    } else {
-      height = DEFAULT_WINDOW_HEIGHT;
-    }
-    try { host.resize(height); } catch { /* main may be torn down */ }
-  });
-}
+// The host owns slot height. Notes scroll within the granted viewport; the card never asks the slot to grow.
 
 function normalizeIntermediateEntry(entry) {
   const wrappedData = entry && typeof entry === "object" && entry.data && typeof entry.data === "object"
@@ -774,8 +728,6 @@ async function refreshNotes() {
       notes.textContent = parts.join("\n\n") || notes.textContent;
       notes.classList.add("has-content");
     }
-    // Notes content just changed — resize window to fit (rAF-debounced).
-    if (activeTab === "note") requestWindowResize();
   } catch { /* never break recording on poll error */ }
 }
 
@@ -800,7 +752,6 @@ function setTab(tab) {
     waveCanvas.style.display = "block";
     if (notesPollInterval) { clearInterval(notesPollInterval); notesPollInterval = null; }
   }
-  requestWindowResize();
 }
 noteTab.addEventListener("click", () => setTab("note"));
 meetingTab.addEventListener("click", () => setTab("meeting"));
@@ -863,20 +814,28 @@ doneBtn.addEventListener("click", async () => {
 // labels in. The selected option remains the preferred mic id so the
 // "selected" state survives the rebuild.
 async function populateMicList() {
-  let inputs = [];
+  let inputs;
   try {
     const res = await host.listMicrophones();
-    inputs = Array.isArray(res?.devices) ? res.devices : [];
-  } catch (err) {
-    console.warn("[recorder-card] listMicrophones failed");
+    if (res?.ok !== true || !Array.isArray(res.devices)) throw new Error("microphone list unavailable");
+    inputs = res.devices;
+  } catch {
+    const unavailable = document.createElement("option");
+    unavailable.value = "";
+    unavailable.textContent = "Microphone list unavailable";
+    micSelect.replaceChildren(unavailable);
+    micSelect.disabled = true;
+    micSelect.setAttribute("aria-label", "Microphone list unavailable");
     return;
   }
+  micSelect.disabled = inputs.length === 0;
+  micSelect.setAttribute("aria-label", inputs.length ? "Microphone" : "No microphones found");
   // Preserve current dropdown value across rebuild — restore it after.
   const desired = preferredMicId;
   micSelect.replaceChildren();
   const def = document.createElement("option");
   def.value = "";
-  def.textContent = "기본 마이크";
+  def.textContent = inputs.length ? "기본 마이크" : "No microphones found";
   micSelect.appendChild(def);
   for (const d of inputs) {
     const opt = document.createElement("option");
@@ -1010,7 +969,7 @@ applyHostContext(bridge.app, shell);
 // What session this card is showing. The dock carries no per-slot payload by
 // design — a card asks its own plugin — so this is the first thing it does.
 const stopChanges = watchChanges(bridge, async () => { await pollLevels(); if (activeTab === "note") await refreshNotes(); });
-window.addEventListener("pagehide", () => { stopChanges(); clearInterval(levelsPollInterval); clearInterval(timerInterval); clearInterval(notesPollInterval); cancelAnimationFrame(rafId); cancelAnimationFrame(resizeRafId); bridge.dispose(); }, { once: true });
+window.addEventListener("pagehide", () => { stopChanges(); clearInterval(levelsPollInterval); clearInterval(timerInterval); clearInterval(notesPollInterval); cancelAnimationFrame(rafId); bridge.dispose(); }, { once: true });
 try {
   const payload = await host.getInit();
   if (payload) start(payload);

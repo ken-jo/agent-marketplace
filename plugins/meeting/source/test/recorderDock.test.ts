@@ -169,7 +169,7 @@ describe("the recorder's tools act on the attached slot, not on their arguments"
     const plugin = await createPlugin(context);
 
     expect(await plugin.handlers.meeting_recorder_levels()).toEqual({ peaks: [] });
-    expect(await plugin.handlers.meeting_recorder_microphones()).toEqual({ devices: [] });
+    expect(await plugin.handlers.meeting_recorder_microphones()).toEqual({ ok: false, error: "microphone-list-unavailable", reason: "no-recorder" });
     expect(await plugin.handlers.meeting_recorder_set_paused({ paused: true }))
       .toEqual({ ok: false, error: "unauthorized" });
     expect(await plugin.handlers.meeting_recorder_restart_capture({}))

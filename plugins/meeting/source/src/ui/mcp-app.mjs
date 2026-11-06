@@ -1,7 +1,7 @@
 import { App } from '@modelcontextprotocol/ext-apps';
 
 export async function connectView(name) {
-  const app = new App({ name, version: '0.10.3' }, {}, { autoResize: false });
+  const app = new App({ name, version: __MEETING_APP_VERSION__ }, {}, { autoResize: false });
   await app.connect();
   const callTool = async (name, args = {}, options) => {
     const result = await app.callServerTool({ name, arguments: args }, options);

@@ -164,7 +164,7 @@ export class MeetingPipeline {
   private readonly onTranscriptUpdate?: (sessionId: string, transcript: TranscriptSegment[]) => void;
   private readonly sttRetryAttempts: number;
   private readonly summaryRetryAttempts: number;
-  private readonly log: (message: string, meta?: unknown) => void;
+  private readonly log?: (message: string, meta?: unknown) => void;
 
   constructor(options: MeetingPipelineOptions) {
     if (!options.sttProviderFactory && !options.sttProvider) {
@@ -185,7 +185,12 @@ export class MeetingPipeline {
     this.onTranscriptUpdate = options.onTranscriptUpdate;
     this.sttRetryAttempts = options.sttRetryAttempts ?? 3;
     this.summaryRetryAttempts = options.summaryRetryAttempts ?? 2;
-    this.log = options.log ?? (() => diagnostic("info", "pipeline_status"));
+    this.log = options.log;
+  }
+
+  private report(level: "info" | "warn" | "error", code: string, message: string, meta?: unknown): void {
+    if (this.log) this.log(message, meta);
+    else diagnostic(level, code);
   }
 
   startSession(sessionId: string, context?: MeetingContext): void {
@@ -256,7 +261,7 @@ export class MeetingPipeline {
           baseDelayMs: 1000,
           signal: controller.signal,
           onRetry: (attempt, error, delay) => {
-          this.log(`STT retry ${attempt}: ${error.message}, waiting ${delay}ms`);
+          this.report("warn", "meeting_pipeline.stt_chunk_retry", `STT retry ${attempt}: ${error.message}, waiting ${delay}ms`);
         },
       },
     );
@@ -278,7 +283,7 @@ export class MeetingPipeline {
         signal: controller.signal,
       })) ?? undefined;
     } catch (err) {
-      this.log("intermediate summary failed (non-blocking)", err);
+      this.report("warn", "meeting_pipeline.intermediate_summary_failed", "intermediate summary failed (non-blocking)", err);
       // Summary 실패해도 ingest는 성공 — 트랜스크립트 데이터 보존
     }
 
@@ -304,7 +309,7 @@ export class MeetingPipeline {
         signal: this.ensureAbortController(sessionId).signal,
       })) ?? undefined;
     } catch (err) {
-      this.log("intermediate summary failed (non-blocking)", err);
+      this.report("warn", "meeting_pipeline.intermediate_summary_failed", "intermediate summary failed (non-blocking)", err);
     }
 
     this.persistSession(session);
@@ -338,7 +343,7 @@ export class MeetingPipeline {
           baseDelayMs: 2000,
           signal: controller.signal,
           onRetry: (attempt, error, delay) => {
-          this.log(`STT file upload retry ${attempt}: ${error.message}, waiting ${delay}ms`);
+          this.report("warn", "meeting_pipeline.stt_file_retry", `STT file upload retry ${attempt}: ${error.message}, waiting ${delay}ms`);
         },
       },
     );
@@ -382,7 +387,7 @@ export class MeetingPipeline {
           });
           if (summary) lastIntermediate = summary;
         } catch (err) {
-          this.log("intermediate summary failed (non-blocking)", err);
+          this.report("warn", "meeting_pipeline.intermediate_summary_failed", "intermediate summary failed (non-blocking)", err);
         }
       }
       this.persistSession(session);
@@ -443,7 +448,7 @@ export class MeetingPipeline {
           baseDelayMs: 2000,
           signal: opts?.signal,
           onRetry: (attempt, error, delay) => {
-            this.log(`final summary retry ${attempt}: ${error.message}, waiting ${delay}ms`);
+            this.report("warn", "meeting_pipeline.final_summary_retry", `final summary retry ${attempt}: ${error.message}, waiting ${delay}ms`);
           },
         },
       );
@@ -511,7 +516,7 @@ export class MeetingPipeline {
         baseDelayMs: 1500,
         signal: opts?.signal,
         onRetry: (attempt, error, delay) => {
-          this.log(`intermediate summary retry ${attempt}: ${error.message}, waiting ${delay}ms`);
+          this.report("warn", "meeting_pipeline.intermediate_summary_retry", `intermediate summary retry ${attempt}: ${error.message}, waiting ${delay}ms`);
         },
       },
     );
@@ -552,7 +557,7 @@ export class MeetingPipeline {
     try {
       this.onTranscriptUpdate?.(session.sessionId, [...session.transcript]);
     } catch (err) {
-      this.log("onTranscriptUpdate failed (non-blocking)", err);
+      this.report("warn", "meeting_pipeline.transcript_update_failed", "onTranscriptUpdate failed (non-blocking)", err);
     }
   }
 
@@ -560,7 +565,7 @@ export class MeetingPipeline {
     try {
       this.onSessionUpdate?.(session);
     } catch (err) {
-      this.log("session persist failed (non-blocking)", err);
+      this.report("warn", "meeting_pipeline.session_persist_failed", "session persist failed (non-blocking)", err);
     }
   }
 

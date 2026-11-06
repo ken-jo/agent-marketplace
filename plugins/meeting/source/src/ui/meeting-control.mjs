@@ -1,6 +1,7 @@
 
 
 import { connectView, applyHostContext, watchChanges } from "./mcp-app.mjs";
+import { shouldRefreshView, createErrorConsumer } from "./viewUpdates.ts";
 import {
   CUSTOM_PROMPT_MAX_BYTES,
   buildFinalSystem,
@@ -3112,6 +3113,8 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
 
   function render() {
     if (typeof activeMoreDismiss === "function") activeMoreDismiss();
+    card.dataset.summaryMode = mode;
+    if (mode === "read") delete card.dataset.dirty;
     card.replaceChildren();
     if (mode === "busy") return renderBusy();
     if (editable) renderToolbar();
@@ -3238,6 +3241,7 @@ function buildSummaryCard(finalSummary, fallbackTitle, opts) {
 
   function renderEdit() {
     const form = el("div", { class: "summary-edit" });
+    form.addEventListener("input", () => { card.dataset.dirty = "true"; });
     // Mode banner — makes the inline transition unambiguous (user
     // otherwise can mistake the swap for "nothing happened").
     const banner = el("div", { class: "summary-edit-banner" });
@@ -3844,17 +3848,24 @@ async function mount() {
   // from flashing an error the user did nothing to cause. Cleared on
   // meeting.ended (subscribed below).
   let activeFloatingSessionId = null;
-  const stopChanges = watchChanges(bridge, async () => {
+  const consumeError = createErrorConsumer();
+  const stopChanges = watchChanges(bridge, async (result) => {
     const state = await bridge.callTool("meeting_view_state", {});
-    if (activeFloatingSessionId && !state.recorder && !state.activeSessions.includes(activeFloatingSessionId)) {
+    if (consumeError(state.lastError)) showErrorToast("회의 처리 중 오류가 발생했습니다. 설정과 전사를 확인하세요.");
+    const editing = !!scope.querySelector('.summary[data-summary-mode="edit"], .summary[data-summary-mode="busy"], .summary[data-summary-mode="regen"], .prompt-overlay');
+    const dirty = !!scope.querySelector('[data-dirty="true"]');
+    const detailTab = viewArea.querySelector(".detail-body")?.dataset.tab ?? "summary";
+    if (editing || dirty) return;
+    const ended = result.reset || result.changes.some(change => change.kind === "meeting.ended");
+    if (ended && activeFloatingSessionId && !state.recorder && !state.activeSessions.includes(activeFloatingSessionId)) {
       const sid = activeFloatingSessionId;
       activeFloatingSessionId = null;
       const detail = await bridge.callTool("meeting_session_detail", { sessionId: sid });
       if (detail?.finalSummary) { setView("session-detail", sid); return; }
     }
-    if (state.lastError) showErrorToast("회의 처리 중 오류가 발생했습니다. 설정과 전사를 확인하세요.");
-    if (currentView === "pre-meeting") renderPreMeeting();
-    else renderCurrentView();
+    if (!shouldRefreshView(result, { view: currentView, detailTab, editing, dirty })) return;
+    if (currentView === "session-detail") pendingSubTab = detailTab;
+    renderCurrentView();
   });
 
   // Top nav is intentionally 2 tabs only — "예정 회의" + "회의록".
@@ -3963,6 +3974,7 @@ async function mount() {
   // the per-window picked tier (carried into meeting_start
   // context.lengthTier and ultimately into summarizeFinal).
   const LENGTH_TIER_KEY = "ave.meeting.summaryLengthTier";
+  // UI-only convenience state: survives panel reopen within one Ave run and resets on restart.
   const SESSION_CATEGORY_FILTER_KEY = "ave.meeting.sessionCategoryFilter";
   let pickedLengthTier = "medium";
   let pickedInstantCategory = "";
@@ -5044,6 +5056,7 @@ async function mount() {
     subTranscriptBtn.addEventListener("click", () => setSubTab("transcript"));
 
     function renderSubTab() {
+      body.dataset.tab = subTab;
       if (!snapshot) {
         body.replaceChildren(makeEmpty("clock", "데이터를 불러오는 중입니다", ""));
         return;

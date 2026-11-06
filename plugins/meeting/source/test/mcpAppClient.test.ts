@@ -8,7 +8,7 @@ function load() {
   const window = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
   const close = vi.fn(async () => {});
   class App { async connect() {} close = close; }
-  return { window, close, api: runInNewContext(source + "\n({connectView,applyHostContext,watchChanges})", { App, window, AbortController, setTimeout }) };
+  return { window, close, api: runInNewContext(source + "\n({connectView,applyHostContext,watchChanges})", { App, window, AbortController, setTimeout, __MEETING_APP_VERSION__: JSON.parse(readFileSync(new URL("../plugin.json", import.meta.url), "utf8")).version }) };
 }
 
 describe("MCP Apps client lifecycle", () => {
