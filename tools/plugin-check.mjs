@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Run the package's declared checks using the shared vendored contract. */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,7 +22,7 @@ export async function runPluginChecks(directory, { helperOnly = false, execute =
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [directory, ...args] = process.argv.slice(2);
   try {
     if (!directory || args.some((arg) => arg !== "--helper")) throw new Error("usage: plugin-check.mjs <directory> [--helper]");

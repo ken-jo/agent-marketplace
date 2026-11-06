@@ -30,6 +30,9 @@ export const ALERTS_RELEASE_VERSION = "0.11.0";
 export const AUTHORITY_FIELDS = ["capabilities", "networkAccess", "hostSecrets", "pluginAccess", "auth", "requires", "dependencies", "sandbox"];
 
 /** Top-level package directories and the kind each holds (design §3.1, §3.3). */
+/** Kinds explicitly retired by Ave; unknown kinds are validation errors. */
+export const RETIRED_KINDS = Object.freeze(["theme"]);
+
 export const KIND_DIRS = new Map([
   ["plugins", "plugin"],
   ["agent-plugins", "agent-plugin"],

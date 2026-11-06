@@ -12,7 +12,7 @@ import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { checkMarketplaceRepository } from "../vendor/marketplace-check.js";
-import { workingTree } from "../repo.mjs";
+import { compareVersions, workingTree } from "../repo.mjs";
 
 
 const TOOLS = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -103,13 +103,51 @@ function withMeetingNotesKit(r) {
 }
 
 describe("index generation", () => {
-  it("retires published entries whose kind left the app contract", () => {
+  it("retires only the explicit historical theme kind", () => {
     const r = repo();
-    r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [{ kind: "retired", name: "old", path: "retired/old", versions: [{ version: "1.0.0", commit: "a".repeat(40) }] }] });
+    r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [{ kind: "theme", name: "old", path: "themes/old", versions: [{ version: "1.0.0", commit: "a".repeat(40) }] }] });
     const base = r.commit("historical kind");
     const result = r.tool("index.mjs");
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(r.index().packages, []);
+    assert.equal(r.tool("check.mjs", "--base", base).status, 0);
+  });
+
+  it("rejects unknown historical kinds even without published versions", () => {
+    for (const versions of [undefined, [{ version: "1.0.0", commit: "a".repeat(40) }]]) {
+      const r = repo();
+      r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [{ kind: "typo", name: "old", path: "typo/old", versions }] });
+      const base = r.commit("unknown kind");
+      assert.match(r.tool("index.mjs").stderr, /unknown package kind typo/u);
+      r.write("marketplace.json", { schemaVersion: 2, name: "ave", displayName: "Ave Official", packages: [] });
+      assert.match(r.tool("check.mjs", "--base", base).stderr, /unknown package kind typo/u);
+    }
+    const r = repo();
+    r.write("skills/review/ave-package.json", { ...skill("1.0.0"), kind: "typo" });
+    r.commit("unknown descriptor kind");
+    assert.match(r.tool("index.mjs").stderr, /unknown package kind typo/u);
+  });
+
+  it("re-pins only unpublished versions against an explicit published base", () => {
+    const r = repo();
+    const base = r.commit("empty published base");
+    r.write("skills/review/ave-package.json", skill("1.0.0"));
+    r.write("skills/review/SKILL.md", "---\nname: review\ndescription: Review.\n---\nBody.\n");
+    r.commit("unpublished package");
+    assert.equal(r.tool("index.mjs").status, 0);
+    const indexed = r.commit("unpublished index");
+    r.write("skills/review/ave-package.json", { ...skill("1.0.0"), minAppVersion: "0.14.2" });
+    const corrected = r.commit("correct unpublished minimum");
+    const pin = `skill/review@1.0.0=${corrected}`;
+    assert.match(r.tool("index.mjs", "--repin", pin).stderr, /needs --base/u);
+    assert.match(r.tool("index.mjs", "--base", indexed, "--repin", pin).stderr, /published at .*cannot re-pin/u);
+    const result = r.tool("index.mjs", "--base", base, "--repin", pin);
+    assert.equal(result.status, 0, result.stderr);
+    const [version] = r.index().packages[0].versions;
+    assert.equal(version.commit, corrected);
+    assert.equal(version.minAppVersion, "0.14.2");
+    r.commit("corrected index");
+    assert.equal(r.tool("index.mjs", "--check").status, 0);
     assert.equal(r.tool("check.mjs", "--base", base).status, 0);
   });
 
@@ -406,6 +444,24 @@ describe("repository check", () => {
     const languageProblems = checkMarketplaceRepository(workingTree(), { sourceId: "ave", official: true, alertsReleaseVersion: "0.11.0", releasedManifests: new Map() })
       .filter((problem) => problem.subject === "language/korean");
     assert.deepEqual(languageProblems, []);
+  });
+
+  it("keeps released Ave 0.14.0 users on Korean 1.0.5", () => {
+    const index = JSON.parse(readFileSync(join(REAL_ROOT, "marketplace.json"), "utf8"));
+    const korean = index.packages.find((entry) => entry.kind === "language" && entry.name === "korean");
+    for (const version of ["1.0.6", "1.0.7"]) {
+      const pin = korean.versions.find((entry) => entry.version === version);
+      assert.equal(pin.minAppVersion, "0.14.2");
+      const descriptor = JSON.parse(execFileSync("git", ["show", `${pin.commit}:languages/korean/ave-package.json`], { cwd: REAL_ROOT, encoding: "utf8" }));
+      assert.equal(descriptor.version, version);
+      assert.equal(descriptor.minAppVersion, pin.minAppVersion);
+      assert.equal(descriptor.description, "Korean interface translation for Ave 0.14.2 and later.");
+    }
+    for (const [appVersion, expected] of [["0.14.0", "1.0.5"], ["0.14.1", "1.0.5"], ["0.14.2", "1.0.7"]]) {
+      const eligible = korean.versions.filter((pin) => !pin.yanked && compareVersions(appVersion, pin.minAppVersion) >= 0)
+        .sort((a, b) => compareVersions(b.version, a.version));
+      assert.equal(eligible[0].version, expected);
+    }
   });
 
   it("requires protocol 2 in 0.12 source, descriptor, index, and released manifest", () => {
