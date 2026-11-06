@@ -468,13 +468,14 @@ export async function mount(context) {
     if (scanDetailEl) scanDetailEl.textContent = text || "";
   };
 
-  const pollScanStatusOnce = async () => {
+  const pollScanStatusOnce = async ({ rethrowErrors = false } = {}) => {
     try {
       const latest = await callTool("index_scan_status");
       applyScanProgress(latest);
       replaceWarnings(latest?.warnings);
-    } catch {
-      // Ignore transient poll failures and let the next tick retry.
+    } catch (error) {
+      setStatus(`Scan status failed: ${formatErrorMessage(error)}`);
+      if (rethrowErrors) throw error;
     }
   };
 
@@ -490,7 +491,7 @@ export async function mount(context) {
     });
   };
 
-  const refreshDocuments = async ({ quiet = false } = {}) => {
+  const refreshDocuments = async ({ quiet = false, rethrowErrors = false } = {}) => {
     const preserveScan = isScanLocked(scanProgress);
     if (!quiet && !preserveScan) {
       setStatus("Refreshing documents...");
@@ -521,6 +522,7 @@ export async function mount(context) {
       allDocs = [];
       renderDocuments([], { error: formatErrorMessage(error) });
       setStatus(`Error: ${formatErrorMessage(error)}`);
+      if (rethrowErrors) throw error;
     }
     if (!quiet && !preserveScan) {
       setProgress(100);
@@ -703,12 +705,14 @@ export async function mount(context) {
     bindFolderActions();
   };
 
-  const loadFolders = async () => {
+  const loadFolders = async ({ rethrowErrors = false } = {}) => {
     try {
       const res = await callTool("index_folders");
       renderFolders(res?.folders || [], res?.summaries || []);
-    } catch {
+    } catch (error) {
       renderFolders([], []);
+      setStatus(`Folder load failed: ${formatErrorMessage(error)}`);
+      if (rethrowErrors) throw error;
     }
   };
 
@@ -827,7 +831,7 @@ export async function mount(context) {
     // BLIP 모델 다운로드 실패. 사용자가 명시적으로 선택했을 때만 경고.
   };
 
-  const loadSettings = async () => {
+  const loadSettings = async ({ rethrowErrors = false } = {}) => {
     try {
       const res = await callTool("index_get_settings");
       if (res && typeof res === "object") {
@@ -843,9 +847,11 @@ export async function mount(context) {
         };
       }
     } catch (error) {
-      // 설정 로딩 실패는 fatal 아님 — 디폴트 값으로 진행, 사용자가 토글하면
-      // 다시 시도된다.
       setStatus(`설정 로딩 실패: ${formatErrorMessage(error)}`);
+      if (rethrowErrors) {
+        renderSettings();
+        throw error;
+      }
     }
     renderSettings();
   };
@@ -1168,11 +1174,11 @@ export async function mount(context) {
   cleanups.push(syncHostContext(app, scope, document.documentElement));
   void runIndexerSync({
     callTool,
-    loadSettings,
-    readScanStatus: pollScanStatusOnce,
+    loadSettings: () => loadSettings({ rethrowErrors: true }),
+    readScanStatus: () => pollScanStatusOnce({ rethrowErrors: true }),
     getScanStatus: () => scanProgress.status,
-    loadFolders,
-    refreshDocuments: () => refreshDocuments({ quiet: true }),
+    loadFolders: () => loadFolders({ rethrowErrors: true }),
+    refreshDocuments: () => refreshDocuments({ quiet: true, rethrowErrors: true }),
     signal: waitAbort.signal,
     onError: error => setStatus(`Live updates failed: ${formatErrorMessage(error)}`),
   }).catch(error => {

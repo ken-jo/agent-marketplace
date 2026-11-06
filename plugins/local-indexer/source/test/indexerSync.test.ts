@@ -110,18 +110,32 @@ describe("the view's production wait loop", () => {
     } finally { await panel.unmount(); }
   });
 
-  it("replays an invalidation after a snapshot fails instead of losing its cursor", async () => {
+  it.each(["readScanStatus", "loadFolders", "refreshDocuments", "loadSettings"] as const)("replays after %s reports a snapshot failure", async loader => {
     vi.useFakeTimers();
     const panel = view(); await flush();
+    const snapshotError = new Error("snapshot unavailable");
+    const requestSnapshot = vi.fn().mockRejectedValueOnce(snapshotError).mockResolvedValue(undefined);
+    const showError = vi.fn();
+    // Match production: loaders render their own error and rethrow only when
+    // the synchronization caller explicitly requests error propagation.
+    const load = async ({ rethrowErrors = false } = {}) => {
+      try { await requestSnapshot(); }
+      catch (error) {
+        showError(error);
+        if (rethrowErrors) throw error;
+      }
+    };
+    panel[loader].mockImplementation(() => load({ rethrowErrors: true }));
     try {
-      panel.readScanStatus.mockRejectedValueOnce(new Error("snapshot unavailable"));
-      await panel.update(update("old:1", ["index.document.updated"]));
-      expect(panel.onError).toHaveBeenCalledTimes(1);
+      const reset = { ...update("new:1", ["index.document.updated"]), reset: true };
+      await panel.update(reset);
+      expect(showError).toHaveBeenCalledExactlyOnceWith(snapshotError);
+      expect(panel.onError).toHaveBeenCalledExactlyOnceWith(snapshotError);
       await vi.advanceTimersByTimeAsync(1000);
       expect(panel.pending[0].args.cursor).toBe("old:0");
-      await panel.update(update("old:1", ["index.document.updated"]));
-      expect(panel.refreshDocuments).toHaveBeenCalledTimes(2);
-      expect(panel.pending[0].args.cursor).toBe("old:1");
+      await panel.update(reset);
+      expect(requestSnapshot).toHaveBeenCalledTimes(2);
+      expect(panel.pending[0].args.cursor).toBe("new:1");
     } finally { await panel.unmount(); }
   });
 

@@ -3990,12 +3990,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           await Promise.all(indexStateStores.map((store) => store.removeEntry(filePath)));
         }
 
+        const summary = await buildFolderSummary(folder);
+        changes.publish("index.document.updated");
         return {
           folder,
           indexed,
           failed,
           removedDocuments: removedDocs.removed,
-          summary: await buildFolderSummary(folder),
+          summary,
           message: `Refreshed ${folder}: indexed ${indexed}, removed ${removedDocs.removed}.`,
         };
       },

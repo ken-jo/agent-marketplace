@@ -1586,6 +1586,28 @@ describe("hostPlugin createPlugin", () => {
     });
   });
 
+  it("a model-started single-folder refresh wakes app change waits", async () => {
+    const workspace = join(hostRoot, ".local-indexer-workspace");
+    const folder = join(hostRoot, "model-refresh");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "new.md"), "A model requested this refresh.", "utf-8");
+    await writeFile(join(workspace, "folders.json"), JSON.stringify({ folders: [folder] }), "utf-8");
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    try {
+      await plugin.onPublished?.();
+      const initial = await plugin.handlers.index_wait_changes({ cursor: "", waitMs: 0 });
+      const waiting = plugin.handlers.index_wait_changes({ cursor: initial.cursor, waitMs: 10000 });
+      // Invoke the public server tool directly, without any panel button reload.
+      const result = await plugin.handlers.index_scan({ folder });
+      expect(result.indexed).toBe(1);
+      const wake = await waiting;
+      const remaining = await plugin.handlers.index_wait_changes({ cursor: wake.cursor, waitMs: 0 });
+      expect([...wake.changes, ...remaining.changes]).toContainEqual({ kind: "index.document.updated" });
+    } finally { await plugin.stop(); }
+  });
+
   it("index_folders add blocks sensitive paths", async () => {
     const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
