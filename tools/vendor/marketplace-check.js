@@ -212,7 +212,7 @@ var init_approvalAttribution = __esm(() => {
     "approvalAttribution.unattributed": "No conversation (host request)",
     "approvalAttribution.headlessSession": "Conversation not open in any tile",
     "approvalAttribution.hostRequest": "Host request",
-    "approvalAttribution.pluginRequest": "Extension request · {plugin}",
+    "approvalAttribution.pluginRequest": "Extension panel request · {plugin}",
     "approvalAttribution.paneConversation": "Request from the conversation behind this surface: {title}",
     "approvalAttribution.returnToConversation": "Return to conversation"
   };
@@ -6502,9 +6502,7 @@ var init_useStatusBarInstall = __esm(() => {
     "useStatusBarInstall.installSuccess": "{target} installed successfully",
     "useStatusBarInstall.installFailure": "{target} installation failed: {error}",
     "useStatusBarInstall.uninstallSuccess": "{target} removed successfully",
-    "useStatusBarInstall.uninstallFailure": "{target} removal failed: {error}",
-    "useStatusBarInstall.labelAgent": "agent",
-    "useStatusBarInstall.labelSkill": "skill"
+    "useStatusBarInstall.uninstallFailure": "{target} removal failed: {error}"
   };
 });
 
@@ -22894,7 +22892,7 @@ var require_utils2 = __commonJS((exports, module) => {
   module.exports = Utils;
   Utils.prototype.makeDir = function(folder) {
     const self = this;
-    function mkdirSync3(fpath) {
+    function mkdirSync2(fpath) {
       let resolvedPath = fpath.split(self.sep)[0];
       fpath.split(self.sep).forEach(function(name) {
         if (!name || name.substr(-1, 1) === ":")
@@ -22914,7 +22912,7 @@ var require_utils2 = __commonJS((exports, module) => {
           throw Errors.FILE_IN_THE_WAY(`"${resolvedPath}"`);
       });
     }
-    mkdirSync3(folder);
+    mkdirSync2(folder);
   };
   Utils.prototype.writeFileTo = function(path, content, overwrite, attr) {
     const self = this;
@@ -25181,6 +25179,7 @@ var require_adm_zip = __commonJS((exports, module) => {
 
 // src/i18n/messages/en.ts
 var en = {
+  "approvalAttribution.extensionSessionRequest": "Extension request · {extension}",
   "appearanceTab.fontSaveFailed": "The font setting could not be loaded or saved.",
   "appearanceTab.schemeTitle": "Color scheme",
   "appearanceTab.schemeDescription": "One scheme sets the interface and terminal colors. System mode keeps a selection for each appearance.",
@@ -28564,6 +28563,15 @@ var plugin_manifest_schema_default = {
             },
             "ai.agent-connector.ave/operationPolicy": {
               $ref: "#/definitions/pluginToolOperationPolicy"
+            }
+          }
+        },
+        annotations: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            readOnlyHint: {
+              type: "boolean"
             }
           }
         }
@@ -35767,7 +35775,7 @@ import { randomUUID } from "node:crypto";
 
 // src/main/storage/feature-namespace.ts
 import { randomBytes } from "node:crypto";
-import { chmodSync, constants as constants3, promises as fs, linkSync, mkdirSync as mkdirSync2, rmSync } from "node:fs";
+import { constants as constants3, promises as fs } from "node:fs";
 import { join as join7, dirname as dirname5, isAbsolute as isAbsolute5, relative as relative4, resolve as resolve7, sep as sep4 } from "node:path";
 import { platform } from "node:process";
 var log7 = createLogger("feature-namespace");
