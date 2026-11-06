@@ -11,3 +11,11 @@ test('plugin check accepts a marketplace plugin directory and its source directo
     assert.deepEqual(calls.filter(c => c.args[0] === 'run').map(c => c.args[1]), ['typecheck', 'build', 'test', 'validate:manifest']);
   }
 });
+
+// Source compatibility follows the app line; published catalog pins stay immutable.
+test('protocol 5 begins at the final contract app floor', async () => {
+  const { requiredHostProtocol } = await import('../repo.mjs');
+  assert.equal(requiredHostProtocol('0.14.1'), '3');
+  assert.equal(requiredHostProtocol('0.14.2'), '5');
+  assert.equal(requiredHostProtocol('0.15.0'), '5');
+});

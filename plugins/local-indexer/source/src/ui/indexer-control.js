@@ -132,7 +132,7 @@ function createMarkup() {
           </div>
         </section>
 
-        <section class="card"><form data-role="questionForm"><label>문서에 질문 <input name="question" class="input" maxlength="4096" required /></label><button>질문 초안 작성</button></form></section>
+        <section class="card"><div data-role="questionForm"><label>문서에 질문 <input name="question" class="input" maxlength="4096" required /></label><button type="button" data-role="questionBtn">질문 초안 작성</button></div></section>
         <section class="card doc-section">
           <div class="card-head">
             <div class="card-title">${ICONS.document}<span>문서</span><span class="count" data-role="docCountBadge">0</span></div>
@@ -1174,9 +1174,8 @@ export async function mount(context) {
     });
   }
 
-  on($("[data-role='questionForm']"), "submit", async event => {
-    event.preventDefault();
-    const text = event.currentTarget.elements.question.value.trim();
+  on($("[data-role='questionBtn']"), "click", async () => {
+    const text = $("[name='question']").value.trim();
     if (!text) return;
     try { await app.sendMessage({ role: "user", content: [{ type: "text", text }] }); setStatus("질문 초안을 작성했습니다."); }
     catch (error) { setStatus(`질문 초안 작성 실패: ${formatErrorMessage(error)}`); }
@@ -1255,9 +1254,10 @@ export async function mount(context) {
 
 export default mount;
 
-const app = new App({ name: "local-indexer", version: "0.8.0" });
+const app = new App({ name: "local-indexer", version: "0.8.0" }, {}, { autoResize: false });
 try {
   await app.connect();
+  await app.sendSizeChanged({ height: 640 });
   const dispose = await mount({ root: document.getElementById("app"), app });
   window.addEventListener("pagehide", () => { dispose(); void app.close(); }, { once: true });
 } catch (error) { document.getElementById("app").textContent = `Connection failed: ${String(error)}`; }

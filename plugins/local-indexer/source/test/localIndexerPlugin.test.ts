@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { flattenAgentPluginsManifest, type PluginWorkerSpec } from "@ave/plugin-contract";
 import {
   LEGACY_INDEX_DIR_NAME,
@@ -258,15 +258,32 @@ describe("LocalIndexerPlugin — spawn spec", () => {
     });
   });
 
-  it("grants read access to the interpreter and the worker script only", async () => {
+  it("grants the worker module directory without widening system interpreter access", async () => {
     await withTempDir("ave-li-read-", async (dir) => {
       const { spawnWorker, specs } = spawnSequence(readyWorker());
       const plugin = makePlugin(spawnWorker, { pluginDataDir: dir });
       await plugin.start();
       const reads = specs[0]!.allowReadPaths ?? [];
-      expect(reads).toHaveLength(2);
+      expect(reads).toHaveLength(3);
       expect(reads[0]).toBe("/usr/bin/python3");
       expect(reads[1]).toMatch(/[\\/]local_indexer_worker\.py$/);
+      expect(reads[2]).toBe(dirname(reads[1]));
+      expect(reads).not.toContain("/usr");
+      await plugin.stop();
+    });
+  });
+
+  it("grants only the selected managed environment's venv and interpreter tree", async () => {
+    await withTempDir("ave-li-python-read-", async (dir) => {
+      const runtime = resolve(dir, "runtime/python-envs/lock-id");
+      const { spawnWorker, specs } = spawnSequence(readyWorker());
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir, pythonExecutable: resolve(runtime, "venv/bin/python") });
+      await plugin.start();
+      const reads = specs[0]!.allowReadPaths ?? [];
+      expect(reads).toContain(resolve(runtime, "venv"));
+      expect(reads).toContain(resolve(runtime, "python"));
+      expect(reads).not.toContain(runtime);
+      expect(reads).not.toContain(resolve(runtime, ".."));
       await plugin.stop();
     });
   });

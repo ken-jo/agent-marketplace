@@ -438,7 +438,14 @@ export class LocalIndexerPlugin {
     // intentionally never injected.
     env.HF_HUB_DISABLE_TELEMETRY = "1"; // 유지 (UX 용)
     const corpCaPath = this.options.corpCaPath ?? null;
-    const workerReadGrantPaths = [pythonExecutable, workerScriptPath];
+    // Imports need the shipped worker modules and the host-managed Python
+    // environment, not just its entry files. Keep grants within this lock's
+    // runtime rather than widening to the runtime root or another plugin.
+    const workerReadGrantPaths = [pythonExecutable, workerScriptPath, dirname(workerScriptPath)];
+    const venvRoot = dirname(dirname(pythonExecutable));
+    if (dirname(venvRoot) !== venvRoot && /[\\/]venv$/.test(venvRoot)) {
+      workerReadGrantPaths.push(venvRoot, resolve(venvRoot, "../python"));
+    }
     if (corpCaPath) {
       env.SSL_CERT_FILE = corpCaPath;         // Python ssl
       env.REQUESTS_CA_BUNDLE = corpCaPath;    // requests
