@@ -1,6 +1,7 @@
+import { ChangeStream } from "../src/changeStream.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import type { EgressChannel } from "../src/egressBroker.js";
 
@@ -18,7 +19,27 @@ const setImageCaptioningMock = vi.fn(async (_enabled, _provider, _model) => ({
   provider: "openai",
   model: "",
 }));
-const setEgressTokenMock = vi.fn(async (_apiKey: string) => ({ hasEmbeddingKey: true }));
+const setEmbeddingEgressMock = vi.fn(async (enabled: boolean) => ({ embeddingEgress: enabled }));
+const setAllowedRootsMock = vi.fn(async (roots: string[]) => ({ roots, count: roots.length }));
+// Where the mocked worker says its index lives. Tests of the 0.8.0 index
+// rebuild set a legacy directory here.
+let mockScanTotalIndexed = 5;
+let mockUnreadableFolders: string[] = [];
+// Files the mocked walk saw per folder; null = 2 in every scanned folder.
+let mockWalkedByFolder: Record<string, number> | null = null;
+// What the mocked worker reads from the copy of a pre-0.8.0 index.
+let mockLegacyManifest: Array<{
+  docId: string; path: string; mtimeMs: number; contentState: string | null; contentHash: string | null; hadVectors: boolean;
+}> = [];
+const prePopulateCacheMock = vi.fn((_docs: unknown[]) => {});
+const prePopulateCacheFromStateMock = vi.fn((_state: Map<string, unknown>) => {});
+const legacyIndexManifestMock = vi.fn(async (_sqlitePath: string) => mockLegacyManifest);
+let mockIndexLocation: {
+  indexRoot: string;
+  documentCount: number;
+  inStateDirectory: boolean;
+  legacyIndexDir: string | null;
+} | null = null;
 // Boot reconcile pass mocks. Default: no drift (a clean warmup no-op so every
 // existing test's background warmup completes without error). Tests that
 // exercise the heal path override reconcileMock per-case.
@@ -34,6 +55,7 @@ const reindexMock = vi.fn(async (filePath: string) => ({
   doc_type: "md",
   chunk_count: 1,
   status: "indexed",
+  embedded: true as boolean | undefined,
 }));
 let mockDocuments = [
   { id: "d1", doc_id: "d1", doc_name: "a.pdf", doc_type: "pdf", type: "pdf", path: "/tmp/a.pdf" },
@@ -78,6 +100,26 @@ const getStructureMock = vi.fn(async (_docId) => ({
 // 이 파일 전체의 `createRequire` 를 바꿔 놓고 있었으므로, 사라진 것은
 // picker 배선만이 아니라 그 부수효과이기도 하다.
 const pickFoldersMock = vi.fn(async () => ({ canceled: false, folders: [] as string[] }));
+
+// Hooks into the copy of a pre-0.8.0 index (torn copies, a full disk).
+let copyFileHook: ((src: string, dst: string) => void | Promise<void>) | null = null;
+let statfsOverride: ((path: string) => { bavail: number; bsize: number }) | null = null;
+let lstatHook: ((path: string, real: any) => any) | null = null;
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...real,
+    copyFile: async (src: string, dst: string, mode?: number) => {
+      if (copyFileHook) await copyFileHook(src, dst);
+      return real.copyFile(src, dst, mode);
+    },
+    statfs: async (path: string, opts?: any) => (statfsOverride ? statfsOverride(path) : real.statfs(path, opts)),
+    lstat: async (path: string, opts?: any) => {
+      const st = await real.lstat(path, opts);
+      return lstatHook ? lstatHook(path, st) : st;
+    },
+  };
+});
 
 vi.mock("node:child_process", () => {
   const { EventEmitter } = require("node:events");
@@ -152,9 +194,17 @@ vi.mock("../src/folderIndexer.js", () => {
       return invalidateImageEntriesMock();
     }
 
-    prePopulateCacheFromState(_state) {}
+    prePopulateCacheFromState(state) {
+      prePopulateCacheFromStateMock(state);
+    }
 
-    prePopulateCache(_docs) {}
+    prePopulateCache(docs) {
+      prePopulateCacheMock(docs);
+    }
+
+    wouldIndex(_path, _folder) {
+      return true;
+    }
 
     getIndexedEntries() {
       return [
@@ -162,7 +212,8 @@ vi.mock("../src/folderIndexer.js", () => {
       ];
     }
 
-    async scanOnce() {
+    async scanOnce(foldersOverride) {
+      const scanned = foldersOverride ?? this.folders;
       const firstPath = join(this.folders[0] ?? "/tmp", "a.md");
       const secondPath = join(this.folders[0] ?? "/tmp", "b.md");
       this.emitProgress({
@@ -193,7 +244,13 @@ vi.mock("../src/folderIndexer.js", () => {
       return {
         scanned: 2,
         indexed: 2,
-        totalIndexed: 5,
+        failed: 0,
+        failedTransient: 0,
+        walked: 2,
+        walkedByFolder: mockWalkedByFolder ?? Object.fromEntries(scanned.map((folder) => [folder, 2])),
+        failures: [],
+        unreadableFolders: mockUnreadableFolders,
+        totalIndexed: mockScanTotalIndexed,
         folders: this.folders,
       };
     }
@@ -220,9 +277,13 @@ vi.mock("../src/localIndexerPlugin.js", () => {
         getPageContent: getPageContentMock,
         getStructure: getStructureMock,
         setImageCaptioning: setImageCaptioningMock,
-        setEgressToken: setEgressTokenMock,
+        setEmbeddingEgress: setEmbeddingEgressMock,
+        setAllowedRoots: setAllowedRootsMock,
+        runtimeInfo: async () => ({ index_root: mockIndexLocation?.indexRoot ?? "", document_count: mockDocuments.length }),
         reconcile: reconcileMock,
         reindex: reindexMock,
+        indexDocument: (filePath: string) => indexDocumentMock(filePath),
+        legacyIndexManifest: legacyIndexManifestMock,
         captionImage: async () => ({
           filePath: "",
           caption: "",
@@ -248,8 +309,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
       await localIndexerStopMock();
       this.started = false;
     }
-    getEgressToken() { return "test-broker-token"; }
-    getShutdownToken() { return null; }
+    getIndexLocation() { return this.started ? mockIndexLocation : null; }
     async listDocuments() {
       return mockDocuments;
     }
@@ -264,7 +324,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
   return { LocalIndexerPlugin };
 });
 
-import createPlugin from "../src/hostPlugin.js";
+import createPlugin, { MAX_PREVIEW_ENTRIES } from "../src/hostPlugin.js";
 
 /**
  * The home the fixture TELLS the plugin about — which is no longer the real
@@ -276,10 +336,14 @@ function fixtureUserHome(hostRoot) {
   return join(hostRoot, "user-home");
 }
 
+const publishChange = ChangeStream.prototype.publish;
+
 function makeContext(hostRoot, config = {}, options = {}) {
+  vi.restoreAllMocks();
   const events = [];
   const logs = [];
-  const shutdownHandlers = [];
+  vi.spyOn(ChangeStream.prototype, "publish").mockImplementation(function (kind, payload) { publishChange.call(this, kind, payload); events.push([kind, payload]); });
+  const auditSpy = vi.spyOn(console, "error").mockImplementation((level, msg, data) => logs.push([`${level}:${msg}`, data]));
   const ctx = {
     pluginId: "local-indexer",
     pluginRoot: hostRoot,
@@ -298,14 +362,10 @@ function makeContext(hostRoot, config = {}, options = {}) {
     userHome: options.userHome ?? fixtureUserHome(hostRoot),
     aveHome: options.aveHome ?? join(fixtureUserHome(hostRoot), ".ave"),
     config,
-    log: vi.fn(),
+    stderr: auditSpy,
     hostApi: {
       pickFolders: pickFoldersMock,
-      emitEvent: vi.fn((type, data) => {
-        events.push([type, data]);
-      }),
       raiseAlert: vi.fn(async () => ({ status: "disabled_by_user" as const })),
-      onEvent: vi.fn(),
       addTask: vi.fn(),
       saveNote: vi.fn(),
       // Per SDK PluginHostApi: `config.{get,set,onChange}` is a required
@@ -327,12 +387,10 @@ function makeContext(hostRoot, config = {}, options = {}) {
         ok: true, exposure: "lease", leaseId: "lease-test", vendor: "openai",
         release: async () => {}, onClosed: () => () => {},
       })),
-      logEvent: vi.fn((level, msg, data) => logs.push([`${level}:${msg}`, data])),
-      onShutdown: vi.fn((handler) => shutdownHandlers.push(handler)),
       hostFetch: vi.fn(async () => new Response("{}", { status: 200 })),
     },
   };
-  return { ctx, events, logs, shutdownHandlers };
+  return { ctx, events, logs };
 }
 
 function latestEgressChannels() {
@@ -359,7 +417,19 @@ describe("hostPlugin createPlugin", () => {
     folderAutoIndexerStopMock.mockClear();
     localIndexerPluginInstances.length = 0;
     setImageCaptioningMock.mockClear();
-    setEgressTokenMock.mockClear();
+    setEmbeddingEgressMock.mockClear();
+    setAllowedRootsMock.mockClear();
+    mockIndexLocation = null;
+    mockScanTotalIndexed = 5;
+    mockUnreadableFolders = [];
+    mockWalkedByFolder = null;
+    mockLegacyManifest = [];
+    legacyIndexManifestMock.mockClear();
+    copyFileHook = null;
+    statfsOverride = null;
+    lstatHook = null;
+    prePopulateCacheMock.mockClear();
+    prePopulateCacheFromStateMock.mockClear();
     reconcileMock.mockClear();
     reconcileMock.mockResolvedValue({
       checked: true,
@@ -389,14 +459,14 @@ describe("hostPlugin createPlugin", () => {
 
   afterEach(async () => {
     await rm(hostRoot, { recursive: true, force: true });
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
-  it("registers the shutdown hook and exposes public methods", async () => {
-    const { ctx, shutdownHandlers } = makeContext(hostRoot);
+  it("exposes lifecycle methods without host shutdown registration", async () => {
+    const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
 
-    expect(shutdownHandlers.length).toBe(1);
     expect(typeof plugin.start).toBe("function");
     expect(typeof plugin.onPublished).toBe("function");
     expect(typeof plugin.stop).toBe("function");
@@ -409,10 +479,24 @@ describe("hostPlugin createPlugin", () => {
     expect(folderAutoIndexerStopMock).not.toHaveBeenCalled();
 
     await plugin.onPublished?.();
-    expect(ctx.log).toHaveBeenCalledWith("local-indexer plugin started");
+    expect(ctx.stderr).toHaveBeenCalledWith("local-indexer plugin started");
 
     await plugin.stop();
-    expect(ctx.log).toHaveBeenCalledWith("local-indexer plugin stopped");
+    expect(ctx.stderr).toHaveBeenCalledWith("local-indexer plugin stopped");
+  });
+
+  it("delivers scan invalidations through the app-only wait and releases it on stop", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const initial = await plugin.handlers.index_wait_changes({ cursor: "", waitMs: 0 });
+    const pending = plugin.handlers.index_wait_changes({ cursor: initial.cursor, waitMs: 10000 });
+    await plugin.handlers.index_scan();
+    const changed = await pending;
+    const remaining = await plugin.handlers.index_wait_changes({ cursor: changed.cursor, waitMs: 0 });
+    expect([...changed.changes, ...remaining.changes].some(c => c.kind === "index.scan.progress")).toBe(true);
+    const waiting = plugin.handlers.index_wait_changes({ cursor: remaining.cursor, waitMs: 10000 });
+    await plugin.stop();
+    expect(await waiting).toMatchObject({ closed: true });
   });
 
   it("single-flights concurrent post-publication startup", async () => {
@@ -553,20 +637,20 @@ describe("hostPlugin createPlugin", () => {
     ]);
   });
 
-  it("shares teardown between concurrent stop and shutdown calls", async () => {
+  it("shares teardown between concurrent stop calls", async () => {
     let releaseStartup!: () => void;
     const startupGate = new Promise<void>((resolve) => {
       releaseStartup = resolve;
     });
     localIndexerStartMock.mockImplementationOnce(() => startupGate);
-    const { ctx, shutdownHandlers } = makeContext(hostRoot);
+    const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
 
     const publishing = plugin.onPublished?.();
     await vi.waitFor(() => expect(localIndexerStartMock).toHaveBeenCalledTimes(1));
     const folderStopsBeforeTeardown = folderAutoIndexerStopMock.mock.calls.length;
     const stopping = plugin.stop();
-    const shuttingDown = shutdownHandlers[0]();
+    const shuttingDown = plugin.stop();
 
     releaseStartup();
     await Promise.all([publishing, stopping, shuttingDown]);
@@ -618,14 +702,14 @@ describe("hostPlugin createPlugin", () => {
   });
 
   it("makes repeated teardown idempotent", async () => {
-    const { ctx, shutdownHandlers } = makeContext(hostRoot);
+    const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
     await plugin.onPublished?.();
     const folderStopsBeforeTeardown = folderAutoIndexerStopMock.mock.calls.length;
 
     await plugin.stop();
     await plugin.stop();
-    await shutdownHandlers[0]();
+    await plugin.stop();
 
     expect(folderAutoIndexerStopMock).toHaveBeenCalledTimes(folderStopsBeforeTeardown + 1);
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
@@ -633,7 +717,7 @@ describe("hostPlugin createPlugin", () => {
 
   it("shares and preserves a teardown rejection without retrying components", async () => {
     const stopError = new Error("worker shutdown failed");
-    const { ctx, logs, shutdownHandlers } = makeContext(hostRoot);
+    const { ctx, logs } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
     await plugin.onPublished?.();
     const folderStopsBeforeTeardown = folderAutoIndexerStopMock.mock.calls.length;
@@ -643,14 +727,10 @@ describe("hostPlugin createPlugin", () => {
     const secondStop = plugin.stop();
     await expect(firstStop).rejects.toBe(stopError);
     await expect(secondStop).rejects.toBe(stopError);
-    await expect(shutdownHandlers[0]()).resolves.toBeUndefined();
+    await expect(plugin.stop()).rejects.toBe(stopError);
 
     expect(folderAutoIndexerStopMock).toHaveBeenCalledTimes(folderStopsBeforeTeardown + 1);
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
-    expect(logs).toContainEqual([
-      "error:local_indexer.shutdown.failed",
-      { error: stopError.message },
-    ]);
   });
 
   it("preserves both component failures in an aggregate teardown error", async () => {
@@ -706,7 +786,8 @@ describe("hostPlugin createPlugin", () => {
     expect(res.body).toEqual(Buffer.from('{"ok":true}'));
   });
 
-  it("passes a configured workerPort through to the worker plugin", async () => {
+  it("hands the worker plugin no port, socket or token: the worker talks over stdio control", async () => {
+    // A leftover `workerPort` from a pre-0.8.0 config is ignored.
     const { ctx } = makeContext(hostRoot, {}, {
       pluginDataDir: hostRoot,
       configValues: { workerPort: 43229 },
@@ -714,24 +795,12 @@ describe("hostPlugin createPlugin", () => {
 
     await createPlugin(ctx);
 
-    expect(localIndexerPluginInstances.at(-1)?.opts?.port).toBe(43229);
-  });
-
-  it("leaves workerPort unset when it is out of range, so the default port stands", async () => {
-    // Deliberately not clamped: a port outside the usable range is a
-    // configuration mistake, and quietly binding a different port than the one
-    // asked for is worse than falling back to the documented default.
-    for (const workerPort of [80, 70000, Number.NaN]) {
-      localIndexerPluginInstances.length = 0;
-      const { ctx } = makeContext(hostRoot, {}, {
-        pluginDataDir: hostRoot,
-        configValues: { workerPort },
-      });
-
-      await createPlugin(ctx);
-
-      expect(localIndexerPluginInstances.at(-1)?.opts?.port).toBeUndefined();
+    const opts = localIndexerPluginInstances.at(-1)?.opts ?? {};
+    for (const key of ["port", "host", "pluginSocketDir", "onWorkerStdout"]) {
+      expect(opts, key).not.toHaveProperty(key);
     }
+    expect(JSON.stringify(Object.keys(opts))).not.toMatch(/token|port|socket/i);
+    expect(typeof opts.onWorkerStderr).toBe("function");
   });
 
   it("fails closed at plugin load when hostApi.hostFetch is absent", async () => {
@@ -769,7 +838,8 @@ describe("hostPlugin createPlugin", () => {
   it("index_scan_status replays buffered warnings and index_clear_warnings resets them", async () => {
     const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
     const plugin = await createPlugin(ctx);
-    localIndexerPluginInstances.at(-1)?.opts.onWorkerStdout?.(
+    // Worker logs arrive on stderr, one JSON line each.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(
       '{"event":"indexer.file.empty","path":"C:/docs/empty.pdf","error":"empty content"}',
     );
 
@@ -784,6 +854,567 @@ describe("hostPlugin createPlugin", () => {
     await plugin.handlers.index_clear_warnings();
     status = await plugin.handlers.index_scan_status();
     expect(status.warnings).toEqual([]);
+  });
+
+  describe("0.8.0 index location rebuild", () => {
+    async function legacyIndexFixture(): Promise<string> {
+      const legacy = join(hostRoot, "index");
+      await mkdir(legacy, { recursive: true });
+      await writeFile(join(legacy, "fts5.sqlite"), "pre-0.8.0 index");
+      mockIndexLocation = {
+        indexRoot: join(hostRoot, "workers", "local-indexer-worker", "index"),
+        documentCount: 0,
+        inStateDirectory: true,
+        legacyIndexDir: legacy,
+      };
+      return legacy;
+    }
+
+    /** A saved folder list, so the scan does not use the default folders. */
+    async function savedFolders(): Promise<string> {
+      const docs = join(hostRoot, "docs");
+      await mkdir(docs, { recursive: true });
+      const workspaceDir = join(hostRoot, ".local-indexer-workspace");
+      await mkdir(workspaceDir, { recursive: true });
+      await writeFile(join(workspaceDir, "folders.json"), JSON.stringify({ folders: [docs] }));
+      return docs;
+    }
+
+    /**
+     * Files on disk under `docs` that the old index held, and that the
+     * mocked new index holds too (with vectors).
+     */
+    async function oldIndexHolds(docs: string, names = ["a.pdf", "b.md"], inNewIndex = names) {
+      mockLegacyManifest = [];
+      for (const name of names) {
+        const path = join(docs, name);
+        await writeFile(path, `# ${name}`);
+        mockLegacyManifest.push({
+          docId: `old-${name}`,
+          path,
+          mtimeMs: Math.floor((await stat(path)).mtimeMs),
+          contentState: "ok",
+          contentHash: null,
+          hadVectors: true,
+        });
+      }
+      mockDocuments = inNewIndex.map((name, i) => ({
+        id: `d${i}`, doc_id: `d${i}`, doc_name: name, doc_type: "md", type: "md",
+        path: join(docs, name), status: "indexed", content_state: "ok",
+      })) as typeof mockDocuments;
+    }
+
+    const ledgerPath = () => join(hostRoot, "index-migration-attempts.json");
+    const manifestPath = () => join(hostRoot, "index-migration-manifest.json");
+    const manifestCopyDir = () => join(hostRoot, ".local-indexer-workspace", ".legacy-index-manifest");
+
+    async function settledMigration(plugin: any) {
+      let status: any;
+      await vi.waitFor(async () => {
+        status = (await plugin.handlers.index_scan_status()).indexMigration;
+        expect(status?.phase).toMatch(/^(completed|kept-old)$/);
+      });
+      return status;
+    }
+
+    function migrationNotices(events: any[]): string[] {
+      return events
+        .filter(([name, payload]: [string, any]) => name === "index.warning" && payload.kind === "index-migration")
+        .map(([, payload]: [string, any]) => payload.message);
+    }
+
+    it("rebuilds visibly and deletes the old index once the new one covers it", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(join(legacy, "fts5.sqlite-wal"), "un-checkpointed rows");
+      await oldIndexHolds(await savedFolders());
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 2, lastReason: "earlier" }));
+      // The worker reads a copy in its workspace, WAL included.
+      legacyIndexManifestMock.mockImplementationOnce(async (sqlitePath: string) => {
+        expect(sqlitePath).toBe(join(manifestCopyDir(), "fts5.sqlite"));
+        expect(await readFile(sqlitePath, "utf-8")).toBe("pre-0.8.0 index");
+        expect(await readFile(`${sqlitePath}-wal`, "utf-8")).toBe("un-checkpointed rows");
+        return mockLegacyManifest;
+      });
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({
+        phase: "completed",
+        legacyIndexDir: legacy,
+        attempt: 3,
+        documentsAfter: mockDocuments.length,
+        legacyDocuments: 2,
+        scan: { folderSource: "saved", registeredFolders: 1, unreadableFolders: [], failedTransient: 0 },
+        coverage: { required: 2, covered: 2, missingDocuments: 0 },
+      });
+      expect(legacyIndexManifestMock).toHaveBeenCalledTimes(1);
+      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(manifestPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
+      const notices = migrationNotices(events);
+      expect(notices).toHaveLength(2);
+      expect(notices[0]).toMatch(/전체 재인덱싱/);
+      expect(notices[1]).toMatch(/재구축 완료/);
+      const migrationEvents = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .map(([, event]: [string, string]) => event)
+        .filter((event: string) => typeof event === "string" && event.startsWith("local_indexer.index_migration."));
+      expect(migrationEvents).toEqual([
+        "local_indexer.index_migration.manifest",
+        "local_indexer.index_migration.rebuilding",
+        "local_indexer.index_migration.completed",
+      ]);
+      await plugin.stop();
+    });
+
+    it("keeps the old index, counts the attempt, and keeps the manifest, when an old document is missing", async () => {
+      const legacy = await legacyIndexFixture();
+      const docs = await savedFolders();
+      await oldIndexHolds(docs, ["a.pdf", "b.md", "lost.md"], ["a.pdf", "b.md"]);
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", attempt: 1, coverage: { required: 3, missingDocuments: 1 } });
+      expect(status.reason).toMatch(/the new index lacks 1 document\(s\) and the vectors of 0 document\(s\)/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      expect(JSON.parse(await readFile(ledgerPath(), "utf-8"))).toMatchObject({ attempts: 1 });
+      expect(migrationNotices(events).at(-1)).toMatch(/이전 인덱스를 보존.*다음 시작 때 다시 시도합니다 \(1\/5\)/);
+      // The manifest stays beside the old index for the next attempt.
+      const saved = JSON.parse(await readFile(manifestPath(), "utf-8"));
+      expect(saved).toMatchObject({ version: 2, folders: [docs] });
+      expect(saved.documents.map((d: any) => d.path)).toEqual(mockLegacyManifest.map((d) => d.path));
+      await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
+      await plugin.stop();
+
+      // The next start measures against the saved manifest, without reading the old index again.
+      legacyIndexManifestMock.mockClear();
+      const again = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin2 = await createPlugin(again.ctx);
+      await plugin2.onPublished?.();
+      expect(await settledMigration(plugin2)).toMatchObject({ phase: "kept-old", attempt: 2 });
+      expect(legacyIndexManifestMock).not.toHaveBeenCalled();
+      await plugin2.stop();
+    });
+
+    it("keeps the old index when the scan used the default folders (no saved folder list)", async () => {
+      const legacy = await legacyIndexFixture();
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.scan.folderSource).toBe("fallback");
+      expect(status.reason).toMatch(/saved folder list was missing or unreadable/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("keeps the old index when a registered folder with old documents could not be read", async () => {
+      const legacy = await legacyIndexFixture();
+      const docs = await savedFolders();
+      await oldIndexHolds(docs);
+      mockUnreadableFolders = [docs];
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/1 folder\(s\) could not be read: .*docs/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("stops retrying after the bound and says so in the banner, without scanning", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "1 folder(s) could not be read: /x" }));
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", retriesExhausted: true });
+      expect(status.scan).toBeUndefined();
+      expect(status.reason).toMatch(/stopped after 5 attempt\(s\); last reason: 1 folder\(s\) could not be read/);
+      expect(migrationNotices(events).at(-1)).toMatch(/자동 재시도 5회를 모두 썼으므로/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("keeps the old index when a folder that held old documents now shows no files", async () => {
+      const legacy = await legacyIndexFixture();
+      const docs = await savedFolders();
+      await oldIndexHolds(docs, ["x.md", "y.md"], []);
+      await rm(join(docs, "x.md"));
+      await rm(join(docs, "y.md"));
+      mockWalkedByFolder = { [docs]: 0 }; // the walk lists it cleanly and finds nothing
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/held indexed documents now show no files .*docs/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("keeps the old index, and its vectors, when the rebuild could not embed (an outage)", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(join(legacy, "vectors.lance"), "old vectors");
+      const docs = await savedFolders();
+      await oldIndexHolds(docs);
+      for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: { apiKeySource: "host", hostApiVendor: "openai", embeddingProvider: "openai" },
+      });
+      ctx.hostApi.getSecret = vi.fn((key: string) => (key === "llm.apiKey.openai" ? "sk-key" : null));
+      // The provider is down: a re-embed indexes the file but gets no vectors.
+      reindexMock.mockImplementation(async (filePath: string) => ({
+        doc_id: `doc:${filePath}`, doc_name: filePath, doc_type: "md", chunk_count: 1, status: "indexed", embedded: false,
+      }) as any);
+      try {
+        const plugin = await createPlugin(ctx);
+        await plugin.onPublished?.();
+        const status = await settledMigration(plugin);
+        expect(status).toMatchObject({
+          phase: "kept-old",
+          coverage: { required: 2, missingVectors: 2, backfill: { attempted: 2, embedded: 0 } },
+        });
+        expect(status.reason).toMatch(/lacks 0 document\(s\) and the vectors of 2 document\(s\)/);
+        // The backfill went to the worker for exactly the documents without vectors.
+        const backfilled = reindexMock.mock.calls.map((c) => c[0]).filter((p) => p.startsWith(docs));
+        expect(new Set(backfilled)).toEqual(new Set(mockDocuments.map((d) => d.path)));
+        expect(await readFile(join(legacy, "vectors.lance"), "utf-8")).toBe("old vectors");
+        await plugin.stop();
+      } finally {
+        reindexMock.mockReset();
+        reindexMock.mockImplementation(async (filePath: string) => ({
+          doc_id: `doc:${filePath}`, doc_name: filePath, doc_type: "md", chunk_count: 1, status: "indexed", embedded: true,
+        }));
+      }
+    });
+
+    it("retries a copy the old index changed under, and reads the consistent one", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(join(legacy, "fts5.sqlite-wal"), "wal v1");
+      await oldIndexHolds(await savedFolders());
+      let torn = 0;
+      copyFileHook = async (src) => {
+        // A checkpoint lands after the main file was copied, once.
+        if (src.endsWith("fts5.sqlite-wal") && torn === 0) {
+          torn += 1;
+          await writeFile(join(legacy, "fts5.sqlite-wal"), "wal v2, longer");
+        }
+      };
+      legacyIndexManifestMock.mockImplementationOnce(async (sqlitePath: string) => {
+        expect(await readFile(`${sqlitePath}-wal`, "utf-8")).toBe("wal v2, longer");
+        return mockLegacyManifest;
+      });
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).phase).toBe("completed");
+      const events = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(events.filter((e: string) => e === "local_indexer.index_migration.copy_torn")).toHaveLength(1);
+      await plugin.stop();
+    });
+
+    it("an old index that keeps changing while copied waits for the next start, without using an attempt", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(join(legacy, "fts5.sqlite-wal"), "wal");
+      await oldIndexHolds(await savedFolders());
+      let n = 0;
+      copyFileHook = async (src) => {
+        if (src.endsWith("fts5.sqlite-wal")) await writeFile(join(legacy, "fts5.sqlite-wal"), `wal ${"x".repeat(++n)}`);
+      };
+      const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", deferred: "index-busy" });
+      expect(status.reason).toMatch(/kept changing while it was copied \(3 tries\)/);
+      expect(legacyIndexManifestMock).not.toHaveBeenCalled();
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(manifestPath())).rejects.toMatchObject({ code: "ENOENT" });
+      expect(migrationNotices(events).at(-1)).toMatch(/자동 재시도 횟수에 넣지 않습니다/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("a disk without room for the copy, or one that fills up, waits with its own status", async () => {
+      for (const setup of [
+        () => { statfsOverride = () => ({ bavail: 10, bsize: 4096 }); },
+        () => {
+          copyFileHook = async () => { throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" }); };
+        },
+      ]) {
+        const legacy = await legacyIndexFixture();
+        await oldIndexHolds(await savedFolders());
+        copyFileHook = null;
+        statfsOverride = null;
+        setup();
+        const { ctx, events } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+        const plugin = await createPlugin(ctx);
+        await plugin.onPublished?.();
+        const status = await settledMigration(plugin);
+        expect(status).toMatchObject({ phase: "kept-old", deferred: "no-space" });
+        await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+        expect(migrationNotices(events).at(-1)).toMatch(/디스크 공간이 부족해/);
+        expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+        await plugin.stop();
+      }
+    });
+
+    it("keeps the old vectors when the host refuses the embedding lease (embedding state unknown)", async () => {
+      const legacy = await legacyIndexFixture();
+      await oldIndexHolds(await savedFolders());
+      for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: { apiKeySource: "host", hostApiVendor: "openai", embeddingProvider: "openai" },
+      });
+      ctx.hostApi.resolveApiKey = vi.fn(async () => ({ ok: false, reason: "busy" })) as any;
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", coverage: { undecidedVectors: 2, missingVectors: 0 } });
+      expect(status.reason).toMatch(/whether embedding is available could not be determined/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("a plugin key that reads null, or a key store that throws, keeps the old vectors and says what to do", async () => {
+      for (const read of [async () => null, async () => { throw new Error("keychain locked"); }]) {
+        const legacy = await legacyIndexFixture();
+        await oldIndexHolds(await savedFolders());
+        for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
+        const { ctx, events } = makeContext(hostRoot, {}, {
+          pluginDataDir: hostRoot,
+          configValues: { apiKeySource: "plugin", embeddingProvider: "openai" },
+        });
+        ctx.hostApi.getSecret = vi.fn(read) as any;
+        const plugin = await createPlugin(ctx);
+        await plugin.onPublished?.();
+        const status = await settledMigration(plugin);
+        expect(status).toMatchObject({ phase: "kept-old", coverage: { undecidedVectors: 2, embedding: "no-key" } });
+        expect(status.reason).toMatch(/embedding API key could not be read or is not set.*re-enter the key/);
+        expect(migrationNotices(events).at(-1)).toMatch(/re-enter the key/);
+        expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+        await plugin.stop();
+      }
+    });
+
+    it("the one setting that reads as embedding off (host key withheld from a custom endpoint) is refused by the scan itself", async () => {
+      // There is no switch that turns embedding off and no "no provider"
+      // choice, so the only "off" is a configuration index_scan rejects
+      // before it starts: the rebuild keeps the old index for that reason,
+      // never by waiving vectors.
+      const legacy = await legacyIndexFixture();
+      await oldIndexHolds(await savedFolders());
+      for (const doc of mockDocuments) (doc as any).content_state = "embed_failed";
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: {
+          apiKeySource: "host",
+          hostApiVendor: "openai",
+          embeddingProvider: "openai",
+          embeddingEndpoint: "https://embeddings.example.net/v1",
+        },
+      });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      const status = await settledMigration(plugin);
+      expect(status.phase).toBe("kept-old");
+      expect(status.reason).toMatch(/the rebuild scan failed: .*embeddingEndpoint/);
+      expect(status.coverage).toBeUndefined();
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await plugin.stop();
+    });
+
+    it("indexes an old document from outside the folders (a dropped file) directly, then completes", async () => {
+      const legacy = await legacyIndexFixture();
+      const docs = await savedFolders();
+      await oldIndexHolds(docs);
+      const dropped = join(hostRoot, "user-home", "Downloads", "dropped.md");
+      await mkdir(dirname(dropped), { recursive: true });
+      await writeFile(dropped, "# dropped");
+      mockLegacyManifest.push({
+        docId: "old-dropped", path: dropped, mtimeMs: Math.floor((await stat(dropped)).mtimeMs),
+        contentState: "ok", contentHash: null, hadVectors: false,
+      });
+      indexDocumentMock.mockImplementationOnce(async (filePath: string) => {
+        mockDocuments.push({
+          id: "dd", doc_id: "dd", doc_name: "dropped.md", doc_type: "md", type: "md",
+          path: filePath, status: "indexed", content_state: "ok",
+        } as (typeof mockDocuments)[number]);
+        return "dd";
+      });
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "completed", coverage: { required: 3, covered: 3, outside: 1 } });
+      expect(indexDocumentMock).toHaveBeenCalledWith(dropped);
+      // Its directory was allowed for that call, as document_index_scan does.
+      expect(setAllowedRootsMock.mock.calls.some(([roots]) => roots.includes(dirname(dropped)))).toBe(true);
+      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      await plugin.stop();
+    });
+
+    it("measures whether a folder folds case instead of assuming the platform default", async () => {
+      await legacyIndexFixture();
+      const docs = await savedFolders();
+      await writeFile(join(docs, "Note.md"), "# note");
+      const probe = await Promise.all([stat(join(docs, "Note.md")), stat(join(docs, "nOTE.MD")).catch(() => null)]);
+      const foldsHere = probe[1] !== null && probe[0].ino === probe[1].ino && probe[0].dev === probe[1].dev;
+      mockLegacyManifest = [{
+        docId: "old-note", path: join(docs, "Note.md"), mtimeMs: Math.floor(probe[0].mtimeMs),
+        contentState: "ok", contentHash: null, hadVectors: false,
+      }];
+      // The new index names it in another case.
+      mockDocuments = [{ id: "n", doc_id: "n", doc_name: "note.md", doc_type: "md", type: "md",
+        path: join(docs, "note.md"), status: "indexed", content_state: "ok" }] as typeof mockDocuments;
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      // Folding filesystem: the same file, covered. Case-sensitive: a
+      // different name, so Note.md is missing and the old index stays.
+      expect((await settledMigration(plugin)).phase).toBe(foldsHere ? "completed" : "kept-old");
+      await plugin.stop();
+    });
+
+    it("a case-swapped name that is a different file means the folder is case-sensitive", async () => {
+      await legacyIndexFixture();
+      const docs = await savedFolders();
+      await writeFile(join(docs, "Note.md"), "# note");
+      const st = await stat(join(docs, "Note.md"));
+      // As on a case-sensitive volume holding both Note.md and nOTE.MD.
+      lstatHook = (path, real) => (path.endsWith("nOTE.MD") ? { ...real, ino: Number(real.ino) + 1 } : real);
+      if ((await stat(join(docs, "nOTE.MD")).catch(() => null)) === null) await writeFile(join(docs, "nOTE.MD"), "# other");
+      mockLegacyManifest = [{
+        docId: "old-note", path: join(docs, "Note.md"), mtimeMs: Math.floor(st.mtimeMs),
+        contentState: "ok", contentHash: null, hadVectors: false,
+      }];
+      mockDocuments = [{ id: "n", doc_id: "n", doc_name: "note.md", doc_type: "md", type: "md",
+        path: join(docs, "note.md"), status: "indexed", content_state: "ok" }] as typeof mockDocuments;
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).phase).toBe("kept-old");
+      await plugin.stop();
+    });
+
+    it("keeps the old index when the old index cannot be read", async () => {
+      const legacy = await legacyIndexFixture();
+      await savedFolders();
+      legacyIndexManifestMock.mockRejectedValueOnce(new Error("database disk image is malformed"));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+
+      const status = await settledMigration(plugin);
+      expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
+      expect(status.reason).toMatch(/old index could not be read: database disk image is malformed/);
+      expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
+      await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
+      await plugin.stop();
+    });
+
+    it("the rebuild scan walks every registered folder, even ones whose summary reads empty", async () => {
+      await legacyIndexFixture();
+      const docs = await savedFolders();
+      // A mixed set: docs/ holds a file (pending), mount/ is empty (summary
+      // "empty"). A normal scan walks only the pending folder.
+      await writeFile(join(docs, "note.md"), "# note");
+      const mount = join(hostRoot, "mount");
+      await mkdir(mount, { recursive: true });
+      await writeFile(
+        join(hostRoot, ".local-indexer-workspace", "folders.json"),
+        JSON.stringify({ folders: [docs, mount] }),
+      );
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      await settledMigration(plugin);
+      const targets = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .filter(([, event]: [string, string]) => event === "index_scan.target_folders")
+        .map(([, , fields]: [string, string, any]) => fields);
+      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: [docs, mount] });
+      await plugin.stop();
+    });
+
+    it("a manual full scan resets the attempt bound and, once retries had stopped, rebuilds again", async () => {
+      const legacy = await legacyIndexFixture();
+      await oldIndexHolds(await savedFolders());
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "1 folder(s) could not be read: /x" }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).retriesExhausted).toBe(true);
+
+      await plugin.handlers.index_scan();
+      await vi.waitFor(async () => {
+        expect((await plugin.handlers.index_scan_status()).indexMigration?.phase).toBe("completed");
+      });
+      await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      const events = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(events).toContain("local_indexer.index_migration.manual_retry");
+      // Once the old index is gone, another manual scan starts no rebuild.
+      await plugin.handlers.index_scan();
+      await new Promise((r) => setTimeout(r, 20));
+      const after = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(after.filter((e: string) => e === "local_indexer.index_migration.rebuilding")).toHaveLength(1);
+      expect(after.filter((e: string) => e === "local_indexer.index_migration.manual_retry")).toHaveLength(1);
+      await plugin.stop();
+    });
+
+    it("a manual full scan starts no rebuild once the old index was removed by hand", async () => {
+      const legacy = await legacyIndexFixture();
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 5, lastReason: "x" }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await settledMigration(plugin)).retriesExhausted).toBe(true);
+      await rm(legacy, { recursive: true, force: true }); // the user followed the banner
+      await plugin.handlers.index_scan();
+      await new Promise((r) => setTimeout(r, 20));
+      const events = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      expect(events).toContain("local_indexer.index_migration.manual_retry");
+      expect(events).not.toContain("local_indexer.index_migration.rebuilding");
+      // The stale "kept the old index" status goes with it.
+      expect((await plugin.handlers.index_scan_status()).indexMigration).toBeNull();
+      expect(events).toContain("local_indexer.index_migration.cleared");
+      await plugin.stop();
+    });
+
+    it("a manual full scan clears a partial attempt count", async () => {
+      await legacyIndexFixture();
+      await writeFile(ledgerPath(), JSON.stringify({ attempts: 2, lastReason: "earlier" }));
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      await settledMigration(plugin); // fallback folders: kept-old, attempt 3
+      expect(JSON.parse(await readFile(ledgerPath(), "utf-8"))).toMatchObject({ attempts: 3 });
+      await plugin.handlers.index_scan();
+      await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
+      await plugin.stop();
+    });
+
+    it("runs no rebuild when there is no old index", async () => {
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      const plugin = await createPlugin(ctx);
+      await plugin.onPublished?.();
+      expect((await plugin.handlers.index_scan_status()).indexMigration).toBeNull();
+      await plugin.stop();
+    });
   });
 
   it("post-publish startup does not auto scan when the page opens", async () => {
@@ -953,6 +1584,28 @@ describe("hostPlugin createPlugin", () => {
       indexedFiles: 3,
       pendingFiles: 0,
     });
+  });
+
+  it("a model-started single-folder refresh wakes app change waits", async () => {
+    const workspace = join(hostRoot, ".local-indexer-workspace");
+    const folder = join(hostRoot, "model-refresh");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "new.md"), "A model requested this refresh.", "utf-8");
+    await writeFile(join(workspace, "folders.json"), JSON.stringify({ folders: [folder] }), "utf-8");
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    try {
+      await plugin.onPublished?.();
+      const initial = await plugin.handlers.index_wait_changes({ cursor: "", waitMs: 0 });
+      const waiting = plugin.handlers.index_wait_changes({ cursor: initial.cursor, waitMs: 10000 });
+      // Invoke the public server tool directly, without any panel button reload.
+      const result = await plugin.handlers.index_scan({ folder });
+      expect(result.indexed).toBe(1);
+      const wake = await waiting;
+      const remaining = await plugin.handlers.index_wait_changes({ cursor: wake.cursor, waitMs: 0 });
+      expect([...wake.changes, ...remaining.changes]).toContainEqual({ kind: "index.document.updated" });
+    } finally { await plugin.stop(); }
   });
 
   it("index_folders add blocks sensitive paths", async () => {
@@ -1393,9 +2046,48 @@ describe("hostPlugin createPlugin", () => {
     const res = await plugin.handlers.index_preview_folder({ folder });
     expect(res.folder).toBe(folder);
     expect(res.total).toBe(3);
+    expect(res.truncated).toBe(false);
     expect(res.byType).toMatchObject({ pdf: 2, md: 1 });
     expect(Array.isArray(res.sample)).toBe(true);
     expect(res.sample.length).toBeGreaterThan(0);
+    expect(res.error).toBeUndefined();
+  });
+
+  it("index_preview_folder blocks other users' homes before filesystem access", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const target = process.platform === "win32"
+      ? join(hostRoot, "other-user", "documents")
+      : "/Users/another-user/documents";
+    const fs = await import("node:fs/promises");
+    const statSpy = vi.spyOn(fs, "stat");
+    const lstatSpy = vi.spyOn(fs, "lstat");
+    const openSpy = vi.spyOn(fs, "opendir");
+    const res = await plugin.handlers.index_preview_folder({ folder: target });
+    expect(res).toEqual({
+      folder: target, total: 0, byType: {}, sample: [],
+      error: `보안: 다른 사용자 홈 디렉터리는 인덱싱 폴더로 추가할 수 없습니다: ${target}`,
+    });
+    expect(statSpy).not.toHaveBeenCalledWith(target);
+    expect(lstatSpy).not.toHaveBeenCalledWith(target);
+    expect(openSpy).not.toHaveBeenCalledWith(target);
+  });
+
+  it.each([false, true])("index_preview_folder bounds nested traversal, including hidden entries (%s)", async (hidden) => {
+    const folder = join(hostRoot, "bounded-preview");
+    await mkdir(folder);
+    // Nest the files so the budget must be shared across recursive calls.
+    const nested = join(folder, "nested");
+    await mkdir(nested);
+    await Promise.all(Array.from({ length: MAX_PREVIEW_ENTRIES }, (_, i) =>
+      writeFile(join(nested, `${hidden ? "." : ""}file-${i}.md`), "# sample")));
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const res = await plugin.handlers.index_preview_folder({ folder });
+    expect(res.truncated).toBe(true);
+    expect(res.total).toBe(hidden ? 0 : MAX_PREVIEW_ENTRIES - 1);
+    expect(res.byType).toEqual(hidden ? {} : { md: MAX_PREVIEW_ENTRIES - 1 });
+    expect(res.sample).toHaveLength(hidden ? 0 : 5);
     expect(res.error).toBeUndefined();
   });
 
@@ -1607,7 +2299,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -1635,7 +2326,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -1663,7 +2353,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-responses",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -1699,7 +2388,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       "gpt-5.4-mini",
       "https://sdk-base.openai.azure.com/",
-      expect.anything(),
       "2025-01-01-preview",
     );
   });
@@ -1734,7 +2422,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       null,
       null,
-      expect.anything(),
       null,
     );
   });
@@ -1760,7 +2447,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       "",
       "",
-      expect.anything(),
       "",
     );
   });
@@ -1796,7 +2482,6 @@ describe("hostPlugin createPlugin", () => {
       "azure-openai-chat",
       "gpt-5.4-mini",
       "https://sdk-base.openai.azure.com/",
-      expect.anything(),
       "2025-01-01-preview",
     );
   });
@@ -1823,7 +2508,6 @@ describe("hostPlugin createPlugin", () => {
       "openai",
       expect.any(String),
       expect.any(String),
-      expect.anything(),
       expect.any(String),
     );
   });
@@ -2200,9 +2884,8 @@ describe("hostPlugin createPlugin", () => {
         "",
         "",
         "",
-        "",
       );
-      const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      const keyCaptureLogs = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
       );
       expect(keyCaptureLogs.at(-1)?.[2]).toMatchObject({ hasCaptionKey: false });
@@ -2256,15 +2939,15 @@ describe("hostPlugin createPlugin", () => {
       expect(res).toHaveProperty("indexed");
 
       // Verify key_capture event was emitted with vendor and key presence.
-      const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      const keyCaptureLogs = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
       );
       expect(keyCaptureLogs.length).toBeGreaterThan(0);
       expect(keyCaptureLogs[0][2]).toMatchObject({ vendor: "openai", hasEmbeddingKey: true });
     });
 
-    // Broker contract: worker receives only the broker token at scan entry.
-    it("index_scan pushes the broker token to worker via setEgressToken", async () => {
+    // Broker contract: the worker gets a go-ahead flag, never a credential.
+    it("index_scan tells the worker embedding egress may go ahead, with no credential", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: {
@@ -2278,28 +2961,24 @@ describe("hostPlugin createPlugin", () => {
       );
       const plugin = await createPlugin(ctx);
 
-      setEgressTokenMock.mockClear();
+      setEmbeddingEgressMock.mockClear();
       await plugin.handlers.index_scan();
 
-      // First scan also boots the worker, so the token is pushed once at
-      // warmup and once at scan entry. Both calls supply a thunk; the worker
-      // never receives the provider key.
-      expect(setEgressTokenMock).toHaveBeenCalledTimes(2);
-      for (const [getBearer] of setEgressTokenMock.mock.calls) {
-        expect(typeof getBearer).toBe("function");
-        expect((getBearer as () => string)()).toBe("test-broker-token");
-      }
+      // First scan also boots the worker, so the go-ahead is pushed once at
+      // warmup and once at scan entry. It carries a flag only: the worker
+      // never receives the provider key or any other credential.
+      expect(setEmbeddingEgressMock).toHaveBeenCalledTimes(2);
+      expect(setEmbeddingEgressMock.mock.calls).toEqual([[true], [true]]);
       const channel = await latestEgressChannels().embedding();
       expect(channel.apiKey).toBeUndefined();
       expect(channel.lease?.exposure).toBe("lease");
       await channel.lease?.release();
     });
 
-    it("index_scan pushes no egress token at all when no embedding key is available", async () => {
-      // The scan-entry push has always been gated on a provider key existing;
-      // the warmup push was not, so this case used to hand the worker a broker
-      // session token on behalf of a user who had supplied no key. Both are
-      // gated now: no key means no credential of any kind reaches the worker.
+    it("index_scan gives no embedding go-ahead when no embedding key is available", async () => {
+      // Both the warmup and the scan-entry push are gated on a provider key
+      // existing: with none, the worker stays BM25-only instead of relaying a
+      // request per chunk that the broker would refuse.
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: {
@@ -2311,10 +2990,10 @@ describe("hostPlugin createPlugin", () => {
       ctx.hostApi.getSecret = vi.fn(() => null);
       const plugin = await createPlugin(ctx);
 
-      setEgressTokenMock.mockClear();
+      setEmbeddingEgressMock.mockClear();
       try { await plugin.handlers.index_scan(); } catch { /* expected */ }
 
-      expect(setEgressTokenMock).not.toHaveBeenCalled();
+      expect(setEmbeddingEgressMock).not.toHaveBeenCalled();
       expect((await latestEgressChannels().embedding()).apiKey).toBe("");
     });
 
@@ -2335,7 +3014,7 @@ describe("hostPlugin createPlugin", () => {
 
       await plugin.handlers.index_scan();
 
-      const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      const keyCaptureLogs = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
       );
       expect(keyCaptureLogs.length).toBeGreaterThan(0);
@@ -2370,7 +3049,6 @@ describe("hostPlugin createPlugin", () => {
         "openai",
         expect.any(String),
         expect.any(String),
-        "",
         expect.any(String),
       );
       expect(events).toContainEqual([
@@ -2381,7 +3059,7 @@ describe("hostPlugin createPlugin", () => {
   });
 
   describe("lease-backed egress channels", () => {
-    it("hydrates the host embedding presence and broker token before a scan", async () => {
+    it("hydrates the host embedding presence and the embedding go-ahead before a scan", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: { apiKeySource: "host", embeddingProvider: "openai" },
@@ -2396,11 +3074,10 @@ describe("hostPlugin createPlugin", () => {
 
       expect(localIndexerPluginInstances.at(-1)?.opts?.apiKey).toBe("host-lease-present");
       expect(release).toHaveBeenCalled();
-      expect(setEgressTokenMock).toHaveBeenCalledWith(expect.any(Function));
-      expect(setEgressTokenMock.mock.lastCall?.[0]()).toBe("test-broker-token");
+      expect(setEmbeddingEgressMock).toHaveBeenCalledWith(true);
     });
 
-    it("does not warm a broker token or read a plugin key after a host lease denial", async () => {
+    it("gives no embedding go-ahead and reads no plugin key after a host lease denial", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
         configValues: { apiKeySource: "host", embeddingProvider: "openai" },
@@ -2410,7 +3087,7 @@ describe("hostPlugin createPlugin", () => {
       await plugin.onPublished?.();
 
       expect(localIndexerPluginInstances.at(-1)?.opts?.apiKey).toBe("");
-      expect(setEgressTokenMock).not.toHaveBeenCalled();
+      expect(setEmbeddingEgressMock).not.toHaveBeenCalled();
       expect(ctx.hostApi.getSecret).not.toHaveBeenCalled();
     });
 
@@ -2544,6 +3221,161 @@ describe("hostPlugin createPlugin", () => {
       expect(healedPaths).toEqual(drifted.slice(0, 50).map((d) => d.path));
     });
 
+    it("heal re-embeds documents indexed without vectors, with the drifted ones, within the cap", async () => {
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: {
+          apiKeySource: "host",
+          hostApiVendor: "openai",
+          embeddingProvider: "openai",
+        },
+      });
+      ctx.hostApi.getSecret = vi.fn((key: string) =>
+        key === "llm.apiKey.openai" ? "sk-heal-key" : null,
+      );
+      // Embedded during an outage: indexed, but without vectors. A scan skips
+      // them (same mtime), so only the heal re-embeds them.
+      mockDocuments = [
+        ...Array.from({ length: 55 }, (_, i) => ({
+          id: `e${i}`, doc_id: `e${i}`, doc_name: `e${i}.md`, doc_type: "md", type: "md",
+          path: `/tmp/embed-failed-${i}.md`, status: "indexed", content_state: "embed_failed",
+        })),
+        { id: "ok", doc_id: "ok", doc_name: "ok.md", doc_type: "md", type: "md",
+          path: "/tmp/ok.md", status: "indexed", content_state: "ok" },
+        { id: "f", doc_id: "f", doc_name: "f.md", doc_type: "md", type: "md",
+          path: "/tmp/failed.md", status: "failed", content_state: "embed_failed" },
+      ] as typeof mockDocuments;
+      reconcileMock.mockResolvedValue({
+        checked: true,
+        // One drifted document is also embed_failed: healed once.
+        drifted_docs: [{ doc_id: "d1", path: "/tmp/drift-1.md" }, { doc_id: "e0", path: "/tmp/embed-failed-0.md" }],
+        drifted_doc_count: 2,
+        orphan_vectors_deleted: 0,
+      });
+      const plugin = await createPlugin(ctx);
+      reindexMock.mockClear();
+      await plugin.handlers.index_scan();
+
+      await vi.waitFor(() => expect(reindexMock).toHaveBeenCalledTimes(50), { timeout: 3000 });
+      const healed = reindexMock.mock.calls.map((c) => c[0]);
+      expect(healed.slice(0, 3)).toEqual(["/tmp/drift-1.md", "/tmp/embed-failed-0.md", "/tmp/embed-failed-1.md"]);
+      expect(new Set(healed).size).toBe(50);
+      expect(healed).not.toContain("/tmp/ok.md");
+      expect(healed).not.toContain("/tmp/failed.md");
+      // 1 drifted + 55 embed_failed (one shared) = 56; 50 healed, 6 next cycle.
+      await vi.waitFor(() => {
+        const done = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([, event]: [string, string]) => event === "local_indexer.reconcile_healed",
+        );
+        expect(done?.[2]).toMatchObject({ healed: 50, remaining: 6 });
+      });
+    });
+
+    function hostKeyContext() {
+      const made = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: { apiKeySource: "host", hostApiVendor: "openai", embeddingProvider: "openai" },
+      });
+      made.ctx.hostApi.getSecret = vi.fn((key: string) => (key === "llm.apiKey.openai" ? "sk-heal-key" : null));
+      return made;
+    }
+
+    async function healOnce(paths: string[], fails: (path: string) => boolean) {
+      mockDocuments = paths.map((path, i) => ({
+        id: `e${i}`, doc_id: `e${i}`, doc_name: `${i}.md`, doc_type: "md", type: "md",
+        path, status: "indexed", content_state: "embed_failed",
+      })) as typeof mockDocuments;
+      reindexMock.mockReset();
+      reindexMock.mockImplementation(async (filePath: string) => ({
+        doc_id: `doc:${filePath}`, doc_name: filePath, doc_type: "md", chunk_count: 1, status: "indexed",
+        embedded: !fails(filePath),
+      }));
+      const { ctx } = hostKeyContext();
+      const plugin = await createPlugin(ctx);
+      await plugin.handlers.index_scan();
+      let done: any;
+      await vi.waitFor(() => {
+        done = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([, event]: [string, string]) => event === "local_indexer.reconcile_healed",
+        );
+        expect(done).toBeTruthy();
+      }, { timeout: 3000 });
+      const called = reindexMock.mock.calls.map((c) => c[0] as string);
+      await plugin.stop();
+      return { called, done: done[2] };
+    }
+
+    it("heal stops after 3 failures in a row, and puts documents that keep failing at the back", async () => {
+      const paths = Array.from({ length: 10 }, (_, i) => `/tmp/heal-${i}.md`);
+      const alwaysFails = new Set(paths.slice(0, 3)); // e.g. over the provider's token limit
+      try {
+        const first = await healOnce(paths, (p) => alwaysFails.has(p));
+        expect(first.called).toEqual(paths.slice(0, 3));
+        expect(first.done).toMatchObject({ healed: 0, attempted: 3, stoppedEarly: true });
+        const ledger = JSON.parse(await readFile(join(hostRoot, "heal-attempts.json"), "utf-8"));
+        expect(ledger).toEqual(Object.fromEntries(paths.slice(0, 3).map((p) => [p, 1])));
+
+        // Next start: the documents that failed go last, so the rest heal.
+        const second = await healOnce(paths, (p) => alwaysFails.has(p));
+        expect(second.called.slice(0, 7)).toEqual(paths.slice(3));
+        expect(second.done).toMatchObject({ healed: 7, stoppedEarly: true });
+        const after = JSON.parse(await readFile(join(hostRoot, "heal-attempts.json"), "utf-8"));
+        expect(after).toEqual(Object.fromEntries(paths.slice(0, 3).map((p) => [p, 2])));
+      } finally {
+        reindexMock.mockReset();
+        reindexMock.mockImplementation(async (filePath: string) => ({
+          doc_id: `doc:${filePath}`, doc_name: filePath, doc_type: "md", chunk_count: 1, status: "indexed", embedded: true,
+        }));
+      }
+    });
+
+    it("documents without vectors wait for a key: no re-embed without one", async () => {
+      const { ctx } = makeContext(hostRoot, {}, {
+        pluginDataDir: hostRoot,
+        configValues: { apiKeySource: "plugin", embeddingProvider: "openai" },
+      });
+      ctx.hostApi.getSecret = vi.fn(() => null);
+      mockDocuments = [
+        { id: "e", doc_id: "e", doc_name: "e.md", doc_type: "md", type: "md",
+          path: "/tmp/embed-failed.md", status: "indexed", content_state: "embed_failed" },
+      ] as typeof mockDocuments;
+      const plugin = await createPlugin(ctx);
+      reindexMock.mockClear();
+      try { await plugin.handlers.index_scan(); } catch { /* expected: no key */ }
+      await vi.waitFor(() => expect(reconcileMock).toHaveBeenCalled(), { timeout: 3000 });
+      await vi.waitFor(() => {
+        const deferred = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([, event]: [string, string]) => event === "local_indexer.reconcile_heal_deferred",
+        );
+        expect(deferred?.[2]).toMatchObject({ drifted: 0, embedFailed: 1 });
+      });
+      expect(reindexMock).not.toHaveBeenCalled();
+    });
+
+    it("seeds the scan cache only from indexed rows, so a failed file is retried after a restart", async () => {
+      const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+      mockDocuments = [
+        { id: "a", doc_id: "a", doc_name: "a.md", doc_type: "md", type: "md", path: "/tmp/a.md",
+          status: "indexed", mtime_ms: 1_700_000_000_000 },
+        { id: "f", doc_id: "f", doc_name: "f.md", doc_type: "md", type: "md", path: "/tmp/failed.md",
+          status: "failed", mtime_ms: 1_700_000_000_000 },
+        { id: "p", doc_id: "p", doc_name: "p.md", doc_type: "md", type: "md", path: "/tmp/pending.md",
+          status: "pending", mtime_ms: 1_700_000_000_000 },
+      ] as typeof mockDocuments;
+      const plugin = await createPlugin(ctx);
+      await plugin.handlers.index_scan();
+      await vi.waitFor(() => expect(prePopulateCacheMock).toHaveBeenCalled(), { timeout: 3000 });
+      const seeded = (prePopulateCacheMock.mock.calls.at(-1)![0] as Array<{ path: string }>).map((d) => d.path);
+      expect(seeded).toEqual(["/tmp/a.md"]);
+      // Nor does the DB-to-state sync record the failed rows as indexed.
+      await vi.waitFor(async () => {
+        const state = JSON.parse(await readFile(join(hostRoot, "index-state.json"), "utf-8"));
+        expect(Object.keys(state.entries)).toEqual(["/tmp/a.md"]);
+      });
+      const fromState = [...(prePopulateCacheFromStateMock.mock.calls.at(-1)![0] as Map<string, unknown>).keys()];
+      expect(fromState.every((p) => p === "/tmp/a.md")).toBe(true);
+    });
+
     it("heal deferred when no embedding key — detect runs key-free, no reindex", async () => {
       const { ctx } = makeContext(hostRoot, {}, {
         pluginDataDir: hostRoot,
@@ -2575,7 +3407,7 @@ describe("hostPlugin createPlugin", () => {
       );
       // Detect ran (key-free), but heal is deferred — no reindex without a key.
       expect(reindexMock).not.toHaveBeenCalled();
-      const logged = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.some(
+      const logged = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.some(
         ([, event]: [string, string]) => event === "local_indexer.reconcile_heal_deferred",
       );
       expect(logged).toBe(true);

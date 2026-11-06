@@ -1,13 +1,6 @@
 import { defineAvePluginConfig } from "@ave/plugin-build";
 
-// Two build targets (mirrors the meeting plugin's pattern):
-//   1. Node host plugin (src/hostPlugin.ts + src/index.ts) — runs in the
-//      plugin's own confined child process.
-//   2. Browser UI bundle (src/ui/indexer-control.js) — loaded via
-//      `<script type="module">` from indexer-control.html inside the
-//      plugin webview. Bundled (not just copied) so its local imports
-//      (./prime-theme.js, the style modules) resolve into one file. With
-//      `platform: "browser"` the build helper externalises react/react-dom.
+// Self-contained Node server and MCP Apps view bundle.
 export default defineAvePluginConfig([
   {
     entry: ["src/index.ts", "src/hostPlugin.ts"],
@@ -18,8 +11,6 @@ export default defineAvePluginConfig([
     target: "node18",
   },
   {
-    // Entry-object form keeps the dist/ui/ path structure that
-    // indexer-control.html references via ./indexer-control.js.
     entry: {
       "ui/indexer-control": "src/ui/indexer-control.js",
     },

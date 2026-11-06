@@ -6,6 +6,3 @@
 #   uv pip install --python .venv -r python-requirements.lock -r python-test-requirements.txt
 #   uv run pytest test/
 pytest==9.1.1
-# FastAPI's TestClient (starlette.testclient) imports httpx. openai 3 no longer
-# installs it, and the worker itself uses httpx2, so it belongs here only.
-httpx==0.28.1

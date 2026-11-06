@@ -3,5 +3,6 @@ dist/
 .DS_Store
 *.log
 /.tmp/
-.cache/
+
+/.cache/
 /evidence/p5-meeting/

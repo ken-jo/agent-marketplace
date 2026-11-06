@@ -168,10 +168,10 @@ describe("indexer-control theme scoping", () => {
   });
 
   it("derives button hover states from host semantic tokens", () => {
-    expect(STYLES).toContain("--bg-muted: var(--ave-secondary");
-    expect(STYLES).toContain("--bg-hover: var(--ave-surface-hover, var(--bg-muted))");
+    expect(STYLES).toContain("--bg-muted: var(--color-background-tertiary");
+    expect(STYLES).toContain("--bg-hover: var(--color-background-tertiary, var(--bg-muted))");
     expect(STYLES).toMatch(/\.ave-local-indexer-ui\[data-shell="light"\]\s*\{/);
-    expect(STYLES).toContain("--bg-hover: var(--ave-secondary, var(--bg-muted));");
+    expect(STYLES).toContain("--bg-hover: var(--color-background-tertiary, var(--bg-muted));");
     expect(STYLES).toContain("--accent-hover: color-mix(in srgb, var(--accent-strong) 92%, var(--bg-card) 8%);");
     expect(STYLES).toContain("button:not(:disabled):hover { background: var(--accent-hover); }");
     expect(STYLES).toContain("button.primary-cta:hover");
@@ -179,8 +179,8 @@ describe("indexer-control theme scoping", () => {
   });
 
   it("uses warning semantics for pending folder badges", () => {
-    expect(STYLES).toContain(".folder-badge.needs_scan { background: var(--ave-warning-bg-subtle); color: var(--warning); }");
-    expect(STYLES).toContain(".folder-badge.images_disabled { background: var(--ave-warning-bg-subtle); color: var(--warning); }");
+    expect(STYLES).toContain(".folder-badge.needs_scan { background: var(--color-background-warning); color: var(--warning); }");
+    expect(STYLES).toContain(".folder-badge.images_disabled { background: var(--color-background-warning); color: var(--warning); }");
     expect(STYLES).not.toContain("--li-accent-bg");
     expect(STYLES).not.toContain("--li-success-bg");
     expect(STYLES).not.toContain("--li-warning-bg");

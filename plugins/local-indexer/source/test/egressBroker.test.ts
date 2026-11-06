@@ -1,22 +1,26 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { ApiKeyLease } from "@ave/plugin-contract";
 import {
-  EGRESS_TOKEN_HEADER,
+  CAPTION_IMAGE_BYTES_MAX,
+  CAPTION_REQUEST_BYTES_MAX,
+  EGRESS_CAPTION_METHOD,
+  EGRESS_EMBEDDING_METHOD,
   EgressBroker,
   EgressLeaseDenied,
-  egressBrokerTransportFor,
-  egressBrokerWorkerArgs,
-  type EgressBrokerInfo,
+  WORKER_FRAME_BYTES_MAX,
   type EgressChannel,
   type EgressChannelResolution,
+  type EgressRelayAnswer,
   type EgressUpstreamFetch,
 } from "../src/egressBroker.js";
-import type { ApiKeyLease } from "@ave/plugin-contract";
 
-// ── Test harness ─────────────────────────────────────────────────────────
-// Each test starts a REAL loopback broker and a stub upstream transport so the
-// security logic (token auth, channel routing, allow-list, auth-scheme rewrite,
-// host-resolved upstream) is exercised end-to-end without any network. Every
-// invariant test is written to FAIL if the invariant were violated.
+// The broker answers the worker's egress requests (worker stdio control v1,
+// worker → plugin). Each test drives `handleWorkerRequest` the way the host
+// relays a worker request, with a stub upstream, so every invariant fails if
+// it were violated: the worker never sees a key, never names a host, and every
+// refusal is an HTTP-shaped answer.
 
 const REAL_HOST_KEY = "sk-REAL-HOST-CHAT-KEY-do-not-leak";
 const REAL_AZURE_KEY = "AZURE-REAL-KEY-do-not-leak";
@@ -26,160 +30,138 @@ interface Captured {
   method: string;
   headers: Record<string, string>;
   body: Buffer | undefined;
+  lease?: ApiKeyLease;
 }
 
-function makeUpstreamStub(): { fetch: EgressUpstreamFetch; calls: Captured[]; body: () => Buffer } {
+function makeUpstreamStub(responseBody = JSON.stringify({ data: [{ embedding: [0.1, 0.2] }] })): {
+  fetch: EgressUpstreamFetch;
+  calls: Captured[];
+} {
   const calls: Captured[] = [];
-  let responseBody = Buffer.from(JSON.stringify({ data: [{ embedding: [0.1, 0.2] }] }));
   const fetch: EgressUpstreamFetch = async (url, init) => {
-    calls.push({ url, method: init.method, headers: init.headers, body: init.body });
-    return {
-      status: 200,
-      headers: { "content-type": "application/json" },
-      body: responseBody,
-    };
+    calls.push({ url, method: init.method, headers: init.headers, body: init.body, lease: init.lease });
+    return { status: 200, headers: { "content-type": "application/json", "content-length": "9" }, body: Buffer.from(responseBody) };
   };
-  return {
-    fetch,
-    calls,
-    body: () => responseBody,
-  };
+  return { fetch, calls };
 }
 
-const brokers: EgressBroker[] = [];
-async function startBroker(opts: {
-  embedding: EgressChannel;
-  caption: EgressChannel;
-  token?: string;
+function makeBroker(opts: {
+  embedding?: EgressChannel;
+  caption?: EgressChannel;
   isUpstreamAllowed?: (url: string) => boolean;
   upstreamFetch?: EgressUpstreamFetch;
-  logEvent?: (level: "info" | "warn" | "error", event: string, fields: Record<string, unknown>) => void;
-}): Promise<{ broker: EgressBroker; baseUrl: string; token: string }> {
-  const token = opts.token ?? "session-token-abc123";
-  const broker = new EgressBroker({
-    token,
-    channels: { embedding: opts.embedding, caption: opts.caption },
+  audit?: (level: "info" | "warn" | "error", event: string, fields: Record<string, unknown>) => void;
+  requestTimeoutMs?: number;
+}): EgressBroker {
+  return new EgressBroker({
+    channels: { embedding: opts.embedding ?? openaiChannel(), caption: opts.caption ?? openaiChannel() },
     isUpstreamAllowed: opts.isUpstreamAllowed ?? (() => true),
-    upstreamFetch: opts.upstreamFetch,
-    logEvent: opts.logEvent,
+    upstreamFetch: opts.upstreamFetch ?? makeUpstreamStub().fetch,
+    audit: opts.audit,
+    requestTimeoutMs: opts.requestTimeoutMs,
   });
-  brokers.push(broker);
-  const info = await broker.start();
-  return { broker, baseUrl: info.baseUrl, token };
 }
 
-afterEach(async () => {
-  while (brokers.length) {
-    const b = brokers.pop();
-    await b?.stop();
-  }
-});
-
-const openaiEmbedChannel = (apiKey = REAL_HOST_KEY): EgressChannel => async () => ({
+const openaiChannel = (apiKey = REAL_HOST_KEY): EgressChannel => async () => ({
   upstreamBaseUrl: "https://api.openai.com/v1",
   apiKey,
   authScheme: "bearer",
 });
 
-describe("EgressBroker — token authentication", () => {
-  it("relays when the correct egress token is presented", async () => {
-    const upstream = makeUpstreamStub();
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
-    });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token, "content-type": "application/json" },
-      body: JSON.stringify({ input: ["hi"] }),
-    });
-    expect(res.status).toBe(200);
-    expect(upstream.calls).toHaveLength(1);
-  });
+function ask(
+  broker: EgressBroker,
+  params: Record<string, unknown>,
+  method = EGRESS_EMBEDDING_METHOD,
+  signal = new AbortController().signal,
+): Promise<EgressRelayAnswer> {
+  return broker.handleWorkerRequest(method, params, signal);
+}
 
-  it("returns 403 and does NOT relay when the token is missing (blocks other local processes)", async () => {
-    const upstream = makeUpstreamStub();
-    const { baseUrl } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
-    });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      body: JSON.stringify({ input: ["hi"] }),
-    });
-    expect(res.status).toBe(403);
-    // Mutation guard: a broker that skipped auth would have relayed.
-    expect(upstream.calls).toHaveLength(0);
-  });
+const embeddingRequest = (extra: Record<string, unknown> = {}) => ({
+  method: "POST",
+  path: "/embeddings",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ input: ["hi"] }),
+  ...extra,
+});
 
-  it("returns 403 for a wrong token (rejects wrong-length and same-length tokens; impl uses timingSafeEqual)", async () => {
-    const upstream = makeUpstreamStub();
-    const { baseUrl } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      token: "the-real-session-token",
-      upstreamFetch: upstream.fetch,
-    });
-    for (const wrong of ["x", "the-real-session-toke", "the-real-session-tokenX", "totally-different"]) {
-      const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-        method: "POST",
-        headers: { [EGRESS_TOKEN_HEADER]: wrong },
-        body: "{}",
-      });
-      expect(res.status).toBe(403);
+describe("EgressBroker — worker requests it answers", () => {
+  it("answers exactly egress_embedding and egress_caption", () => {
+    expect(EgressBroker.handles(EGRESS_EMBEDDING_METHOD)).toBe(true);
+    expect(EgressBroker.handles(EGRESS_CAPTION_METHOD)).toBe(true);
+    expect(EgressBroker.handles("egress_reranker")).toBe(false);
+    for (const method of [EGRESS_EMBEDDING_METHOD, EGRESS_CAPTION_METHOD]) {
+      expect(method).toMatch(/^[a-zA-Z_][a-zA-Z0-9_]{0,127}$/);
     }
+    // The worker sends exactly these names.
+    const python = readFileSync(join(__dirname, "..", "worker", "stdio_egress.py"), "utf-8");
+    expect(python).toContain(`"embedding": "${EGRESS_EMBEDDING_METHOD}"`);
+    expect(python).toContain(`"caption": "${EGRESS_CAPTION_METHOD}"`);
+  });
+
+  it("refuses an unknown channel as a request error, without relaying", async () => {
+    const upstream = makeUpstreamStub();
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    await expect(ask(broker, embeddingRequest(), "egress_reranker")).rejects.toThrow(/unknown worker request/);
     expect(upstream.calls).toHaveLength(0);
+  });
+
+  it("refuses malformed params as a request error", async () => {
+    const broker = makeBroker({});
+    await expect(broker.handleWorkerRequest(EGRESS_EMBEDDING_METHOD, null, new AbortController().signal)).rejects.toThrow(/object/);
+    await expect(ask(broker, { method: "POST" })).rejects.toThrow(/path/);
+    await expect(ask(broker, embeddingRequest({ body: 42 }))).rejects.toThrow(/body/);
   });
 });
 
-describe("EgressBroker — host-resolved upstream + auth-scheme rewrite", () => {
-  it("strips worker-set auth and injects the real host key (the key never round-trips to the worker)", async () => {
+describe("EgressBroker — allowed requests", () => {
+  it("relays to the host-resolved upstream with the real key, and returns the body verbatim", async () => {
     const upstream = makeUpstreamStub();
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(REAL_HOST_KEY),
-      caption: openaiEmbedChannel(REAL_HOST_KEY),
-      upstreamFetch: upstream.fetch,
-    });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: {
-        [EGRESS_TOKEN_HEADER]: token,
-        // A compromised worker tries to smuggle its own auth + token onward.
-        authorization: "Bearer worker-forged-key",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ input: ["hi"] }),
-    });
-    expect(res.status).toBe(200);
-    const call = upstream.calls[0];
-    // Real host key injected, worker's forged auth dropped.
-    expect(call.headers.Authorization ?? call.headers.authorization).toBe(`Bearer ${REAL_HOST_KEY}`);
-    expect(JSON.stringify(call.headers)).not.toContain("worker-forged-key");
-    // Token header never forwarded upstream.
-    expect(Object.keys(call.headers).map((k) => k.toLowerCase())).not.toContain(EGRESS_TOKEN_HEADER);
-    // The real key is NEVER echoed back to the worker in the response body.
-    const body = await res.text();
-    expect(body).not.toContain(REAL_HOST_KEY);
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(200);
+    expect(JSON.parse(answer.body)).toEqual({ data: [{ embedding: [0.1, 0.2] }] });
+    expect(answer.bodyEncoding).toBeUndefined();
+    // Hop headers are dropped from the answer.
+    expect(answer.headers).toEqual({ "content-type": "application/json" });
+    expect(upstream.calls).toHaveLength(1);
+    const call = upstream.calls[0]!;
+    expect(call.url).toBe("https://api.openai.com/v1/embeddings");
+    expect(call.method).toBe("POST");
+    expect(call.headers.Authorization).toBe(`Bearer ${REAL_HOST_KEY}`);
+    expect(call.body?.toString()).toBe(JSON.stringify({ input: ["hi"] }));
+    // The key never travels back to the worker.
+    expect(JSON.stringify(answer)).not.toContain(REAL_HOST_KEY);
   });
 
-  it("resolves the upstream HOST host-side — the worker only controls the path remainder", async () => {
+  it("strips worker-set auth and drops every header off the allow-list", async () => {
     const upstream = makeUpstreamStub();
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    await ask(broker, embeddingRequest({
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        authorization: "Bearer worker-forged-key",
+        "api-key": "worker-forged-key",
+        "accept-encoding": "gzip",
+        "OpenAI-Organization": "org-evil",
+        "x-custom": "1",
+      },
+    }));
+    const headers = upstream.calls[0]!.headers;
+    expect(headers).toEqual({
+      "content-type": "application/json",
+      accept: "application/json",
+      Authorization: `Bearer ${REAL_HOST_KEY}`,
     });
-    // Worker addresses an arbitrary path; it cannot change the host.
-    await fetch(`${baseUrl}/egress/embedding/v1/embeddings?model=x`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token },
-      body: "{}",
-    });
-    const call = upstream.calls[0];
-    expect(new URL(call.url).host).toBe("api.openai.com");
-    expect(call.url).toBe("https://api.openai.com/v1/v1/embeddings?model=x");
+    expect(JSON.stringify(headers)).not.toContain("worker-forged-key");
+  });
+
+  it("joins the worker's path to the upstream base — the worker only controls the remainder", async () => {
+    const upstream = makeUpstreamStub();
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    await ask(broker, embeddingRequest({ path: "/v1/embeddings?model=x" }));
+    expect(upstream.calls[0]!.url).toBe("https://api.openai.com/v1/v1/embeddings?model=x");
   });
 
   it("injects the correct auth scheme per channel/provider (Bearer / api-key)", async () => {
@@ -190,106 +172,37 @@ describe("EgressBroker — host-resolved upstream + auth-scheme rewrite", () => 
     for (const c of cases) {
       const upstream = makeUpstreamStub();
       const channel: EgressChannel = async () => ({
-        upstreamBaseUrl: "https://res.cognitiveservices.azure.com",
+        upstreamBaseUrl: "https://res.openai.azure.com",
         apiKey: c.key,
         authScheme: c.scheme,
       });
-      const { baseUrl, token } = await startBroker({
-        embedding: channel,
-        caption: channel,
-        upstreamFetch: upstream.fetch,
-      });
-      await fetch(`${baseUrl}/egress/caption/computervision/imageanalysis:analyze`, {
-        method: "POST",
-        headers: { [EGRESS_TOKEN_HEADER]: token },
-        body: "imgbytes",
-      });
-      const call = upstream.calls[0];
+      const broker = makeBroker({ caption: channel, upstreamFetch: upstream.fetch });
+      await ask(broker, embeddingRequest({ path: "/openai/deployments/vision/chat/completions?api-version=2024-08-01-preview" }), EGRESS_CAPTION_METHOD);
+      const call = upstream.calls[0]!;
+      expect(call.url).toBe("https://res.openai.azure.com/openai/deployments/vision/chat/completions?api-version=2024-08-01-preview");
       expect(call.headers[c.header]).toBe(c.value);
     }
   });
 
-  it("preserves the P0 plugin-own-key decision — the broker injects exactly the key the channel resolver returns", async () => {
-    // Custom untrusted endpoint ⇒ the host channel resolver returns the
-    // plugin-own key (NOT the host key). The broker must forward that verbatim.
+  it("injects exactly the key the channel resolver returns (the plugin-own key for a custom endpoint)", async () => {
     const PLUGIN_OWN_KEY = "plugin-own-user-key";
     const upstream = makeUpstreamStub();
-    const customChannel: EgressChannel = async () => ({
+    const custom: EgressChannel = async () => ({
       upstreamBaseUrl: "https://lmstudio.internal.example/v1",
       apiKey: PLUGIN_OWN_KEY,
       authScheme: "bearer",
     });
-    const { baseUrl, token } = await startBroker({
-      embedding: customChannel,
-      caption: customChannel,
+    const broker = makeBroker({
+      embedding: custom,
       isUpstreamAllowed: (url) => new URL(url).host === "lmstudio.internal.example",
       upstreamFetch: upstream.fetch,
     });
-    await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token },
-      body: "{}",
-    });
-    const call = upstream.calls[0];
-    expect(call.headers.Authorization).toBe(`Bearer ${PLUGIN_OWN_KEY}`);
-    expect(JSON.stringify(call.headers)).not.toContain(REAL_HOST_KEY);
-  });
-});
-
-describe("EgressBroker — allow-list gate", () => {
-  it("returns 403 and does NOT relay when the resolved upstream is not allow-listed", async () => {
-    const upstream = makeUpstreamStub();
-    const evilChannel: EgressChannel = async () => ({
-      upstreamBaseUrl: "https://evil.attacker.example/v1",
-      apiKey: REAL_HOST_KEY,
-      authScheme: "bearer",
-    });
-    const logs: Array<[string, Record<string, unknown>]> = [];
-    const { baseUrl, token } = await startBroker({
-      embedding: evilChannel,
-      caption: evilChannel,
-      isUpstreamAllowed: (url) => {
-        const h = new URL(url).host;
-        return h === "api.openai.com" || h.endsWith(".openai.azure.com");
-      },
-      upstreamFetch: upstream.fetch,
-      logEvent: (_lvl, event, fields) => logs.push([event, fields]),
-    });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token },
-      body: "{}",
-    });
-    expect(res.status).toBe(403);
-    // Mutation guard: a broker without the gate would have made the call.
-    expect(upstream.calls).toHaveLength(0);
-    // The refusal is audited and never includes the key.
-    const refused = logs.find(([e]) => e === "local_indexer.egress_refused");
-    expect(refused).toBeDefined();
-    expect(JSON.stringify(logs)).not.toContain(REAL_HOST_KEY);
-    const body = await res.text();
-    expect(body).not.toContain(REAL_HOST_KEY);
+    await ask(broker, embeddingRequest());
+    expect(upstream.calls[0]!.headers.Authorization).toBe(`Bearer ${PLUGIN_OWN_KEY}`);
+    expect(JSON.stringify(upstream.calls[0]!.headers)).not.toContain(REAL_HOST_KEY);
   });
 
-  it("returns 404 for an unknown channel prefix", async () => {
-    const upstream = makeUpstreamStub();
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
-    });
-    const res = await fetch(`${baseUrl}/egress/reranker/x`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token },
-      body: "{}",
-    });
-    expect(res.status).toBe(404);
-    expect(upstream.calls).toHaveLength(0);
-  });
-});
-
-describe("EgressBroker — relay correctness + lifecycle", () => {
-  it("uses a fresh public lease per request and releases after the buffered relay", async () => {
+  it("uses a fresh lease per request, adds no auth header for it, and releases it after the relay", async () => {
     const release = vi.fn(async () => {});
     let nextId = 0;
     const channel: EgressChannel = async () => {
@@ -307,292 +220,219 @@ describe("EgressBroker — relay correctness + lifecycle", () => {
       seen.push(init.lease!.leaseId);
       return { status: 200, headers: {}, body: Buffer.from("ok") };
     };
-    const { baseUrl, token } = await startBroker({
-      embedding: channel, caption: channel, upstreamFetch,
-    });
+    const broker = makeBroker({ embedding: channel, upstreamFetch });
     for (let i = 0; i < 2; i++) {
-      const response = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-        method: "POST", headers: { [EGRESS_TOKEN_HEADER]: token }, body: "{}",
-      });
-      expect(response.status).toBe(200);
-      expect(await response.text()).toBe("ok");
-      await vi.waitFor(() => expect(release).toHaveBeenCalledTimes(i + 1));
+      const answer = await ask(broker, embeddingRequest());
+      expect(answer).toMatchObject({ status: 200, body: "ok" });
+      expect(release).toHaveBeenCalledTimes(i + 1);
     }
     expect(seen).toEqual(["lease-1", "lease-2"]);
   });
 
-  it("maps lease and effect denials to one terminal event without relay", async () => {
+  it("relays a 64-input batch and returns the upstream body", async () => {
+    let seenBody: Buffer | undefined;
+    const big = JSON.stringify({ data: Array.from({ length: 64 }, () => ({ embedding: [0.1, 0.2, 0.3] })) });
+    const broker = makeBroker({
+      upstreamFetch: async (_url, init) => {
+        seenBody = init.body;
+        return { status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(big) };
+      },
+    });
+    const batch = JSON.stringify({ input: Array.from({ length: 64 }, (_v, i) => `chunk-${i}`) });
+    const answer = await ask(broker, embeddingRequest({ body: batch }));
+    expect(seenBody?.toString()).toBe(batch);
+    expect((JSON.parse(answer.body) as { data: unknown[] }).data).toHaveLength(64);
+  });
+
+  it("carries a base64 request body and a non-UTF-8 answer body both ways", async () => {
+    const binary = Buffer.from([0xff, 0xfe, 0x00, 0x80]);
+    let seenBody: Buffer | undefined;
+    const broker = makeBroker({
+      upstreamFetch: async (_url, init) => {
+        seenBody = init.body;
+        return { status: 200, headers: {}, body: binary };
+      },
+    });
+    const answer = await ask(broker, embeddingRequest({ body: binary.toString("base64"), bodyEncoding: "base64" }));
+    expect(seenBody?.equals(binary)).toBe(true);
+    expect(answer.bodyEncoding).toBe("base64");
+    expect(Buffer.from(answer.body, "base64").equals(binary)).toBe(true);
+  });
+});
+
+describe("EgressBroker — refused requests answer as HTTP and never relay", () => {
+  it("refuses an upstream that is not allow-listed with 403, audited without the key", async () => {
+    const upstream = makeUpstreamStub();
+    const logs: Array<[string, Record<string, unknown>]> = [];
+    const broker = makeBroker({
+      embedding: async () => ({ upstreamBaseUrl: "https://evil.attacker.example/v1", apiKey: REAL_HOST_KEY, authScheme: "bearer" }),
+      isUpstreamAllowed: (url) => new URL(url).host === "api.openai.com",
+      upstreamFetch: upstream.fetch,
+      audit: (_lvl, event, fields) => logs.push([event, fields]),
+    });
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(403);
+    expect(upstream.calls).toHaveLength(0);
+    expect(logs.find(([e]) => e === "local_indexer.egress_refused")).toBeDefined();
+    expect(JSON.stringify(logs)).not.toContain(REAL_HOST_KEY);
+    expect(JSON.stringify(answer)).not.toContain(REAL_HOST_KEY);
+  });
+
+  it("refuses a path that could change the authority or is not absolute", async () => {
+    const upstream = makeUpstreamStub();
+    const broker = makeBroker({
+      embedding: async () => ({ upstreamBaseUrl: "https://api.openai.com", apiKey: REAL_HOST_KEY, authScheme: "bearer" }),
+      upstreamFetch: upstream.fetch,
+    });
+    for (const path of ["@evil.example/x", "//evil.example/x", "embeddings", "/a\\b", "/a b", "/x#frag", "/x@evil.example", ""]) {
+      const answer = await ask(broker, embeddingRequest({ path }));
+      expect(answer.status, path).toBe(400);
+    }
+    expect(upstream.calls).toHaveLength(0);
+  });
+
+  it("refuses methods other than GET and POST", async () => {
+    const upstream = makeUpstreamStub();
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    expect((await ask(broker, embeddingRequest({ method: "DELETE" }))).status).toBe(405);
+    expect(upstream.calls).toHaveLength(0);
+  });
+
+  it("maps lease and effect denials to one terminal 403 event", async () => {
     for (const reason of ["audience-not-allowlisted", "lease-unavailable", "effect-boundary-denied"]) {
-      const logEvent = vi.fn();
+      const audit = vi.fn();
       const upstreamFetch = vi.fn(async () => ({ status: 200, headers: {}, body: Buffer.alloc(0) }));
       const channel: EgressChannel = async () => { throw new EgressLeaseDenied(reason); };
-      const { baseUrl, token } = await startBroker({
-        embedding: channel, caption: channel, upstreamFetch, logEvent,
-      });
-      const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-        method: "POST", headers: { [EGRESS_TOKEN_HEADER]: token }, body: "{}",
-      });
-      expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: "egress-denied", reason, terminal: true });
+      const broker = makeBroker({ embedding: channel, upstreamFetch, audit });
+      const answer = await ask(broker, embeddingRequest());
+      expect(answer.status).toBe(403);
+      expect(JSON.parse(answer.body)).toEqual({ error: "egress-denied", reason, terminal: true });
       expect(upstreamFetch).not.toHaveBeenCalled();
-      expect(logEvent.mock.calls.filter(([, event]) => event === "indexer.egress.denied")).toHaveLength(1);
+      expect(audit.mock.calls.filter(([, event]) => event === "indexer.egress.denied")).toHaveLength(1);
     }
   });
 
   it("maps host rate limiting to 429 with Retry-After", async () => {
-    const channel: EgressChannel = async () => {
-      throw Object.assign(new Error("limited"), { code: "rate-limited", retryAfterMs: 2400 });
-    };
-    const { baseUrl, token } = await startBroker({ embedding: channel, caption: channel });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST", headers: { [EGRESS_TOKEN_HEADER]: token }, body: "{}",
+    const broker = makeBroker({
+      embedding: async () => {
+        throw Object.assign(new Error("limited"), { code: "rate-limited", retryAfterMs: 2400 });
+      },
     });
-    expect(res.status).toBe(429);
-    expect(res.headers.get("retry-after")).toBe("3");
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(429);
+    expect(answer.headers["retry-after"]).toBe("3");
   });
 
   it("releases a revoked lease and returns one terminal denial", async () => {
     const release = vi.fn(async () => {});
-    const lease: ApiKeyLease = {
-      exposure: "lease", leaseId: "revoked-lease", vendor: "openai",
-      release, onClosed: () => () => {},
-    };
-    const channel: EgressChannel = async () => ({
-      upstreamBaseUrl: "https://api.openai.com/v1", lease, authScheme: "bearer",
-    });
-    const logEvent = vi.fn();
+    const lease: ApiKeyLease = { exposure: "lease", leaseId: "revoked", vendor: "openai", release, onClosed: () => () => {} };
     const upstreamFetch = vi.fn(async () => {
       throw Object.assign(new Error("revoked"), { code: "lease-unavailable" });
     });
-    const { baseUrl, token } = await startBroker({ embedding: channel, caption: channel, upstreamFetch, logEvent });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST", headers: { [EGRESS_TOKEN_HEADER]: token }, body: "{}",
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "egress-denied", reason: "lease-unavailable", terminal: true });
-    expect(upstreamFetch).toHaveBeenCalledTimes(1);
-    expect(release).toHaveBeenCalledTimes(1);
-    expect(logEvent.mock.calls.filter(([, event]) => event === "indexer.egress.denied")).toHaveLength(1);
-  });
-
-  it("maps an aborted leased use to terminal 499 and releases it", async () => {
-    const release = vi.fn(async () => {});
-    const lease: ApiKeyLease = {
-      exposure: "lease", leaseId: "aborted-lease", vendor: "openai",
-      release, onClosed: () => () => {},
-    };
-    const channel: EgressChannel = async () => ({
-      upstreamBaseUrl: "https://api.openai.com/v1", lease, authScheme: "bearer",
-    });
-    const upstreamFetch = vi.fn(async () => {
-      throw Object.assign(new Error("aborted"), { name: "AbortError" });
-    });
-    const { baseUrl, token } = await startBroker({ embedding: channel, caption: channel, upstreamFetch });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST", headers: { [EGRESS_TOKEN_HEADER]: token }, body: "{}",
-    });
-    expect(res.status).toBe(499);
-    expect(await res.json()).toEqual({ error: "egress-denied", reason: "cancelled", terminal: true });
-    expect(release).toHaveBeenCalledTimes(1);
-  });
-  it("relays a large (64-batch) request body and returns the upstream body verbatim", async () => {
-    let seenBody: Buffer | undefined;
-    const bigResponse = Buffer.from(JSON.stringify({ data: Array.from({ length: 64 }, () => ({ embedding: [0.1, 0.2, 0.3] })) }));
-    const upstreamFetch: EgressUpstreamFetch = async (_url, init) => {
-      seenBody = init.body;
-      return { status: 200, headers: { "content-type": "application/json" }, body: bigResponse };
-    };
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
+    const broker = makeBroker({
+      embedding: async () => ({ upstreamBaseUrl: "https://api.openai.com/v1", lease, authScheme: "bearer" }),
       upstreamFetch,
     });
-    const batch = JSON.stringify({ input: Array.from({ length: 64 }, (_v, i) => `chunk-${i}`) });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token, "content-type": "application/json" },
-      body: batch,
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(403);
+    expect(JSON.parse(answer.body)).toEqual({ error: "egress-denied", reason: "lease-unavailable", terminal: true });
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 499 when the worker withdraws the request, and releases the lease", async () => {
+    const release = vi.fn(async () => {});
+    const lease: ApiKeyLease = { exposure: "lease", leaseId: "cancelled", vendor: "openai", release, onClosed: () => () => {} };
+    const workerCancel = new AbortController();
+    const broker = makeBroker({
+      embedding: async () => ({ upstreamBaseUrl: "https://api.openai.com/v1", lease, authScheme: "bearer" }),
+      upstreamFetch: (_url, init) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+      }),
     });
-    expect(res.status).toBe(200);
-    expect(seenBody?.toString()).toBe(batch);
-    const parsed = (await res.json()) as { data: unknown[] };
-    expect(parsed.data).toHaveLength(64);
+    const pending = ask(broker, embeddingRequest(), EGRESS_EMBEDDING_METHOD, workerCancel.signal);
+    await new Promise((r) => setTimeout(r, 5));
+    workerCancel.abort();
+    const answer = await pending;
+    expect(answer.status).toBe(499);
+    expect(JSON.parse(answer.body)).toEqual({ error: "egress-denied", reason: "cancelled", terminal: true });
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out a stuck upstream with 499 timeout", async () => {
+    const broker = makeBroker({
+      requestTimeoutMs: 10,
+      upstreamFetch: (_url, init) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+      }),
+    });
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(499);
+    expect(JSON.parse(answer.body).reason).toBe("timeout");
   });
 
   it("maps a transport failure to 502 for bounded worker retry", async () => {
-    const upstreamFetch: EgressUpstreamFetch = async () => {
-      throw new Error("ECONNREFUSED");
-    };
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch,
-    });
-    const res = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token },
-      body: "{}",
-    });
-    expect(res.status).toBe(502);
-    const body = await res.text();
-    expect(body).not.toContain(REAL_HOST_KEY);
+    const broker = makeBroker({ upstreamFetch: async () => { throw new Error("ECONNREFUSED"); } });
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(502);
+    expect(answer.body).not.toContain(REAL_HOST_KEY);
   });
 
-  it("is listening when start() resolves and refuses connections after stop()", async () => {
-    const upstream = makeUpstreamStub();
-    const { broker, baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
-    });
-    // Listening immediately after start().
-    const ok = await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: { [EGRESS_TOKEN_HEADER]: token },
-      body: "{}",
-    });
-    expect(ok.status).toBe(200);
-    await broker.stop();
-    expect(broker.info).toBeNull();
-    // After stop the port is closed.
-    await expect(
-      fetch(`${baseUrl}/egress/embedding/embeddings`, {
-        method: "POST",
-        headers: { [EGRESS_TOKEN_HEADER]: token },
-        body: "{}",
-      }),
-    ).rejects.toThrow();
+  it("refuses an upstream answer that could not fit one worker frame", async () => {
+    const huge = Buffer.alloc(WORKER_FRAME_BYTES_MAX, 0x61);
+    const broker = makeBroker({ upstreamFetch: async () => ({ status: 200, headers: {}, body: huge }) });
+    const answer = await ask(broker, embeddingRequest());
+    expect(answer.status).toBe(502);
+    expect(answer.body).toMatch(/too large/);
   });
 
-  it("rejects construction without a token", () => {
-    expect(
-      () =>
-        new EgressBroker({
-          token: "",
-          channels: { embedding: openaiEmbedChannel(), caption: openaiEmbedChannel() },
-          isUpstreamAllowed: () => true,
-        }),
-    ).toThrow();
+  it("requires the host-mediated upstream transport", () => {
+    expect(() => new EgressBroker({
+      channels: { embedding: openaiChannel(), caption: openaiChannel() },
+      isUpstreamAllowed: () => true,
+      upstreamFetch: undefined as unknown as EgressUpstreamFetch,
+    })).toThrow(/upstreamFetch/);
   });
 });
 
-describe("EgressBroker — header allow-list (FIX 1 + FIX 3)", () => {
-  it("strips accept-encoding from the forwarded request so the upstream never returns gzip", async () => {
-    // FIX 1: without stripping accept-encoding the upstream (api.openai.com)
-    // returns a gzip body; the broker strips content-encoding from the response
-    // so the worker gets compressed bytes with NO encoding header → JSON decode
-    // failure → ALL brokered embedding/caption egress silently degrades to BM25.
-    // Assert: accept-encoding is absent from the headers the broker forwards.
+describe("EgressBroker — caption relay cap", () => {
+  it("is 11 MiB of raw image, and the largest request still fits one frame", () => {
+    expect(CAPTION_IMAGE_BYTES_MAX).toBe(11 * 1024 * 1024);
+    // The worker enforces the same number on its side.
+    const python = readFileSync(join(__dirname, "..", "worker", "stdio_egress.py"), "utf-8");
+    expect(python).toMatch(/^CAPTION_IMAGE_BYTES_MAX = 11 \* 1024 \* 1024$/m);
+    expect(CAPTION_REQUEST_BYTES_MAX).toBeLessThan(WORKER_FRAME_BYTES_MAX);
+  });
+
+  it("relays a caption request at the cap", async () => {
     const upstream = makeUpstreamStub();
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
-    });
-    await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: {
-        [EGRESS_TOKEN_HEADER]: token,
-        "content-type": "application/json",
-        "accept-encoding": "gzip, deflate, br", // worker (or openai SDK) may set this
-      },
-      body: JSON.stringify({ input: ["hi"] }),
-    });
-    const call = upstream.calls[0];
-    const forwardedKeys = Object.keys(call.headers).map((k) => k.toLowerCase());
-    expect(forwardedKeys).not.toContain("accept-encoding");
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    const body = "x".repeat(CAPTION_REQUEST_BYTES_MAX);
+    const answer = await ask(broker, embeddingRequest({ path: "/responses", body }), EGRESS_CAPTION_METHOD);
+    expect(answer.status).toBe(200);
+    expect(upstream.calls).toHaveLength(1);
   });
 
-  it("drops arbitrary worker-injected headers not on the allow-list", async () => {
-    // FIX 3: a compromised worker must not be able to inject arbitrary headers
-    // (OpenAI-Organization, x-custom-attack-header, etc.) onto the upstream.
+  it("refuses a larger caption request with a visible 413, without resolving a credential", async () => {
     const upstream = makeUpstreamStub();
-    const { baseUrl, token } = await startBroker({
-      embedding: openaiEmbedChannel(),
-      caption: openaiEmbedChannel(),
-      upstreamFetch: upstream.fetch,
-    });
-    await fetch(`${baseUrl}/egress/embedding/embeddings`, {
-      method: "POST",
-      headers: {
-        [EGRESS_TOKEN_HEADER]: token,
-        "content-type": "application/json",
-        "openai-organization": "worker-injected-org-id",
-        "x-custom-attack": "malicious-value",
-        "user-agent": "worker-custom-agent",
-      },
-      body: "{}",
-    });
-    const call = upstream.calls[0];
-    const forwardedKeys = Object.keys(call.headers).map((k) => k.toLowerCase());
-    // Allow-listed headers pass through.
-    expect(forwardedKeys).toContain("content-type");
-    // Non-allow-listed headers are dropped.
-    expect(forwardedKeys).not.toContain("openai-organization");
-    expect(forwardedKeys).not.toContain("x-custom-attack");
-    expect(forwardedKeys).not.toContain("user-agent");
-  });
-});
-
-// ── Transport selection ──────────────────────────────────────────────────
-// The chooser is a pure function precisely so the platform it decides for does
-// not have to be the platform the test runs on.
-describe("egressBrokerTransportFor", () => {
-  it("binds loopback TCP on win32, where listen(path) makes a named pipe rather than a Unix socket", () => {
-    expect(egressBrokerTransportFor("win32", "/irrelevant/sockets")).toEqual({
-      kind: "tcp",
-      host: "127.0.0.1",
-      port: 0,
-    });
+    const caption = vi.fn(openaiChannel());
+    const audit = vi.fn();
+    const broker = makeBroker({ caption, upstreamFetch: upstream.fetch, audit });
+    const body = "x".repeat(CAPTION_REQUEST_BYTES_MAX + 1);
+    const answer = await ask(broker, embeddingRequest({ path: "/responses", body }), EGRESS_CAPTION_METHOD);
+    expect(answer.status).toBe(413);
+    expect(JSON.parse(answer.body)).toEqual({ error: "caption image exceeds the 11 MiB relay cap" });
+    expect(caption).not.toHaveBeenCalled();
+    expect(upstream.calls).toHaveLength(0);
+    expect(audit).toHaveBeenCalledWith("warn", "local_indexer.egress_refused", expect.objectContaining({
+      channel: "caption",
+      reason: "caption image over the relay cap",
+    }));
   });
 
-  it("needs no socket directory on win32 (nothing is bound in one there)", () => {
-    expect(egressBrokerTransportFor("win32", undefined)).toEqual({
-      kind: "tcp",
-      host: "127.0.0.1",
-      port: 0,
-    });
-  });
-
-  it("binds a Unix socket in the host-registered directory on darwin and linux", () => {
-    for (const platform of ["darwin", "linux"] as const) {
-      expect(egressBrokerTransportFor(platform, "/plugins/local-indexer/sockets")).toEqual({
-        kind: "uds",
-        socketPath: "/plugins/local-indexer/sockets/egress.sock",
-      });
-    }
-  });
-
-  it("returns null where a Unix socket is required and no directory was supplied", () => {
-    expect(egressBrokerTransportFor("darwin", undefined)).toBeNull();
-    expect(egressBrokerTransportFor("linux", "")).toBeNull();
-  });
-});
-
-describe("egressBrokerWorkerArgs", () => {
-  it("names the real bound address and no socket on TCP", () => {
-    const info: EgressBrokerInfo = {
-      baseUrl: "http://127.0.0.1:51823",
-      transport: { kind: "tcp", host: "127.0.0.1", port: 51823 },
-      socketPath: null,
-    };
-    expect(egressBrokerWorkerArgs(info)).toEqual([
-      "--egress-broker-url",
-      "http://127.0.0.1:51823",
-    ]);
-  });
-
-  it("names the socket alongside the dummy authority on UDS", () => {
-    const info: EgressBrokerInfo = {
-      baseUrl: "http://localhost",
-      transport: { kind: "uds", socketPath: "/sockets/egress.sock" },
-      socketPath: "/sockets/egress.sock",
-    };
-    expect(egressBrokerWorkerArgs(info)).toEqual([
-      "--egress-broker-url",
-      "http://localhost",
-      "--egress-broker-uds",
-      "/sockets/egress.sock",
-    ]);
+  it("does not apply the caption cap to embeddings", async () => {
+    const upstream = makeUpstreamStub();
+    const broker = makeBroker({ upstreamFetch: upstream.fetch });
+    const answer = await ask(broker, embeddingRequest({ body: "x".repeat(CAPTION_REQUEST_BYTES_MAX + 1) }));
+    expect(answer.status).toBe(200);
   });
 });

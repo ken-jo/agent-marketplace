@@ -19,6 +19,6 @@ describe("hello-world", () => {
 
   it("declares the entries the build writes", () => {
     expect(manifest.entry).toBe("dist/hostPlugin.js");
-    expect(manifest.ui?.map((ui) => ui.entry)).toEqual(["dist/ui/hello-control.js"]);
+    expect(manifest.ui?.map((ui) => ui.resourceUri)).toEqual(["ui://hello-world/control"]);
   });
 });

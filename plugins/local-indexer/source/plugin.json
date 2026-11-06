@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "local-indexer",
-  "version": "0.7.2",
-  "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 익스텐션 데이터 디렉터리의 index/",
+  "version": "0.8.0",
+  "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 색인 워커 전용 상태 디렉터리(또는 사용자가 지정한 인덱스 저장 경로)",
   "extensions": {
     "ai.agent-connector.ave": {
       "displayName": "Ave Local Indexer",
@@ -109,7 +109,7 @@
                 "app"
               ]
             },
-            "ave/pathFields": [
+            "ai.agent-connector.ave/pathFields": [
               "folder",
               "paths"
             ]
@@ -159,7 +159,7 @@
                 "app"
               ]
             },
-            "ave/pathFields": [
+            "ai.agent-connector.ave/pathFields": [
               "folder",
               "folders"
             ]
@@ -348,9 +348,12 @@
                 "app"
               ]
             },
-            "ave/pathFields": [
+            "ai.agent-connector.ave/pathFields": [
               "folder"
             ]
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -392,6 +395,38 @@
               ]
             }
           }
+        },
+        {
+          "name": "index_wait_changes",
+          "description": "Wait for local index changes after a cursor; reset requires reloading snapshots.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "cursor": {
+                "type": "string"
+              },
+              "waitMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "cursor",
+              "waitMs"
+            ],
+            "additionalProperties": false
+          },
+          "_meta": {
+            "ui": {
+              "visibility": [
+                "app"
+              ]
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
         }
       ],
       "capabilities": [
@@ -402,11 +437,6 @@
         "lifecycle-observer"
       ],
       "startupTimeoutMs": 30000,
-      "eventSubscriptions": [
-        {
-          "type": "host.theme.changed"
-        }
-      ],
       "alerts": {
         "reasoning": "Index scans and registered folder changes can be useful in the alert summary when the user opts in.",
         "suggestions": [
@@ -453,12 +483,11 @@
         {
           "id": "local-indexer-control",
           "slot": "sidebar",
-          "kind": "embedded-module",
+          "kind": "mcp-app",
           "displayName": "로컬 인덱서",
           "title": "Local Indexer",
           "description": "Local Indexer 문서 스캔/목록 확인과 채팅창 질문 전송을 제공합니다.",
-          "entry": "dist/ui/indexer-control.js",
-          "exportName": "mount"
+          "resourceUri": "ui://local-indexer/control"
         }
       ],
       "configSchema": {
@@ -590,18 +619,10 @@
             "default": 2000,
             "minimum": 1
           },
-          "workerPort": {
-            "type": "integer",
-            "title": "워커 포트",
-            "description": "색인 워커가 127.0.0.1 에서 listen 할 TCP 포트. 기본값 43129. 같은 PC 에서 Ave 를 두 개 이상 실행하면 두 번째 인스턴스는 이 포트를 잡지 못해 로컬 색인이 아예 켜지지 않으므로, 그런 경우 인스턴스마다 다른 값을 지정하십시오. 다른 프로그램이 43129 를 쓰고 있을 때도 마찬가지입니다.",
-            "default": 43129,
-            "minimum": 1024,
-            "maximum": 65535
-          },
           "indexStorageRoot": {
             "type": "string",
             "title": "인덱스 저장 경로",
-            "description": "승인된 경로 안의 인덱스 저장 디렉터리. 비워 두면 익스텐션 기본 경로를 사용합니다.",
+            "description": "승인된 경로 안의 인덱스 저장 디렉터리. 비워 두면 호스트가 색인 워커에게만 만들어 주는 상태 디렉터리에 저장합니다. 0.8.0 이전의 기본 위치(익스텐션 데이터 디렉터리의 index/)에 있던 인덱스는 처음 시작할 때 전체 재인덱싱으로 다시 만들고, 재구축이 확인된 뒤에만 이전 디렉터리를 지웁니다.",
             "default": ""
           },
           "workspace": {
@@ -613,8 +634,8 @@
         }
       },
       "requires": {
-        "minAppVersion": "0.14.0",
-        "hostProtocol": "3"
+        "hostProtocol": "5",
+        "minAppVersion": "0.14.2"
       },
       "hostSecrets": {
         "read": [
@@ -631,15 +652,8 @@
           "127.0.0.1",
           "::1"
         ],
-        "reasoning": "워커의 임베딩/비전 캡셔닝 egress. 이 정적 allow-list는 디폴트 OpenAI/Azure 호스트(api.openai.com, *.openai.azure.com, *.cognitiveservices.azure.com — dot-boundary suffix-match)만 커버한다. host-mediated egress broker(P3 ⑬, src/egressBroker.ts) 도입 후, 워커는 provider 키를 보유하지 않고 broker(<base>/egress/embedding, <base>/egress/caption)로만 egress하며, 실제 provider 호출은 호스트-측 broker가 hostApi.hostFetch chokepoint를 통해 수행한다. 따라서 provider egress는 이 manifest networkAccess.allowedDomains, HTTPS-only, SSRF guard, effect-boundary audit를 모두 통과한다. 워커는 임의 host를 지정할 수 없고, suffix에 맞지 않는 사용자-설정 커스텀 OpenAI-호환 endpoint는 hostFetch 단계에서 hard-deny된다. 루프백 리터럴(localhost / 127.0.0.1 / ::1)은 embeddingProvider=\"openai\" 일 때 사용자가 embeddingEndpoint 설정에 직접 적어 넣는 로컬 추론 서버(LM Studio, LiteLLM, 사내 프록시)를 위한 선언이다. 이 선언이 없으면 해당 설정은 hostFetch에서 항상 거부되어 조작할 수 없는 설정이 된다. 호스트는 이 리터럴에 한해 http cleartext를 허용하되(바이트가 기기 밖으로 나가지 않으므로 https 규칙이 보호할 대상이 없다) 이름이 실제로 루프백으로만 resolve되는지 증명한 뒤에만 허용하며, 이 선언은 LAN(RFC1918)이나 다른 어떤 host도 열지 않는다."
+        "reasoning": "워커의 임베딩/비전 캡셔닝 egress. 이 정적 allow-list는 디폴트 OpenAI/Azure 호스트(api.openai.com, *.openai.azure.com, *.cognitiveservices.azure.com — dot-boundary suffix-match)만 커버한다. 워커는 provider 키도 네트워크도 갖지 않는다. 임베딩/캡션 요청은 worker stdio control 채널의 egress_embedding / egress_caption 요청으로 플러그인에 넘기고, 플러그인의 egress broker(src/egressBroker.ts)가 hostApi.hostFetch chokepoint를 통해 실제 provider 호출을 수행한다. 따라서 provider egress는 이 manifest networkAccess.allowedDomains, HTTPS-only, SSRF guard, effect-boundary audit를 모두 통과한다. 워커는 임의 host를 지정할 수 없고, suffix에 맞지 않는 사용자-설정 커스텀 OpenAI-호환 endpoint는 hostFetch 단계에서 hard-deny된다. 루프백 리터럴(localhost / 127.0.0.1 / ::1)은 embeddingProvider=\"openai\" 일 때 사용자가 embeddingEndpoint 설정에 직접 적어 넣는 로컬 추론 서버(LM Studio, LiteLLM, 사내 프록시)를 위한 선언이다. 이 선언이 없으면 해당 설정은 hostFetch에서 항상 거부되어 조작할 수 없는 설정이 된다. 호스트는 이 리터럴에 한해 http cleartext를 허용하되(바이트가 기기 밖으로 나가지 않으므로 https 규칙이 보호할 대상이 없다) 이름이 실제로 루프백으로만 resolve되는지 증명한 뒤에만 허용하며, 이 선언은 LAN(RFC1918)이나 다른 어떤 host도 열지 않는다."
       },
-      "emittedEvents": [
-        "index.document.updated",
-        "index.folders.changed",
-        "index.scan.progress",
-        "index.scan.completed",
-        "index.warning"
-      ],
       "sandbox": {
         "read": [
           {
@@ -661,7 +675,7 @@
           {
             "kind": "userChosenDirectory",
             "configKey": "indexStorageRoot",
-            "why": "where the local index is written"
+            "why": "a user-chosen index location; without one the index lives in the worker state directory the host creates"
           },
           {
             "kind": "userChosenDirectory",
@@ -669,7 +683,12 @@
             "why": "the workers scratch and state directory"
           }
         ]
-      }
+      },
+      "uiResources": [
+        {
+          "uri": "ui://local-indexer/control"
+        }
+      ]
     }
   }
 }

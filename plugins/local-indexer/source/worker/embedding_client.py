@@ -95,40 +95,6 @@ def _normalize_azure_endpoint_and_version(
 # ======================================================================
 # OpenAI / Azure OpenAI embedding client
 # ======================================================================
-def broker_http_client(egress_uds: Optional[str]) -> Optional[Any]:
-    """Build the HTTP client the provider SDKs must use to reach the broker.
-
-    On macOS and Linux the broker does not listen on loopback TCP. A plugin
-    loaded in a confined child cannot bind loopback there — on macOS the bind is
-    refused, and on Linux it succeeds into a network namespace this worker is not
-    in, which is worse, because the failure would then arrive at the first
-    request instead of at the bind. It binds a Unix-domain socket instead, and a
-    Unix socket is reached by PATH rather than by port. The SDKs still want a
-    URL, so the base URL stays ``http://localhost`` — an authority nothing dials.
-    THIS transport is what decides where the bytes go, so a caller that dropped
-    the socket path would send real requests to a real localhost port and fail in
-    a way that looks like the broker being down.
-
-    Returns ``None`` when no socket path was given: either there is no broker at
-    all, or the broker bound loopback TCP (Windows, where ``listen(path)`` makes
-    a named pipe rather than a Unix socket, and httpx2 cannot pin a transport to
-    a pipe anyway). Both are addressed by the base URL, which is the real bound
-    one there, so the SDK's own default client is correct.
-
-    The client is an ``httpx2`` one because that is the HTTP library openai 3
-    uses and installs; the older ``httpx`` is no longer in the shipped lock.
-    """
-    if not egress_uds:
-        return None
-    try:
-        import httpx2  # type: ignore  # egress-gate: allow — pins the SDK to a Unix socket, removing TCP reach rather than adding any
-    except Exception as exc:  # pragma: no cover - dep guard
-        raise RuntimeError(
-            f"httpx2 is required to reach the egress broker over a Unix socket: {exc}"
-        ) from exc
-    return httpx2.Client(transport=httpx2.HTTPTransport(uds=egress_uds))
-
-
 class OpenAIEmbeddingClient:
     """Thin wrapper around ``OpenAI``/``AzureOpenAI`` ``embeddings.create``.  # egress-gate: allow Tier A Python-worker embedding egress carve-out: doc mention only, the actual SDK egress below is grandfathered
 
@@ -152,27 +118,21 @@ class OpenAIEmbeddingClient:
         api_version: Optional[str] = None,
         use_azure: bool = False,
         client_factory: Optional[Callable[[], Any]] = None,
-        egress_broker_url: Optional[str] = None,
-        egress_broker_uds: Optional[str] = None,
-        egress_token: Optional[str] = None,
+        egress_relay: Optional[Any] = None,
     ) -> None:
-        # Host-mediated egress broker (P3 ⑬). When ``egress_broker_url`` is set
-        # the client never holds the provider key: it points its base_url at the
-        # broker, sends only an ``x-ave-egress-token`` header, and a dummy
-        # api_key (the broker discards it and injects the real provider auth
-        # host-side). The OPENAI_API_KEY env opt-in is GATED OFF in broker mode —
-        # falling back to a real env key would bypass the broker entirely.
-        self.egress_broker_url = egress_broker_url or None
-        self.egress_broker_uds = egress_broker_uds or None
-        self.egress_token = egress_token or None
-        if self.egress_broker_url:
-            self.api_key = "ave-egress-broker"  # dummy; broker injects real auth
+        # Plugin-mediated egress. With ``egress_relay`` set the client never
+        # holds the provider key: every SDK request is relayed to the plugin
+        # over the worker control channel (``worker/stdio_egress.py``), and the
+        # plugin resolves the real upstream and credential itself. The SDK's
+        # api_key is a dummy the relay never sends, and the OPENAI_API_KEY env
+        # opt-in is off, because a real env key would go around the plugin.
+        self.egress_relay = egress_relay
+        if self.egress_relay is not None:
+            self.api_key = "ave-plugin-egress"  # dummy; the plugin supplies real auth
         else:
-            # Legacy (no-broker) path: the embedding key is pushed into the
-            # worker at runtime via the control channel and reaches this client
-            # through the explicit ``api_key`` argument, never the process
-            # environment. The only env channel kept is the OPENAI_API_KEY dev
-            # opt-in (gated host-side by AVE_ALLOW_ENV_API_KEY=1).
+            # Direct path, used by the retrieval eval harness and tests only:
+            # the key arrives through the explicit ``api_key`` argument or the
+            # OPENAI_API_KEY dev opt-in. The worker itself always relays.
             self.api_key = (
                 api_key
                 or os.environ.get("OPENAI_API_KEY", "")
@@ -258,43 +218,39 @@ class OpenAIEmbeddingClient:
             self._client = self._client_factory()
             return self._client
 
-        # ── Broker mode (P3 ⑬) ────────────────────────────────────────────
-        # Point the SDK at the host's egress broker. The broker base URL already
-        # carries the channel path (``…/egress/embedding``); it is NOT normalized
-        # (the Azure path-construction appends ``/openai/deployments/…`` to it,
-        # and the broker forwards the remainder verbatim to the real upstream).
-        # The token rides a dedicated header so the SDK auth field stays a dummy.
-        if self.egress_broker_url:
-            default_headers = (
-                {"x-ave-egress-token": self.egress_token} if self.egress_token else {}
-            )
+        # ── Plugin-mediated egress ────────────────────────────────────────
+        # The SDK addresses EGRESS_BASE_URL, an authority nothing dials: the
+        # relay transport takes only the path the SDK builds (``/embeddings``,
+        # or ``/openai/deployments/<name>/embeddings`` for Azure) and the
+        # plugin joins it to the upstream it resolved. Retries stay with the
+        # tenacity loop below, so the SDK's own are off.
+        if self.egress_relay is not None:
+            from stdio_egress import EGRESS_BASE_URL  # type: ignore
+
+            http_client = self.egress_relay.http_client("embedding")
             if self.use_azure:
-                from openai import AzureOpenAI  # type: ignore  # egress-gate: allow — broker mode: SDK targets the host loopback egress broker (egress_broker_url), not the provider; real egress is host-side via the broker's allow-listed upstream
-                # api-version is non-secret config (only the resource host is
-                # withheld from the worker — the broker holds it). The broker
-                # base has a scheme+netloc so the parser is happy; we keep the
-                # un-normalized broker base as azure_endpoint so its channel path
-                # survives (the SDK appends /openai/deployments/… to it).
+                from openai import AzureOpenAI  # type: ignore  # egress-gate: allow — relayed: the http_client sends every request to the plugin, not the provider
+
+                # api-version is non-secret configuration; the Azure resource
+                # itself is known only to the plugin.
                 _, effective_version = _normalize_azure_endpoint_and_version(
-                    self.egress_broker_url,
+                    EGRESS_BASE_URL,
                     self.api_version,
                 )
-                self._client = AzureOpenAI(  # egress-gate: allow — broker mode: azure_endpoint is the host loopback broker, not the Azure resource
-                    azure_endpoint=self.egress_broker_url,
+                self._client = AzureOpenAI(  # egress-gate: allow — relayed through the plugin
+                    azure_endpoint=EGRESS_BASE_URL,
                     api_key=self.api_key,
                     api_version=effective_version,
-                    default_headers=default_headers,
-                    http_client=broker_http_client(self.egress_broker_uds),
+                    http_client=http_client,
                     max_retries=0,
                 )
                 return self._client
-            from openai import OpenAI  # type: ignore  # egress-gate: allow — broker mode: base_url is the host loopback egress broker, not the provider
+            from openai import OpenAI  # type: ignore  # egress-gate: allow — relayed through the plugin
 
-            self._client = OpenAI(  # egress-gate: allow — broker mode: base_url is the host loopback egress broker, not the provider
+            self._client = OpenAI(  # egress-gate: allow — relayed through the plugin
                 api_key=self.api_key,
-                base_url=self.egress_broker_url,
-                default_headers=default_headers,
-                http_client=broker_http_client(self.egress_broker_uds),
+                base_url=EGRESS_BASE_URL,
+                http_client=http_client,
                 max_retries=0,
             )
             return self._client
@@ -414,9 +370,7 @@ def create_embedding_client(
     batch_size: Optional[int] = None,
     target_rpm: int = DEFAULT_TARGET_RPM,
     client_factory: Optional[Callable[[], Any]] = None,
-    egress_broker_url: Optional[str] = None,
-    egress_broker_uds: Optional[str] = None,
-    egress_token: Optional[str] = None,
+    egress_relay: Optional[Any] = None,
 ) -> Any:
     """Factory: return an ``OpenAIEmbeddingClient`` for the chosen provider.
 
@@ -443,9 +397,7 @@ def create_embedding_client(
             api_version=api_version,
             use_azure=False,
             client_factory=client_factory,
-            egress_broker_url=egress_broker_url,
-            egress_broker_uds=egress_broker_uds,
-            egress_token=egress_token,
+            egress_relay=egress_relay,
         )
     if p == "azure":
         return OpenAIEmbeddingClient(
@@ -458,9 +410,7 @@ def create_embedding_client(
             api_version=api_version,
             use_azure=True,
             client_factory=client_factory,
-            egress_broker_url=egress_broker_url,
-            egress_broker_uds=egress_broker_uds,
-            egress_token=egress_token,
+            egress_relay=egress_relay,
         )
     raise ValueError(
         f"Unknown embedding provider: {provider!r} (expected 'openai' or 'azure')"
