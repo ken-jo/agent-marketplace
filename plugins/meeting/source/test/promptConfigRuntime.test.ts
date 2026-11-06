@@ -62,11 +62,11 @@ function makeContext(options?: {
       pluginDataDir: root,
       log: (_msg: string) => { /* no-op */ },
       hostApi: {
-        emitEvent: (_type: string, _data?: unknown) => { /* no-op */ },
-        onEvent: (_type: string, _handler: (data: unknown) => void) => { /* no-op */ },
+        observeChange: (_type: string, _data?: unknown) => { /* no-op */ },
+
         getSecret: (_key: string): string | null => null,
-        logEvent: vi.fn(),
-        onShutdown: (_h: () => void | Promise<void>) => { /* no-op */ },
+        diagnostic: vi.fn(),
+
         callLlm: options?.callLlm,
         config: {
           get: (key: string) => config[key],

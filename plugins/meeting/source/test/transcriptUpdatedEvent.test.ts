@@ -1,9 +1,10 @@
+import { ChangeStream } from "../src/changeStream.js";
 /**
  * §35 STT transcript.updated per-chunk event emission test.
  *
  * Verifies:
  *  - 3 audio chunks → 3 transcript-updated events (isFinal: false) from recorder
- *  - hostPlugin wires recorder events → hostApi.emitEvent("meeting.transcript.updated")
+ *  - hostPlugin wires recorder events → hostApi.observeChange("meeting.transcript.updated")
  *  - stop() emits one final transcript-updated with isFinal: true
  *  - newSegmentIndex increases monotonically across chunks
  */
@@ -100,59 +101,4 @@ describe("ElectronMeetingRecorder transcript-updated events", () => {
     }
   });
 
-  it("hostPlugin wires recorder transcript-updated → hostApi.emitEvent('meeting.transcript.updated')", async () => {
-    const pipeline = makePipeline();
-    const recorder = new ElectronMeetingRecorder(pipeline);
-
-    const emitted: Array<{ type: string; data: unknown }> = [];
-    const mockHostApi = {
-      emitEvent: vi.fn((type: string, data: unknown) => {
-        emitted.push({ type, data });
-      }),
-    };
-
-    // Wire like hostPlugin.ts does
-    recorder.on("transcript-updated", (payload) => {
-      const { sessionId, newSegmentIndex, newSegment, isFinal } = payload as TranscriptUpdatedPayload;
-      mockHostApi.emitEvent("meeting.transcript.updated", {
-        meetingId: sessionId,
-        newSegmentIndex,
-        newSegment,
-        isFinal,
-      });
-    });
-
-    recorder.start("sess-3");
-    await recorder.pushAudioChunk("sess-3", DUMMY_CHUNK);
-    await recorder.pushAudioChunk("sess-3", { ...DUMMY_CHUNK, startSec: 1, endSec: 2 });
-    await recorder.pushAudioChunk("sess-3", { ...DUMMY_CHUNK, startSec: 2, endSec: 3 });
-
-    const transcriptUpdatedEvents = emitted.filter((e) => e.type === "meeting.transcript.updated");
-    expect(transcriptUpdatedEvents.length).toBe(3);
-
-    for (const ev of transcriptUpdatedEvents) {
-      const d = ev.data as { meetingId: string; newSegmentIndex: number; newSegment: unknown; isFinal: boolean };
-      expect(d.meetingId).toBe("sess-3");
-      expect(typeof d.newSegmentIndex).toBe("number");
-      expect(d.newSegment).not.toBeNull();
-      expect(d.isFinal).toBe(false);
-    }
-  });
-});
-
-describe("plugin.json emittedEvents declaration regression", () => {
-  it("meeting.transcript.updated is declared in emittedEvents", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const __dirname = join(fileURLToPath(import.meta.url), "..");
-    const { flattenAgentPluginsManifest } = await import("@ave/plugin-contract");
-    const manifest = flattenAgentPluginsManifest(
-      JSON.parse(readFileSync(join(__dirname, "..", "plugin.json"), "utf8")),
-    ) as unknown as {
-      emittedEvents?: string[];
-    };
-    expect(manifest.emittedEvents).toBeDefined();
-    expect(manifest.emittedEvents).toContain("meeting.transcript.updated");
-  });
 });

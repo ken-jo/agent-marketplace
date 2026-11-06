@@ -6,6 +6,7 @@
  * - Summary 실패가 ingest를 차단하지 않도록 격리
  * - 세션 상태 변경 시 persistence 콜백 호출
  */
+import { diagnostic } from "../diagnostic.js";
 import type { AudioFileInput, MeetingContext, IngestResult, TranscriptSegment, FinalSummary, IntermediateSummary, SummaryLengthTier } from "../types.js";
 import type { SttProvider, SummaryProvider } from "../providers.js";
 import { withRetry } from "../utils/retry.js";
@@ -184,7 +185,7 @@ export class MeetingPipeline {
     this.onTranscriptUpdate = options.onTranscriptUpdate;
     this.sttRetryAttempts = options.sttRetryAttempts ?? 3;
     this.summaryRetryAttempts = options.summaryRetryAttempts ?? 2;
-    this.log = options.log ?? console.log.bind(console, "[meeting-pipeline]");
+    this.log = options.log ?? (() => diagnostic("info", "pipeline_status"));
   }
 
   startSession(sessionId: string, context?: MeetingContext): void {

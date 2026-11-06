@@ -318,12 +318,12 @@ describe("PrepStore — legacy briefings.json migration", () => {
     symlinkSync(targetFile, join(dir, "briefings.json"));
 
     const logCalls: Array<{ level: string; message: string }> = [];
-    const logEvent = (level: "info" | "warn" | "error", message: string) => {
+    const diagnostic = (level: "info" | "warn" | "error", message: string) => {
       logCalls.push({ level, message });
     };
 
     // Should not throw and not crash plugin init
-    const s = new PrepStore(dir, logEvent);
+    const s = new PrepStore(dir, diagnostic);
 
     // No rename performed
     expect(existsSync(join(dir, "preps.json"))).toBe(false);

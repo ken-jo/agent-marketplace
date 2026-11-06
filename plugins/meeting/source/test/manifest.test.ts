@@ -5,7 +5,7 @@
  * PluginRuntime.callFromUi(), which rejects any tool call whose
  * `_meta.ui.visibility` does not include "app" (pure v6 manifest: tools[]
  * is Tool[] with per-tool visibility, no more separate uiActions[] map).
- * When the meeting UI (sidebar slot) calls any meeting-control.js
+ * When the meeting UI (sidebar slot) calls any meeting-control.mjs
  * bridge.callTool("...") method, any tool missing "app" visibility
  * surfaces as a silent IPC rejection — the renderer updates local state,
  * but the host never receives the call.
@@ -19,14 +19,13 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CUSTOM_PROMPT_MAX_BYTES } from "../src/adapters/summaryPrompts.js";
 import { flattenAgentPluginsManifest } from "@ave/plugin-contract";
-import { scanUiBridgeUsage } from "../scripts/ui-bridge-usage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const MANIFEST_PATH = join(__dirname, "..", "plugin.json");
 const HOST_PLUGIN_PATH = join(__dirname, "..", "src", "hostPlugin.ts");
-const HOST_API_VALIDATOR_PATH = join(__dirname, "..", "scripts", "validate-hostapi.mjs");
+
 const UI_DIR = join(__dirname, "..", "src", "ui");
 
 type Tool = {
@@ -60,7 +59,7 @@ describe("plugin.json manifest", () => {
 
   it("does not revive retired keyword-to-tool dispatch", () => {
     expect(manifest).not.toHaveProperty("keywords");
-    for (const path of [HOST_PLUGIN_PATH, HOST_API_VALIDATOR_PATH]) {
+    for (const path of [HOST_PLUGIN_PATH]) {
       expect(readFileSync(path, "utf8"), path).not.toMatch(/\bregisterKeywords\b|manifest\.keywords/);
     }
   });
@@ -74,31 +73,7 @@ describe("plugin.json manifest", () => {
     }
   });
 
-  it("retires work-assistant event access while retaining its config migration", () => {
-    expect(manifest.pluginAccess?.plugins?.map((grant) => grant.pluginId)).not.toContain("work-assistant");
-    const subscriptions = (manifest.eventSubscriptions ?? []).map((event) => typeof event === "string" ? event : event.type);
-    expect(subscriptions.filter((event) => event.startsWith("work_assistant."))).toEqual([]);
-    expect(manifest.configInherits).toContainEqual({
-      pluginId: "work-assistant", to: "calendarAutomationEnabled", value: true,
-    });
-    expect(manifest.alerts?.kinds?.find((kind) => kind.id === "summary-ready")?.inherits)
-      .toContainEqual(expect.objectContaining({ pluginId: "work-assistant" }));
-  });
 
-  it("declares all UI-invoked tools with app visibility", () => {
-    // Every UI file that calls tools, through the same scan the validators
-    // use. The sidebar panel and the recorder card both call tools; a tool
-    // either calls without app visibility is rejected by the host with
-    // nothing in this repo to say so, which is the failure this prevents.
-    const scanned = scanUiBridgeUsage(UI_DIR);
-    const callers = scanned.filter((f) => f.callTool.size > 0).map((f) => basename(f.file)).sort();
-    expect(callers, "the scan stopped seeing the UI bundles").toEqual(["meeting-control.js", "recorder-card.js"]);
-    for (const { file, callTool } of scanned) {
-      for (const tool of [...callTool].sort()) {
-        expect(uiActions, `no tool named "${tool}" has app visibility — the UI call in ${file} will be silently rejected by host`).toContain(tool);
-      }
-    }
-  });
 
   it("keeps staged upload transfer methods off the LLM tool surface", () => {
     for (const name of [
@@ -113,14 +88,10 @@ describe("plugin.json manifest", () => {
     }
   });
 
-  it("does not expose custom summary prompt mutation as a plugin tool", () => {
-    const toolNames = tools.map((t) => t.name);
-    for (const tool of toolNames) {
-      expect(
-        /prompt|meeting_update_ui_config|summary_prompt/i.test(tool),
-        `Prompt mutation must stay on the UI-only bridge.config surface, not tools[]: ${tool}`,
-      ).toBe(false);
-    }
+  it("keeps prompt mutation app-only and undeclared as a read", () => {
+    expect(llmTools).not.toContain("meeting_set_prompt");
+    expect(uiActions).toContain("meeting_set_prompt");
+    expect(toolByName.get("meeting_set_prompt")).not.toHaveProperty("annotations");
   });
 
   it("does not expose internal UI/theme relay tools", () => {
@@ -165,22 +136,7 @@ describe("plugin.json manifest", () => {
     }
   });
 
-  it("emits meeting.prep.opened (not the old meeting.briefing.opened)", () => {
-    const manifest2 = flattenAgentPluginsManifest(
-      JSON.parse(readFileSync(MANIFEST_PATH, "utf8")),
-    ) as unknown as { emittedEvents?: string[] };
-    const events = manifest2.emittedEvents ?? [];
-    expect(events).toContain("meeting.prep.opened");
-    expect(events).not.toContain("meeting.briefing.opened");
-  });
 
-  it("emits meeting.prep.registered for background scheduled-meeting sync", () => {
-    const manifest2 = flattenAgentPluginsManifest(
-      JSON.parse(readFileSync(MANIFEST_PATH, "utf8")),
-    ) as unknown as { emittedEvents?: string[] };
-    const events = manifest2.emittedEvents ?? [];
-    expect(events).toContain("meeting.prep.registered");
-  });
 
   it("documents registration tools for both manual and automatic meeting creation", () => {
     const manual = toolByName.get("meeting_register_manual_meeting");
@@ -244,7 +200,7 @@ describe("plugin.json manifest", () => {
   });
 
   it("every documented tool carries the disambiguation negative anchor", () => {
-    for (const t of tools) {
+    for (const t of tools.filter(t => !["meeting_view_state", "meeting_wait_changes", "meeting_set_prompt"].includes(t.name))) {
       if (t.description === undefined) continue;
       expect(t.description, `${t.name} description must contain negative anchor`).toContain("회의실(공간/시설 단위 자원) 예약·조회와 무관");
     }

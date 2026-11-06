@@ -19,11 +19,11 @@ function makeContext() {
       pluginDataDir: root,
       log: (_msg: string) => { /* noop */ },
       hostApi: {
-        emitEvent: () => { /* noop */ },
-        onEvent: () => { /* noop */ },
+        observeChange: () => { /* noop */ },
+
         getSecret: () => null,
-        logEvent: () => { /* noop */ },
-        onShutdown: () => { /* noop */ },
+        diagnostic: () => { /* noop */ },
+
         config: {
           get: () => undefined,
           onChange: () => () => { /* noop */ },
