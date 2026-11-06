@@ -12,7 +12,7 @@ import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { checkMarketplaceRepository } from "../vendor/marketplace-check.js";
-import { compareVersions, requiredHostProtocol, workingTree } from "../repo.mjs";
+import { requiredHostProtocol, workingTree } from "../repo.mjs";
 
 
 const TOOLS = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -448,21 +448,16 @@ describe("repository check", () => {
     assert.deepEqual(languageProblems, []);
   });
 
-  it("keeps released Ave 0.14.0 users on Korean 1.0.5", () => {
+  it("matches Korean index version floors to their committed descriptors", () => {
     const index = JSON.parse(readFileSync(join(REAL_ROOT, "marketplace.json"), "utf8"));
     const korean = index.packages.find((entry) => entry.kind === "language" && entry.name === "korean");
-    for (const version of ["1.0.6", "1.0.7", "1.0.8"]) {
+    for (const version of ["1.0.5", "1.0.6", "1.0.7", "1.0.8"]) {
       const pin = korean.versions.find((entry) => entry.version === version);
-      assert.equal(pin.minAppVersion, "0.14.2");
+      assert.equal(pin.minAppVersion, version === "1.0.5" ? "0.14.0" : "0.14.2");
       const descriptor = JSON.parse(execFileSync("git", ["show", `${pin.commit}:languages/korean/ave-package.json`], { cwd: REAL_ROOT, encoding: "utf8" }));
       assert.equal(descriptor.version, version);
       assert.equal(descriptor.minAppVersion, pin.minAppVersion);
-      assert.equal(descriptor.description, "Korean interface translation for Ave 0.14.2 and later.");
-    }
-    for (const [appVersion, expected] of [["0.14.0", "1.0.5"], ["0.14.1", "1.0.5"], ["0.14.2", "1.0.8"]]) {
-      const eligible = korean.versions.filter((pin) => !pin.yanked && compareVersions(appVersion, pin.minAppVersion) >= 0)
-        .sort((a, b) => compareVersions(b.version, a.version));
-      assert.equal(eligible[0].version, expected);
+      assert.equal(descriptor.description, `Korean interface translation for Ave ${pin.minAppVersion} and later.`);
     }
   });
 

@@ -324,7 +324,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
   return { LocalIndexerPlugin };
 });
 
-import createPlugin from "../src/hostPlugin.js";
+import createPlugin, { MAX_PREVIEW_ENTRIES } from "../src/hostPlugin.js";
 
 /**
  * The home the fixture TELLS the plugin about — which is no longer the real
@@ -2046,9 +2046,48 @@ describe("hostPlugin createPlugin", () => {
     const res = await plugin.handlers.index_preview_folder({ folder });
     expect(res.folder).toBe(folder);
     expect(res.total).toBe(3);
+    expect(res.truncated).toBe(false);
     expect(res.byType).toMatchObject({ pdf: 2, md: 1 });
     expect(Array.isArray(res.sample)).toBe(true);
     expect(res.sample.length).toBeGreaterThan(0);
+    expect(res.error).toBeUndefined();
+  });
+
+  it("index_preview_folder blocks other users' homes before filesystem access", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const target = process.platform === "win32"
+      ? join(hostRoot, "other-user", "documents")
+      : "/Users/another-user/documents";
+    const fs = await import("node:fs/promises");
+    const statSpy = vi.spyOn(fs, "stat");
+    const lstatSpy = vi.spyOn(fs, "lstat");
+    const openSpy = vi.spyOn(fs, "opendir");
+    const res = await plugin.handlers.index_preview_folder({ folder: target });
+    expect(res).toEqual({
+      folder: target, total: 0, byType: {}, sample: [],
+      error: `보안: 다른 사용자 홈 디렉터리는 인덱싱 폴더로 추가할 수 없습니다: ${target}`,
+    });
+    expect(statSpy).not.toHaveBeenCalledWith(target);
+    expect(lstatSpy).not.toHaveBeenCalledWith(target);
+    expect(openSpy).not.toHaveBeenCalledWith(target);
+  });
+
+  it.each([false, true])("index_preview_folder bounds nested traversal, including hidden entries (%s)", async (hidden) => {
+    const folder = join(hostRoot, "bounded-preview");
+    await mkdir(folder);
+    // Nest the files so the budget must be shared across recursive calls.
+    const nested = join(folder, "nested");
+    await mkdir(nested);
+    await Promise.all(Array.from({ length: MAX_PREVIEW_ENTRIES }, (_, i) =>
+      writeFile(join(nested, `${hidden ? "." : ""}file-${i}.md`), "# sample")));
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const res = await plugin.handlers.index_preview_folder({ folder });
+    expect(res.truncated).toBe(true);
+    expect(res.total).toBe(hidden ? 0 : MAX_PREVIEW_ENTRIES - 1);
+    expect(res.byType).toEqual(hidden ? {} : { md: MAX_PREVIEW_ENTRIES - 1 });
+    expect(res.sample).toHaveLength(hidden ? 0 : 5);
     expect(res.error).toBeUndefined();
   });
 

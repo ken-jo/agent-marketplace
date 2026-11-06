@@ -6,18 +6,18 @@
 // 삽입에만 한정 — 따옴표/꺾쇠가 들어간 파일명이 와도 DOM 구조가 깨지지
 // 않는다.
 
-// previews: [{ folder, total, byType, sample, error }] 구조의 배열.
+// previews: [{ folder, total, byType, sample, truncated, error }] 구조의 배열.
 // 사용자가 확정한 폴더 경로 배열을 resolve 한다 — 취소 시 빈 배열.
 export function showFolderPreviewModal({ scope, previews, icons }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "preview-overlay";
 
-    const checked = new Set(previews.filter((p) => p.total > 0 && !p.error).map((p) => p.folder));
+    const checked = new Set(previews.filter((p) => (p.total > 0 || p.truncated) && !p.error).map((p) => p.folder));
     const totalIndexable = previews.reduce((sum, p) => sum + (p.total || 0), 0);
 
     const buildRow = (preview, idx) => {
-      const isDisabled = preview.error || preview.total === 0;
+      const isDisabled = preview.error || (preview.total === 0 && !preview.truncated);
       const isChecked = checked.has(preview.folder);
 
       const label = document.createElement("label");
@@ -43,12 +43,15 @@ export function showFolderPreviewModal({ scope, previews, icons }) {
       if (preview.error) {
         metaEl.textContent = `오류: ${preview.error}`;
       } else if (preview.total === 0) {
-        metaEl.textContent = "인덱싱 가능 파일 없음";
+        metaEl.textContent = preview.truncated ? "확인된 인덱싱 가능 파일 0개" : "인덱싱 가능 파일 없음";
       } else {
         metaEl.textContent = Object.entries(preview.byType)
           .sort((a, b) => b[1] - a[1])
           .map(([ext, n]) => `${ext} ${n}`)
           .join(", ");
+      }
+      if (preview.truncated && !preview.error) {
+        metaEl.textContent += " · 일부만 집계됨 (미리보기 제한)";
       }
       body.appendChild(metaEl);
 
@@ -92,7 +95,7 @@ export function showFolderPreviewModal({ scope, previews, icons }) {
     head.appendChild(headIcon);
     const headTitle = document.createElement("div");
     headTitle.className = "preview-title";
-    headTitle.textContent = `선택한 폴더 미리보기 (${previews.length}개 · 인덱싱 가능 ${totalIndexable}개)`;
+    headTitle.textContent = `선택한 폴더 미리보기 (${previews.length}개 · 인덱싱 가능 ${totalIndexable}개${previews.some((p) => p.truncated) ? " · 부분 집계" : ""})`;
     head.appendChild(headTitle);
 
     const bodyEl = document.createElement("div");
@@ -174,7 +177,7 @@ export function showFolderPreviewModal({ scope, previews, icons }) {
         const idx = Number(cb.dataset.idx);
         const preview = previews[idx];
         if (!preview) return;
-        if (preview.error || preview.total === 0) {
+        if (preview.error || (preview.total === 0 && !preview.truncated)) {
           cb.checked = false;
           return;
         }

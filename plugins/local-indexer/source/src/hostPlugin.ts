@@ -1,4 +1,4 @@
-import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, opendir, readFile, readdir, realpath, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { ChangeStream } from "./changeStream.js";
 import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -96,6 +96,7 @@ import type {
 } from "./types.js";
 
 const FOLDER_SUMMARY_CACHE_TTL_MS = 8_000;
+export const MAX_PREVIEW_ENTRIES = 2_000;
 
 function bufferToArrayBuffer(body: Buffer): ArrayBuffer {
   const copy = new Uint8Array(body.byteLength);
@@ -1904,8 +1905,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
 
   async function listIndexableFiles(
     folderPath: string,
-    options?: { includeImages?: boolean },
-  ): Promise<Array<{ filePath: string; mtimeMs: number }>> {
+    options?: { includeImages?: boolean; maxEntries?: number },
+  ): Promise<{ files: Array<{ filePath: string; mtimeMs: number }>; truncated: boolean }> {
+    let visitedEntries = 0;
+    let truncated = false;
     const files: Array<{ filePath: string; mtimeMs: number }> = [];
     // 호출자가 명시적 override 안 주면 현재 토글 상태를 따른다 (기존 동작 유지).
     // 미리보기 (`index_preview_folder`) 처럼 토글 무관하게 폴더 내용을 보여줘야
@@ -1937,11 +1940,20 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       if (metadata.isSymbolicLink()) return;
       if (metadata.isDirectory()) {
         try {
-          const entries = await readdir(currentPath, { withFileTypes: true });
-          for (const entry of entries) {
+          // Stream bounded previews so a huge directory cannot fill memory.
+          const entries = options?.maxEntries === undefined
+            ? await readdir(currentPath, { withFileTypes: true })
+            : await opendir(currentPath);
+          for await (const entry of entries) {
+            if (visitedEntries >= (options?.maxEntries ?? Infinity)) {
+              truncated = true;
+              break;
+            }
+            visitedEntries += 1;
             if (entry.name.startsWith(".")) continue;  // skip dotfiles/dotdirs
             if (entry.isDirectory() && SKIP_DIR_NAMES.has(entry.name)) continue;
             await walk(join(currentPath, entry.name));
+            if (truncated) break;
           }
         } catch (err) {
           // 루트 폴더 readdir 실패는 상위로 전파 — silent empty 방지.
@@ -1960,7 +1972,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     };
 
     await walk(folderPath, true);
-    return files.sort((a, b) => a.filePath.localeCompare(b.filePath));
+    return { files: files.sort((a, b) => a.filePath.localeCompare(b.filePath)), truncated };
   }
 
   async function buildFolderSummary(
@@ -2053,12 +2065,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     }
 
     try {
-      currentFiles = await listIndexableFiles(folderPath, {
+      ({ files: currentFiles } = await listIndexableFiles(folderPath, {
         includeImages: imageEmbeddingEnabled,
-      });
+      }));
       visibleFiles = imageEmbeddingEnabled
         ? currentFiles
-        : await listIndexableFiles(folderPath, { includeImages: true });
+        : (await listIndexableFiles(folderPath, { includeImages: true })).files;
     } catch {
       const summary: FolderIndexSummary = {
         folder: folderPath,
@@ -3575,7 +3587,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         for (const folder of allFolders) {
           const folderKeys = [...stateForScan.keys()].filter((p) => isWithinFolder(p, folder));
           const currentPaths = new Set(
-            (await listIndexableFiles(folder).catch(() => [])).map((f) => f.filePath),
+            (await listIndexableFiles(folder).catch(() => ({ files: [] }))).files.map((f) => f.filePath),
           );
           const orphans = folderKeys.filter((p) => !currentPaths.has(p));
           if (orphans.length > 0) {
@@ -3928,7 +3940,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         for (const folder of allFolders) {
           const folderKeys = [...stateForRefresh.keys()].filter((p) => isWithinFolder(p, folder));
           const currentPaths = new Set(
-            (await listIndexableFiles(folder).catch(() => [])).map((f) => f.filePath),
+            (await listIndexableFiles(folder).catch(() => ({ files: [] }))).files.map((f) => f.filePath),
           );
           const orphans = folderKeys.filter((p) => !currentPaths.has(p));
           if (orphans.length > 0) {
@@ -3960,7 +3972,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         await syncAllowedRootsToWorker(folders, [folder]);
 
         const stateByPath = await loadMergedIndexState();
-        const currentFiles = await listIndexableFiles(folder);
+        const { files: currentFiles } = await listIndexableFiles(folder);
         const currentPaths = new Set(currentFiles.map((file) => file.filePath));
         const refreshTargets = currentFiles.filter((file) => {
           const entry = stateByPath.get(file.filePath);
@@ -4034,6 +4046,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         if (blockedMessage) {
           return { folder: absPath, total: 0, byType: {}, sample: [], error: blockedMessage };
         }
+        if (isOtherUserHome(absPath, userHome)) {
+          return {
+            folder: absPath, total: 0, byType: {}, sample: [],
+            error: `보안: 다른 사용자 홈 디렉터리는 인덱싱 폴더로 추가할 수 없습니다: ${absPath}`,
+          };
+        }
         if (isHighChurnFolderPath(absPath, userHome)) {
           return {
             folder: absPath,
@@ -4063,14 +4081,16 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           // 미리보기 했는데 토글이 OFF 라 0 으로 보이면 혼란). 실제 인덱싱
           // 단계는 토글을 따라가므로 본 단계의 includeImages 강제가 인덱싱
           // 동작을 바꾸진 않는다.
-          const files = await listIndexableFiles(absPath, { includeImages: true });
+          const { files, truncated } = await listIndexableFiles(absPath, {
+            includeImages: true, maxEntries: MAX_PREVIEW_ENTRIES,
+          });
           const byType: Record<string, number> = {};
           for (const file of files) {
             const ext = extname(file.filePath).slice(1).toLowerCase();
             byType[ext] = (byType[ext] ?? 0) + 1;
           }
           const sample = files.slice(0, 5).map((f) => basename(f.filePath));
-          return { folder: absPath, total: files.length, byType, sample };
+          return { folder: absPath, total: files.length, byType, sample, truncated };
         } catch (err) {
           return {
             folder: absPath,
