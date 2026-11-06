@@ -74,7 +74,6 @@ node tools/connector-smoke.mjs --opt-in trello-mcp todoist-mcp airtable-mcp obsi
 node tools/release.mjs verify --base origin/main
 node tools/index.mjs --check
 node tools/vendor.mjs check
-node tools/vendor.mjs check
 node tools/check-retired-name.mjs
 node --test tools/__tests__/tools.test.mjs
 git diff --check

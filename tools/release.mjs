@@ -315,7 +315,7 @@ export function verify(base, { publish = false, download = ghReleaseDownload, re
   return [...problems, ...checkRepository({ base, releasedManifests: released })];
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [command, ...args] = process.argv.slice(2);
   if (command === "plan") {
     if (args.includes("--publish")) {

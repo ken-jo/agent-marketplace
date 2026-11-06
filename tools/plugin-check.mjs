@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 /** Run the package's declared checks using the shared vendored contract. */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 export async function runPluginChecks(directory, { helperOnly = false, execute = execFileSync } = {}) {
-  const requested = resolve(ROOT, directory);
-  const source = existsSync(join(requested, "package.json")) ? requested : join(requested, "source");
+  const source = resolve(ROOT, directory);
   const path = relative(ROOT, source);
   if (!path || path === ".." || path.startsWith(`..${sep}`) || path.includes(`${sep}node_modules${sep}`)) throw new Error("plugin directory must be inside this marketplace");
   const helper = join(ROOT, "tools/plugin-build");
@@ -23,7 +22,7 @@ export async function runPluginChecks(directory, { helperOnly = false, execute =
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [directory, ...args] = process.argv.slice(2);
   try {
     if (!directory || args.some((arg) => arg !== "--helper")) throw new Error("usage: plugin-check.mjs <directory> [--helper]");

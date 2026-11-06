@@ -23,7 +23,7 @@
  * which downloads each asset and runs this check with it. Without either the
  * check fails and names the versions; it never passes without them.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkVendored } from "./vendor.mjs";
@@ -34,6 +34,7 @@ import {
   DESCRIPTOR,
   INDEX_PATH,
   KIND_DIRS,
+  RETIRED_KINDS,
   REPOSITORY,
   MUTABLE_VERSION_FIELDS,
   ROOT,
@@ -139,8 +140,11 @@ function checkPublishedVersions(base, problems) {
   const withdrawn = withdrawnPackages();
   for (const { index: previous } of baseIndexes(base)) {
     for (const entry of previous.packages) {
-      // Historical entries for kinds the app no longer supports are retired.
-      if (![...KIND_DIRS.values()].includes(entry.kind)) continue;
+      if (RETIRED_KINDS.includes(entry.kind)) continue;
+      if (![...KIND_DIRS.values()].includes(entry.kind)) {
+        problems.push(`${entry.kind}/${entry.name}: unknown package kind ${entry.kind} in ${base}`);
+        continue;
+      }
       const subject = `${entry.kind}/${entry.name}`;
       const current = now.get(subject);
       // A withdrawn package leaves whole; one it keeps listed stays immutable.
@@ -242,7 +246,7 @@ export function checkRepository({ base, releasedManifests = new Map() } = {}) {
   return problems;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const base = option("--base");
   const releasedManifests = released();
   // This entry point does not download plugin releases. Replace only the pinned checker's internal

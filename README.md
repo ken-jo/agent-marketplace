@@ -20,7 +20,9 @@ Code packages are called **extensions** in user-facing text. They use the `plugi
 | `tools/vendor/` | Built Ave repository validator and Agent Plugin component extractor. |
 | `tools/` | Repository checks, catalog generator, release tools and extension build helper. |
 
-Content entries without `versions` resolve their descriptors at the fetched commit. `node tools/index.mjs --pin-versions` records explicit version pins once the package commits exist. Published versions remain immutable, apart from `yanked` and `rollout`, unless the whole package is withdrawn or its kind leaves the app contract.
+Content entries without `versions` resolve their descriptors at the fetched commit. `node tools/index.mjs --pin-versions` records explicit version pins once the package commits exist. Published versions remain immutable, apart from `yanked` and `rollout`, unless the whole package is withdrawn or its kind is explicitly retired in `tools/repo.mjs`.
+
+An indexed version absent from the published base can be corrected without changing a published pin. Commit the corrected package, then regenerate with `node tools/index.mjs --base <published-ref> --repin <kind/name>@<version>=<corrected-commit>`. The generator refuses to re-pin any version listed at that base.
 
 ## Ave contract
 
@@ -31,7 +33,7 @@ node tools/vendor.mjs sync --ref <40-hex-commit-or-tag> --app <Ave-checkout>
 node tools/vendor.mjs check
 ```
 
-Sync resolves the ref with git, reads tracked files with `git show`, and builds the helpers from those files using the ref's frozen Bun dependencies. It never reads source from the checkout's working tree. Each `sources.json` records only the repository, ref and source paths or build entries. `check` is offline and checks only that listed files exist. Review the ref and generated diff before committing; changes to the contract belong in Ave.
+Sync resolves the ref with git, accepts only regular blob entries (modes 100644 and 100755), reads tracked files with `git show`, and builds the helpers from those files using the ref's frozen Bun dependencies. It never reads source from the checkout's working tree. Each `sources.json` records the repository, given ref, resolved commit, and source paths or build entries. `check` is offline and checks only that listed files exist. Review the ref and generated diff before committing; changes to the contract belong in Ave.
 
 | Destination | Ave source or build entry |
 |---|---|
@@ -39,7 +41,7 @@ Sync resolves the ref with git, reads tracked files with `git show`, and builds 
 | `contract/plugin-manifest.schema.json` | `schemas/plugin-manifest.schema.json` |
 | `contract/protocol.schema.json` | `schemas/plugin-host-protocol/5/protocol.schema.json` |
 | `tools/vendor/agent-plugin-components.js` | `src/marketplace/content/agent-plugin-components.ts` (built) |
-| `tools/vendor/marketplace-check.js` | `src/marketplace/repository-check.ts` (built when present upstream) |
+| `tools/vendor/marketplace-check.js` | `src/marketplace/repository-check.ts` (required build entry) |
 
 The build recipe replaces the host logger with a silent logger so standalone helpers do not start its worker transport. Repository tools import the committed helpers directly.
 

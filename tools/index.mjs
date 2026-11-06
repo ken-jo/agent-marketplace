@@ -17,6 +17,8 @@
  *   node tools/index.mjs           write marketplace.json
  *   node tools/index.mjs --check   fail when the committed file differs
  *   node tools/index.mjs --pin-versions   also pin descriptor-resolved entries
+ *   node tools/index.mjs --base <published ref> --repin <kind/name>@<version>=<commit>
+ *       correct an unpublished version; never changes a version listed at the base
  *
  * A non-plugin entry without `versions` is descriptor-resolved: the app reads
  * its descriptor at the fetched commit. The single-commit public import lists
@@ -26,16 +28,19 @@
  * Commit a package change before generating: its entry records the commit
  * the app will read the package at, so an uncommitted package has none.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   DESCRIPTOR,
   INDEX_PATH,
   KIND_DIRS,
+  RETIRED_KINDS,
   MUTABLE_VERSION_FIELDS,
   ROOT,
   agentPluginComponents,
+  baseIndexes,
+  hasCommit,
   canonicalJson,
   compareVersions,
   contentPaths,
@@ -137,8 +142,43 @@ function descriptorOnlyMigration(dir, kind, from) {
   }
 }
 
+/** Re-pin only versions absent from an explicitly supplied published base. */
+function repinVersions(previous, repins, base) {
+  if (!base || !hasCommit(base)) throw new Error("--repin needs --base <published ref> present in this clone");
+  if (!isAncestor(base)) throw new Error("--repin base must be in HEAD's history");
+  const published = new Set(baseIndexes(base).flatMap(({ index }) => index.packages.flatMap((entry) =>
+    (entry.versions ?? []).map((version) => `${entry.kind}/${entry.name}@${version.version}`))));
+  const index = structuredClone(previous);
+  const seen = new Set();
+  for (const pin of repins) {
+    const match = /^([^/@]+\/[^/@]+)@([^=]+)=([0-9a-f]{40})$/u.exec(pin);
+    if (!match) throw new Error(`invalid --repin ${pin}; expected <kind/name>@<version>=<40-hex commit>`);
+    const [, subject, version, commit] = match;
+    const key = `${subject}@${version}`;
+    if (seen.has(key)) throw new Error(`${key}: duplicate --repin`);
+    seen.add(key);
+    if (published.has(key)) throw new Error(`${key}: published at ${base}; cannot re-pin`);
+    const entry = index.packages.find((entry) => `${entry.kind}/${entry.name}` === subject);
+    const atVersion = entry?.versions?.findIndex((entry) => entry.version === version) ?? -1;
+    if (atVersion < 0) throw new Error(`${key}: not in the current index`);
+    if (!isAncestor(commit)) throw new Error(`${key}: re-pin commit must be in HEAD's history`);
+    const at = lastCommit(contentPaths(entry.path, entry.kind), commit);
+    if (at?.commit !== commit) throw new Error(`${key}: ${commit} did not change ${entry.path}`);
+    const descriptor = JSON.parse(git(["show", `${commit}:${entry.path}/${DESCRIPTOR}`]));
+    if (`${descriptor.kind}/${descriptor.name}` !== subject || descriptor.version !== version) {
+      throw new Error(`${key}: descriptor at ${commit} names another package or version`);
+    }
+    const prior = entry.versions[atVersion];
+    entry.versions[atVersion] = { ...versionEntry(descriptor, at), ...Object.fromEntries(
+      [...MUTABLE_VERSION_FIELDS].filter((field) => Object.hasOwn(prior, field)).map((field) => [field, prior[field]]),
+    ) };
+  }
+  return index;
+}
+
 /** The index the descriptors and `previous` imply, and why it could not be made. */
-export function generateIndex(previous, { pinVersions = false } = {}) {
+export function generateIndex(previous, { pinVersions = false, repins = [], base } = {}) {
+  if (repins.length) previous = repinVersions(previous, repins, base);
   const problems = [];
   const before = new Map(previous.packages.map((entry) => [`${entry.kind}/${entry.name}`, entry]));
   const found = new Set();
@@ -146,6 +186,10 @@ export function generateIndex(previous, { pinVersions = false } = {}) {
   for (const dir of packageDirs()) {
     const descriptor = readJson(`${dir}/${DESCRIPTOR}`);
     const subject = `${descriptor.kind}/${descriptor.name}`;
+    if (!KIND_ORDER.includes(descriptor.kind)) {
+      problems.push(`${subject}: unknown package kind ${descriptor.kind}`);
+      continue;
+    }
     found.add(subject);
     if (descriptor.kind === "agent-plugin") {
       try {
@@ -187,8 +231,11 @@ export function generateIndex(previous, { pinVersions = false } = {}) {
     if (found.has(subject)) problems.push(`${subject}: withdrawn in ${WITHDRAWN_PATH} but its package is still here`);
   }
   for (const [subject, entry] of before) {
-    // Kinds removed from the app contract leave the catalog as a whole.
-    if (!KIND_ORDER.includes(entry.kind)) continue;
+    if (RETIRED_KINDS.includes(entry.kind)) continue;
+    if (!KIND_ORDER.includes(entry.kind)) {
+      problems.push(`${subject}: unknown package kind ${entry.kind}`);
+      continue;
+    }
     // A withdrawn package leaves the index with every version it had.
     if (!found.has(subject) && (entry.versions?.length ?? 0) > 0 && !withdrawn.has(subject)) {
       problems.push(`${subject}: published package is missing; withdraw it in ${WITHDRAWN_PATH}`);
@@ -203,9 +250,19 @@ export function serialize(index) {
   return `${JSON.stringify(index, null, 2)}\n`;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const committed = readFileSync(join(ROOT, INDEX_PATH), "utf8");
-  const { index, problems } = generateIndex(JSON.parse(committed), { pinVersions: process.argv.includes("--pin-versions") });
+  const args = process.argv.slice(2);
+  const repins = args.flatMap((arg, at) => arg === "--repin" ? [args[at + 1]] : []);
+  const base = args[args.indexOf("--base") + 1];
+  let generated;
+  try {
+    generated = generateIndex(JSON.parse(committed), { pinVersions: args.includes("--pin-versions"), repins, base: args.includes("--base") ? base : undefined });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  const { index, problems } = generated;
   for (const problem of problems) console.error(problem);
   if (problems.length > 0) process.exit(1);
   const text = serialize(index);

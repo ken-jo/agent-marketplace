@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 test("sync reads and builds the requested commit or tag independently of HEAD and dirty files", () => {
-  const root = mkdtempSync(join(tmpdir(), "vendor-ref-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "vendor-ref-")));
   try {
     const app = join(root, "ave");
     mkdirSync(app);
@@ -26,6 +26,9 @@ test("sync reads and builds the requested commit or tag independently of HEAD an
     write("src/marketplace/content/agent-plugin-components.ts", 'export { value } from "./value.ts";\n');
     write("src/marketplace/repository-check.ts", 'export const check = "original";\n');
     git("add", ".");
+    write("executable.sh", "#!/bin/sh\nexit 0\n");
+    git("add", "executable.sh");
+    git("update-index", "--chmod=+x", "executable.sh");
     git("commit", "-qm", "Original sources");
     const ref = git("rev-parse", "HEAD");
     git("tag", "test-release");
@@ -50,15 +53,50 @@ test("sync reads and builds the requested commit or tag independently of HEAD an
     assert.equal(readFileSync(join(root, "tools/vendor/agent-plugin-components.js"), "utf8"), built);
     sync("test-release");
     const sources = JSON.parse(readFileSync(join(root, "contract/sources.json"), "utf8"));
-    assert.deepEqual(Object.keys(sources), ["repository", "ref", "files"]);
+    assert.deepEqual(Object.keys(sources), ["repository", "ref", "commit", "files"]);
     assert.equal(sources.ref, "test-release");
+    assert.equal(sources.commit, ref);
     assert.equal(run("check").status, 0);
     assert.notEqual(run("sync", "--ref", "missing-tag", "--app", app).status, 0);
     git("rm", "-q", "src/marketplace/repository-check.ts");
     git("commit", "-qm", "Remove checker");
-    sync(git("rev-parse", "HEAD"));
-    const files = JSON.parse(readFileSync(join(root, "tools/vendor/sources.json"), "utf8")).files;
-    assert.equal(files["marketplace-check.js"], undefined);
+    const missing = run("sync", "--ref", git("rev-parse", "HEAD"), "--app", app);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /repository-check/u);
+
+    symlinkSync("package.json", join(app, "linked-package.json"));
+    git("add", "linked-package.json");
+    git("commit", "-qm", "Symlink entry");
+    const linked = run("sync", "--ref", git("rev-parse", "HEAD"), "--app", app);
+    assert.notEqual(linked.status, 0);
+    assert.match(linked.stderr, /symlink 120000 linked-package/u);
+    git("rm", "-q", "linked-package.json");
+    git("update-index", "--add", "--cacheinfo", `160000,${ref},linked-repository`);
+    git("commit", "-qm", "Gitlink entry");
+    const gitlink = run("sync", "--ref", git("rev-parse", "HEAD"), "--app", app);
+    assert.notEqual(gitlink.status, 0);
+    assert.match(gitlink.stderr, /gitlink 160000 linked-repository/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test("every tool CLI runs through a symlink instead of silently succeeding", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "tool-cli-")));
+  try {
+    writeFileSync(join(root, "marketplace.json"), "invalid JSON");
+    for (const [name, args] of [
+      ["vendor", ["bogus"]], ["plugin-check", []], ["index", ["--check"]],
+      ["check", []], ["release", ["bogus"]], ["connector-pins", ["bogus"]],
+      ["connector-runtime", []],
+    ]) {
+      const link = join(root, `${name}.mjs`);
+      symlinkSync(fileURLToPath(new URL(`../${name}.mjs`, import.meta.url)), link);
+      const result = spawnSync("node", [link, ...args], { encoding: "utf8", env: { ...process.env, MARKETPLACE_ROOT: root } });
+      assert.notEqual(result.status, 0, `${name}: silently skipped CLI`);
+      assert.ok(result.stderr.length > 0, `${name}: missing diagnostic`);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
