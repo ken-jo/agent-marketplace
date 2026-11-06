@@ -43,7 +43,7 @@ function skill(version) {
 
 /** A scratch marketplace using local copies of the tools and contract. */
 function repo() {
-  const root = mkdtempSync(join(tmpdir(), "marketplace-tools-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "marketplace-tools-")));
   scratch.push(root);
   const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
   git("init", "-q", "-b", "main");
@@ -141,6 +141,8 @@ describe("index generation", () => {
     const pin = `skill/review@1.0.0=${corrected}`;
     assert.match(r.tool("index.mjs", "--repin", pin).stderr, /needs --base/u);
     assert.match(r.tool("index.mjs", "--base", indexed, "--repin", pin).stderr, /published at .*cannot re-pin/u);
+    const orphan = r.git("commit-tree", r.git("rev-parse", `${base}^{tree}`).trim(), "-m", "unrelated base").trim();
+    assert.match(r.tool("index.mjs", "--base", orphan, "--repin", pin).stderr, /base must be in HEAD/u);
     const result = r.tool("index.mjs", "--base", base, "--repin", pin);
     assert.equal(result.status, 0, result.stderr);
     const [version] = r.index().packages[0].versions;
@@ -652,7 +654,7 @@ describe("releases", () => {
     const match = workflow.match(/^      - id: plan\n        run: \|\n((?:          [^\n]*\n)+)/mu);
     assert.ok(match, "release plan must be a checked multiline shell step");
     const script = match[1].replace(/^          /gmu, "");
-    const fake = mkdtempSync(join(tmpdir(), "marketplace-failing-node-"));
+    const fake = realpathSync(mkdtempSync(join(tmpdir(), "marketplace-failing-node-")));
     scratch.push(fake);
     writeFileSync(join(fake, "node"), "#!/bin/sh\nexit 42\n", { mode: 0o755 });
     const run = spawnSync("bash", ["--noprofile", "--norc", "-c", script], {
@@ -834,7 +836,7 @@ describe("releases", () => {
     const manifest = JSON.parse(readFileSync(join(r.root, "plugins/alpha/source/plugin.json"), "utf8"));
     manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.11.0" };
     r.write("plugins/alpha/source/plugin.json", manifest);
-    const asset = mkdtempSync(join(tmpdir(), "marketplace-asset-"));
+    const asset = realpathSync(mkdtempSync(join(tmpdir(), "marketplace-asset-")));
     scratch.push(asset);
     writeFileSync(join(asset, "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     execFileSync("zip", ["-q", "-X", "alpha-1.0.0.zip", "plugin.json"], { cwd: asset });
@@ -924,7 +926,7 @@ describe("releases", () => {
 describe("plugin alert drift checks", () => {
   for (const [name, removedKind] of [["meeting", "summary-ready"]]) {
     it(`${name} rejects a runtime alert kind missing from its manifest`, () => {
-      const root = mkdtempSync(join(tmpdir(), `alerts-${name}-`));
+      const root = realpathSync(mkdtempSync(join(tmpdir(), `alerts-${name}-`)));
       scratch.push(root);
       const source = join(REAL_ROOT, "plugins", name, "source");
       cpSync(join(source, "scripts"), join(root, "scripts"), { recursive: true });

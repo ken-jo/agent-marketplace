@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,7 @@ function gitEnv(root) {
 
 /** A repository whose index tracks `tracked`; `untracked` files are written but never added. */
 function fixture(tracked, untracked = {}) {
-  const root = mkdtempSync(join(tmpdir(), "marketplace-retired-name-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "marketplace-retired-name-")));
   const env = gitEnv(root);
   execFileSync("git", ["-C", root, "init", "-q"], { env });
   const write = (files) => {

@@ -145,6 +145,7 @@ function descriptorOnlyMigration(dir, kind, from) {
 /** Re-pin only versions absent from an explicitly supplied published base. */
 function repinVersions(previous, repins, base) {
   if (!base || !hasCommit(base)) throw new Error("--repin needs --base <published ref> present in this clone");
+  if (!isAncestor(base)) throw new Error("--repin base must be in HEAD's history");
   const published = new Set(baseIndexes(base).flatMap(({ index }) => index.packages.flatMap((entry) =>
     (entry.versions ?? []).map((version) => `${entry.kind}/${entry.name}@${version.version}`))));
   const index = structuredClone(previous);
