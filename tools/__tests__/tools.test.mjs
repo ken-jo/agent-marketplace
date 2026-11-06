@@ -451,7 +451,7 @@ describe("repository check", () => {
   it("keeps released Ave 0.14.0 users on Korean 1.0.5", () => {
     const index = JSON.parse(readFileSync(join(REAL_ROOT, "marketplace.json"), "utf8"));
     const korean = index.packages.find((entry) => entry.kind === "language" && entry.name === "korean");
-    for (const version of ["1.0.6", "1.0.7"]) {
+    for (const version of ["1.0.6", "1.0.7", "1.0.8"]) {
       const pin = korean.versions.find((entry) => entry.version === version);
       assert.equal(pin.minAppVersion, "0.14.2");
       const descriptor = JSON.parse(execFileSync("git", ["show", `${pin.commit}:languages/korean/ave-package.json`], { cwd: REAL_ROOT, encoding: "utf8" }));
@@ -459,7 +459,7 @@ describe("repository check", () => {
       assert.equal(descriptor.minAppVersion, pin.minAppVersion);
       assert.equal(descriptor.description, "Korean interface translation for Ave 0.14.2 and later.");
     }
-    for (const [appVersion, expected] of [["0.14.0", "1.0.5"], ["0.14.1", "1.0.5"], ["0.14.2", "1.0.7"]]) {
+    for (const [appVersion, expected] of [["0.14.0", "1.0.5"], ["0.14.1", "1.0.5"], ["0.14.2", "1.0.8"]]) {
       const eligible = korean.versions.filter((pin) => !pin.yanked && compareVersions(appVersion, pin.minAppVersion) >= 0)
         .sort((a, b) => compareVersions(b.version, a.version));
       assert.equal(eligible[0].version, expected);
@@ -943,7 +943,7 @@ describe("plugin alert drift checks", () => {
   }
 });
 
- it("maps app release boundaries to the protocol each host serves", () => {
+it("maps app release boundaries to the protocol each host serves", () => {
   for (const [version, protocol] of [["0.11.9", undefined], ["0.12.0", "2"], ["0.13.9", "2"], ["0.14.0", "3"], ["0.14.1", "3"], ["0.14.2", "5"], ["0.15.0", "5"]]) {
     assert.equal(requiredHostProtocol(version), protocol, version);
   }
