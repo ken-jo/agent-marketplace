@@ -14,7 +14,7 @@ const applyContext = (context: ReturnType<typeof app.getHostContext>) => {
   }
   document.documentElement.style.colorScheme = context?.theme ?? "light dark";
 };
-app.onhostcontextchanged = applyContext;
+app.onhostcontextchanged = () => applyContext(app.getHostContext());
 button.onclick = async () => {
   button.disabled = true;
   try {

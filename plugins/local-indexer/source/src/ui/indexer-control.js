@@ -1,3 +1,4 @@
+import { runIndexerSync, syncHostContext } from "./indexer-sync.js";
 import { STYLES } from "./indexer-control.styles.js";
 import {
   FILE_ICONS,
@@ -530,7 +531,6 @@ export async function mount(context) {
   };
 
   const applyScanProgress = (incoming) => {
-    const previous = scanProgress;
     scanProgress = normalizeScanProgress(incoming);
     setScanBadge(scanProgress.status);
     setScanSummary(getScanStatusText(scanProgress));
@@ -543,10 +543,6 @@ export async function mount(context) {
     // without waiting for the post-scan summary refresh.
     if (scanProgress.byFolder) {
       renderFolders(registeredFolders, folderSummaries);
-    }
-    if (previous.status === "running" && scanProgress.status !== "running") {
-      void loadFolders();
-      void refreshDocuments({ quiet: true });
     }
   };
 
@@ -870,16 +866,7 @@ export async function mount(context) {
     }
   };
 
-  // Serialise pushSettings so rapid toggle/radio clicks don't fire
-  // concurrent index_set_image_embedding calls — concurrent calls were
-  // observed to thrash the worker restart loop (port 43129 busy) and
-  // wedge the host plugin lifecycle (methodMap getting cleared mid-flight).
-  //
-  // The earlier coalescer returned the in-flight promise to every caller,
-  // which silently DROPPED diverging args (user clicks toggle ON then
-  // immediately switches provider — second click was discarded). Replaced
-  // with a serial tail: each pushSettings appends to the chain so all
-  // intents reach the host in order, but only one runs at a time.
+  // Serialize settings changes so every toggle reaches the server in order.
   let pushTail = Promise.resolve();
 
   const pushSettings = ({ enabled }) => {
@@ -889,7 +876,7 @@ export async function mount(context) {
         // endpoint / model / apiKey from its config + secret store on
         // every push and returns them in the response so we can refresh
         // the read-only summary line.
-        const res = await callTool("index_set_image_embedding", { enabled, mode: "cloud" });
+        const res = await callTool("index_set_image_embedding", { enabled });
         if (res && typeof res === "object") {
           settings = {
             ...settings,
@@ -1118,9 +1105,6 @@ export async function mount(context) {
     try {
       await callWithRetry("index_scan", undefined, "인덱싱");
       await pollScanStatusOnce();
-      if (!isScanLocked(scanProgress)) {
-        await refreshDocuments({ quiet: true });
-      }
     } catch (error) {
       applyScanProgress({
         status: "failed",
@@ -1181,68 +1165,19 @@ export async function mount(context) {
     catch (error) { setStatus(`질문 초안 작성 실패: ${formatErrorMessage(error)}`); }
   });
 
-  const applyContext = (next) => {
-    for (const [key, value] of Object.entries(next?.styles?.variables ?? {})) {
-      if (typeof value === "string") document.documentElement.style.setProperty(key, value);
-    }
-    scope.dataset.shell = next?.theme || "light";
-    document.documentElement.style.colorScheme = next?.theme || "light dark";
-  };
-  app.onhostcontextchanged = applyContext;
-  applyContext(app.getHostContext());
-  cleanups.push(() => { app.onhostcontextchanged = undefined; });
-
-  void (async () => {
-    // Capture the cursor BEFORE snapshots so changes during initialization replay.
-    let cursor = (await callTool("index_wait_changes", { cursor: "", waitMs: 0 })).cursor;
-    // Settings are independent of folders/scan — load them first so the
-    // toggle is consistent before the user can interact with the UI.
-    await loadSettings();
-
-    try {
-      await loadFolders();
-    } catch {
-      // loadFolders already normalizes its own failure path.
-    }
-
-    try {
-      await pollScanStatusOnce();
-    } catch (error) {
-      setStatus(`Initial scan status failed: ${formatErrorMessage(error)}`);
-    }
-
-    try {
-      await refreshDocuments({ quiet: true });
-      if (!isScanLocked(scanProgress) && scanProgress.status === "idle") {
-        setStatus(`Loaded ${allDocs.length} documents.`);
-      }
-    } catch (error) {
-      if (!isScanLocked(scanProgress)) {
-        setStatus(`Initial load failed: ${formatErrorMessage(error)}`);
-      }
-    }
-    while (!disposed) {
-      try {
-        const result = await app.callServerTool({ name: "index_wait_changes", arguments: { cursor, waitMs: 10000 } }, { signal: waitAbort.signal });
-        if (disposed) break;
-        if (result.isError) throw new Error("Change wait failed");
-        const update = result.structuredContent ?? JSON.parse(result.content.find(c => c.type === "text").text);
-        cursor = update.cursor;
-        if (update.closed) break;
-        if (update.reset || update.changes.length) {
-          await pollScanStatusOnce();
-          if (update.reset || update.changes.some(c => c.kind !== "index.scan.progress" && c.kind !== "index.warning" && c.kind !== "warnings.cleared")) {
-            await loadFolders();
-            await refreshDocuments({ quiet: true });
-          }
-        }
-      } catch (error) {
-        if (disposed) break;
-        setStatus(`Live updates failed: ${formatErrorMessage(error)}`);
-        await new Promise(resolve => { const timer = setTimeout(resolve, 1000); waitAbort.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true, signal: waitAbort.signal }); });
-      }
-    }
-  })().catch(error => setStatus(`Initialization failed: ${formatErrorMessage(error)}`));
+  cleanups.push(syncHostContext(app, scope, document.documentElement));
+  void runIndexerSync({
+    callTool,
+    loadSettings,
+    readScanStatus: pollScanStatusOnce,
+    getScanStatus: () => scanProgress.status,
+    loadFolders,
+    refreshDocuments: () => refreshDocuments({ quiet: true }),
+    signal: waitAbort.signal,
+    onError: error => setStatus(`Live updates failed: ${formatErrorMessage(error)}`),
+  }).catch(error => {
+    if (!disposed) setStatus(`Initialization failed: ${formatErrorMessage(error)}`);
+  });
 
   return () => {
     disposed = true;
