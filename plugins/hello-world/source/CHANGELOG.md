@@ -1,8 +1,8 @@
-## 0.4.0
+# Changelog
+
+## [0.4.0] - Unreleased
 
 Serve the sidebar as self-contained MCP Apps HTML and call hello_world through the standard App SDK. Require host protocol 5 and Ave 0.14.2.
-
-# Changelog
 
 ## [0.3.2] - Unreleased
 

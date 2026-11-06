@@ -1284,11 +1284,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       : validatedEmbeddingEndpoint;
   const embeddingApiVersion = readEmbeddingApiVersion();
 
-  // Worker stdout warning surfacer ─────────────────────────────────────
+  // Worker stderr warning surfacer ─────────────────────────────────────
   // Known event types and a human-readable label. The worker emits one
   // JSON object per line at INFO level; everything else (non-JSON, debug
   // chatter) is ignored. We dedupe by `${event}:${path}` so a single
-  // misconfigured folder doesn't spam the host event bus 100 times.
+  // misconfigured folder doesn't repeat the same warning 100 times.
   type IndexWarningPayload = {
     kind: string;
     path?: string;
@@ -1598,20 +1598,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // soft errors at INFO level only, which means a misconfigured allowed-
       // roots / embedding endpoint / API key silently produces `file.empty`
       // results and the user has no idea why indexing keeps failing.
-      // We parse only the known event types and forward them as a single
-      // `index.warning` host event so the UI can render an actionable banner.
+      // Known worker log types update the warning snapshot and wake app waits.
       handleWorkerLogLine(line);
     },
-    // #955 round-2 architect Minor: forward azure-inherit config warnings
-    // as a host event so the UI can render an actionable banner. Stderr
-    // remains the log archival path.
-    //
-    // We reuse the existing `index.warning` channel (declared in plugin.json
-    // emittedEvents) with a `kind` discriminator instead of introducing a
-    // new event name — the host's emittedEvents contract restricts plugins
-    // to the public `index.*` namespace (knowledge-index capability), so a
-    // new `local_indexer.*` event would be rejected at the manifest layer
-    // (see test/securityHardening.test.ts).
+    // Record configuration warnings for the app snapshot; stderr retains diagnostics.
     onConfigWarning: (warning) => {
       console.error("warn", "local_indexer.azure_inherit_missing_config", {
         missing: warning.missing,
