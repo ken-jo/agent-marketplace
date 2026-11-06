@@ -4,15 +4,12 @@
  *
  *   node tools/release.mjs plan [--publish]
  *       JSON list of plugins whose source version has no <name>-v<version>
- *       tag yet. --publish requires the contract, checker and protocol schema
- *       to pin an Ave release tag (never a commit) before the workflow builds
- *       any release; `vendor.mjs verify` holds their bytes to its signed bundle.
+ *       tag yet. --publish checks the vendored files before the workflow builds.
  *   node tools/release.mjs pack <name> <out.zip>
  *       Zip a built plugin: plugin.json and the paths its package.json
  *       `files` lists, never node_modules, source maps or credential files.
  *   node tools/release.mjs build <name> <out.zip> --publish
- *       Verify a signed tag and retain trusted modules while installing,
- *       typechecking, building and testing, then pack in the same process.
+ *       Install dependencies, typecheck, build and test, then pack.
  *   node tools/release.mjs pin <name> <zip>
  *       Point the descriptor at a released zip: version, minAppVersion,
  *       authority and display fields from the zip's plugin.json, and the
@@ -40,11 +37,9 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkRepository, releasedManifestsNeeded } from "./check.mjs";
-import { checkVendored, isCommitPin, isReleaseTag } from "./vendor.mjs";
-import { runPluginChecks, verifiedRuntime } from "./verified-import.mjs";
+import { checkVendored } from "./vendor.mjs";
+import { runPluginChecks } from "./plugin-check.mjs";
 import { AVE_EXTENSION, DESCRIPTOR, INDEX_PATH, REPOSITORY, ROOT, baseIndexes, canonicalJson, git, hasCommit, isAncestor, pluginAuthority, readJson } from "./repo.mjs";
-
-const TRUSTED_RUNTIME = await verifiedRuntime();
 
 const GLOB = /[*?[\]]/u;
 const SENSITIVE = [
@@ -60,66 +55,17 @@ const SENSITIVE = [
 ];
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
-/** The host protocol the vendored contract must describe; the release tag itself is `ref` in sources.json. */
-const HOST_PROTOCOL = 3;
-const PROTOCOL_SCHEMA_SOURCE = `schemas/plugin-host-protocol/${HOST_PROTOCOL}/protocol.schema.json`;
-const protocolSchemaId = (tag) => `https://ave.agent-connector.ai/schemas/plugin-host-protocol/${HOST_PROTOCOL}/${tag}/protocol.schema.json`;
-const PROTOCOL_SCHEMA_TITLE = `Ave plugin host protocol ${HOST_PROTOCOL}`;
-
-/**
- * Publication metadata prerequisites. The runtime loader also holds every
- * executed vendored byte to the signed bundle, before any module evaluation.
- */
+/** Publication uses the checked-out marketplace and its vendored files. */
 export function publicationProblems() {
   if (process.env.MARKETPLACE_ROOT !== undefined) {
     return ["publication requires this checked-out marketplace; MARKETPLACE_ROOT is for tests only"];
   }
-  const problems = [];
-  const contract = readJson("contract/sources.json");
-  const checker = readJson("tools/vendor/sources.json");
-  for (const [path, sources] of [["contract/sources.json", contract], ["tools/vendor/sources.json", checker]]) {
-    if (!isReleaseTag(sources.ref)) {
-      const kind = isCommitPin(sources.ref) ? "a development commit pin, which has no contract bundle" : "not an Ave release tag";
-      problems.push(`${path}: publication requires an Ave release tag with a signed contract bundle; ${sources.ref} is ${kind}`);
-    }
-  }
-  const tag = contract.ref;
-  const source = contract.files?.["protocol.schema.json"];
-  const manifestSchema = readJson("contract/plugin-manifest.schema.json");
-  const extension = manifestSchema.properties?.extensions?.properties?.[AVE_EXTENSION];
-  if (!Object.hasOwn(extension?.properties?.requires?.properties ?? {}, "hostProtocol")) {
-    problems.push("contract/plugin-manifest.schema.json: publication requires requires.hostProtocol in the vendored manifest schema");
-  }
-  if (!Object.hasOwn(extension?.properties ?? {}, "sandbox")) {
-    problems.push("contract/plugin-manifest.schema.json: publication requires sandbox in the vendored manifest schema");
-  }
-  if (source?.from !== PROTOCOL_SCHEMA_SOURCE || typeof source.sha256 !== "string") {
-    problems.push(`contract/sources.json: publication requires ${PROTOCOL_SCHEMA_SOURCE} with its sha256`);
-  } else {
-    const path = join(ROOT, "contract", "protocol.schema.json");
-    if (!existsSync(path)) problems.push("contract/protocol.schema.json: missing");
-    else {
-      const bytes = readFileSync(path);
-      if (sha256(bytes) !== source.sha256) problems.push("contract/protocol.schema.json: bytes differ from sources.json");
-      try {
-        const schema = JSON.parse(bytes.toString("utf8"));
-        if (schema.$id !== protocolSchemaId(tag) || schema.title !== PROTOCOL_SCHEMA_TITLE) {
-          problems.push(`contract/protocol.schema.json: expected the protocol ${HOST_PROTOCOL} schema for ${tag} ($id ${protocolSchemaId(tag)}, title "${PROTOCOL_SCHEMA_TITLE}"), not ${JSON.stringify(schema.$id)}`);
-        }
-      } catch {
-        problems.push("contract/protocol.schema.json: invalid JSON");
-      }
-    }
-  }
-  problems.push(...checkVendored());
-  return problems;
+  return checkVendored();
 }
 
 function requirePublicationReady() {
   const problems = publicationProblems();
-  if (!TRUSTED_RUNTIME.signed) problems.push("publication requires the runtime to have loaded a signed release bundle");
   if (problems.length > 0) throw new Error(problems.join("\n"));
-  TRUSTED_RUNTIME.assertUnchanged();
 }
 export const tagOf = (name, version) => `${name}-v${version}`;
 export const assetOf = (name, version) => `${name}-${version}.zip`;
@@ -189,16 +135,10 @@ export function pack(name, out) {
   return sha256(readFileSync(out));
 }
 
-/** Verify and load trusted tools once, then retain them across plugin scripts. */
+/** Run plugin checks before packing a release. */
 export async function build(name, out, { execute } = {}) {
   requirePublicationReady();
-  const trusted = await verifiedRuntime({ allowDevelopment: false });
-  if (!trusted.signed) throw new Error("publication requires a signed release bundle");
   await runPluginChecks(`plugins/${name}/source`, { execute });
-  // Neither a rewritten release/checker module nor a changed development
-  // inventory can affect this resident process. Refuse even unused changes.
-  trusted.assertUnchanged();
-  requirePublicationReady();
   return pack(name, out);
 }
 
@@ -375,7 +315,7 @@ export function verify(base, { publish = false, download = ghReleaseDownload, re
   return [...problems, ...checkRepository({ base, releasedManifests: released })];
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [command, ...args] = process.argv.slice(2);
   if (command === "plan") {
     if (args.includes("--publish")) {

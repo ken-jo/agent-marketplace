@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "obsidian-mcp",
-  "version": "2026.10.27",
+  "version": "2026.11.6",
   "minAppVersion": "0.14.0",
   "platforms": [
     "darwin",

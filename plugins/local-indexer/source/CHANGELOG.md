@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0] - Unreleased
+
+Serve the sidebar as MCP Apps HTML with standard host context and staged question drafts. Add app-only index_wait_changes with bounded cursors for progress, warnings, documents, folders and completion. Use delegated stdio worker control and hostFetch secret leases; rebuild legacy indexes in worker-owned state. Log to stderr and close through the runtime lifecycle. Require host protocol 5 and Ave 0.14.2.
+
 ## [0.7.2] - Unreleased
 
 Removes the retired product name from the plugin. Requires Ave 0.14.0 and

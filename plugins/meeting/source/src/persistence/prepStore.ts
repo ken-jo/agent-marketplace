@@ -209,7 +209,7 @@ export function validatePrep(input: unknown): MeetingContext {
  */
 function migrateLegacyFile(
   storageDir: string,
-  logEvent?: (level: "info" | "warn" | "error", message: string, data?: unknown) => void,
+  diagnostic?: (level: "info" | "warn" | "error", message: string, data?: unknown) => void,
 ): void {
   const markerPath = join(storageDir, MIGRATION_MARKER);
   if (existsSync(markerPath)) return;
@@ -222,19 +222,19 @@ function migrateLegacyFile(
       // Symlink reject — lstatSync does not follow the link.
       const stat = lstatSync(legacyPath);
       if (!stat.isFile()) {
-        logEvent?.("warn", "meeting_prep_legacy_file_skipped_not_regular", {
+        diagnostic?.("warn", "meeting_prep_legacy_file_skipped_not_regular", {
           path: LEGACY_FILE_NAME,
         });
         // Marker NOT written — leave the path for explicit user cleanup.
         return;
       }
       renameSync(legacyPath, newPath);
-      logEvent?.("info", "meeting_prep_legacy_file_migrated", {
+      diagnostic?.("info", "meeting_prep_legacy_file_migrated", {
         from: LEGACY_FILE_NAME,
         to: FILE_NAME,
       });
     } catch (err) {
-      logEvent?.("warn", "meeting_prep_legacy_file_migration_failed", {
+      diagnostic?.("warn", "meeting_prep_legacy_file_migration_failed", {
         from: LEGACY_FILE_NAME,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -247,7 +247,7 @@ function migrateLegacyFile(
   try {
     writeFileSync(markerPath, "", "utf-8");
   } catch (err) {
-    logEvent?.("warn", "meeting_prep_migration_marker_write_failed", {
+    diagnostic?.("warn", "meeting_prep_migration_marker_write_failed", {
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -259,11 +259,11 @@ export class PrepStore {
 
   constructor(
     storageDir: string,
-    logEvent?: (level: "info" | "warn" | "error", message: string, data?: unknown) => void,
+    diagnostic?: (level: "info" | "warn" | "error", message: string, data?: unknown) => void,
   ) {
     mkdirSync(storageDir, { recursive: true });
     this.path = join(storageDir, FILE_NAME);
-    migrateLegacyFile(storageDir, logEvent);
+    migrateLegacyFile(storageDir, diagnostic);
   }
 
   /**
@@ -373,7 +373,7 @@ export class PrepStore {
       // entries dropped. Next write naturally rewrites with `preps` key.
       //
       // Deprecation: keep the `briefings` fallback at least through v0.5.x.
-      // v0.4.21 will add logEvent at fallback-hit to measure upgrade tail;
+      // v0.4.21 will add diagnostic at fallback-hit to measure upgrade tail;
       // v0.5.x may force a one-shot normalize at boot; v0.6.x removes the
       // fallback. See follow-up PR notes.
       //

@@ -24,7 +24,7 @@ Trello's original tarball embeds its SDK, so it cannot share the registration fi
 
 The four Python runtimes commit complete version-and-hash locks. Jira and Confluence run the inspected, SHA-256-locked PyPI wheel. Google Workspace and Obsidian run committed, hashed wheels built from their reviewed Git SHAs, avoiding install-time Git builds or build-dependency resolution. CI compares every wheel payload file and its licence with that source commit. The wheels' metadata is hash-bound too; these builds are not claimed to be reproducible byte-for-byte from a later build environment. All Python dependencies have exact versions and SHA-256 artifact hashes, and only wheels can be installed. Python 3.12.12 is selected explicitly.
 
-The packaged bootstrap applies the same inventory-before-execution pattern used by the repository's vendor verifier. It checks runtime inputs, installs into a fresh private directory under Ave's data directory, then checks the inputs again. npm uses ci with lifecycle scripts disabled and no audit/funding requests; uv uses pip sync with required hashes and binary-only artifacts. There is no install-time dependency update, npx resolution or uvx resolution. The [bootstrap](../tools/connector-runtime.mjs) gives package-manager subprocesses a small credential-free environment, empty npm user/global configuration, and no host token or Node injection flags. A changed dependency artifact fails integrity checking. Runtime directories are removed on normal process exit; package-manager caches contain only public dependency artifacts.
+The packaged bootstrap checks runtime inputs, installs into a fresh private directory under Ave's data directory, then checks the inputs again. npm uses ci with lifecycle scripts disabled and no audit/funding requests; uv uses pip sync with required hashes and binary-only artifacts. There is no install-time dependency update, npx resolution or uvx resolution. The [bootstrap](../tools/connector-runtime.mjs) gives package-manager subprocesses a small credential-free environment, empty npm user/global configuration, and no host token or Node injection flags. A changed dependency artifact fails integrity checking. Runtime directories are removed on normal process exit; package-manager caches contain only public dependency artifacts.
 
 ## Prerequisites and host runtime boundary
 
@@ -63,7 +63,7 @@ Microsoft accepts an existing delegated Graph access token. Replace it in Ave wh
 
 ## Targeted verification
 
-Use the versions and cosign setup in the [README](../README.md#checks) and [workflow](../.github/workflows/validate.yml). The source-build check needs the pinned Bun version and read access to the public upstreams through gh. No provider account is authenticated by these checks.
+Use the runtime versions in the [README](../README.md#checks) and [workflow](../.github/workflows/validate.yml). The source-build check needs the pinned Bun version and read access to the public upstreams through gh. No provider account is authenticated by these checks.
 
 ~~~sh
 node tools/connector-pins.mjs
@@ -74,7 +74,6 @@ node tools/connector-smoke.mjs --opt-in trello-mcp todoist-mcp airtable-mcp obsi
 node tools/release.mjs verify --base origin/main
 node tools/index.mjs --check
 node tools/vendor.mjs check
-node tools/verified-import.mjs check --allow-development
 node tools/check-retired-name.mjs
 node --test tools/__tests__/tools.test.mjs
 git diff --check

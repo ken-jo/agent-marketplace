@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "figma-context-mcp",
-  "version": "2026.10.27",
+  "version": "2026.11.6",
   "minAppVersion": "0.14.0",
   "displayName": "Figma Context MCP",
   "description": "Reads Figma layout and styles through Framelink. Image downloads and the local-write download tool are disabled by default and require an explicit local-write opt-in. Supply a Figma personal token through Ave's secret prompt. Telemetry is off. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",

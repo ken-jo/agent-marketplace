@@ -27,7 +27,7 @@ export type CallLlmFn = (
   options?: { maxTokens?: number; systemPrompt?: string; signal?: AbortSignal },
 ) => Promise<string>;
 
-export type LogEventFn = (
+export type DiagnosticFn = (
   level: "info" | "warn" | "error",
   message: string,
   data?: unknown,
@@ -38,7 +38,7 @@ export interface HostLlmSummaryProviderOptions {
   /** Cap for intermediate-summary calls (kept short by design — UI hint
    *  card). Final-summary token cap is derived from `lengthTier`. */
   maxTokens?: number;
-  logEvent?: LogEventFn;
+  diagnostic?: DiagnosticFn;
   /** Default verbosity tier for `summarizeFinal`. Per-call `opts.lengthTier`
    *  overrides this. Default "medium". */
   defaultLengthTier?: SummaryLengthTier;
@@ -71,7 +71,7 @@ function truncateRawSummary(raw: unknown): string {
 export class HostLlmSummaryProvider implements SummaryProvider {
   private readonly callLlm: CallLlmFn;
   private readonly intermediateMaxTokens: number;
-  private readonly logEvent?: LogEventFn;
+  private readonly diagnostic?: DiagnosticFn;
   private readonly defaultLengthTier: SummaryLengthTier;
   private readonly customFinalSystem?: string | (() => string | undefined);
   private readonly customIntermediateSystem?: string | (() => string | undefined);
@@ -82,7 +82,7 @@ export class HostLlmSummaryProvider implements SummaryProvider {
     // modest (default 600) so progressive in-meeting summaries stay cheap
     // and fast regardless of the final-summary length tier.
     this.intermediateMaxTokens = options.maxTokens ?? 600;
-    this.logEvent = options.logEvent;
+    this.diagnostic = options.diagnostic;
     this.defaultLengthTier = options.defaultLengthTier ?? "medium";
     this.customFinalSystem = options.customFinalSystem;
     this.customIntermediateSystem = options.customIntermediateSystem;
@@ -115,7 +115,7 @@ export class HostLlmSummaryProvider implements SummaryProvider {
         createdAt: new Date().toISOString(),
       };
     }
-    this.logEvent?.("warn", "summary parse failed (intermediate)", {
+    this.diagnostic?.("warn", "meeting_summary_parse_failed.intermediate", {
       length: typeof result === "string" ? result.length : 0,
     });
     return {
@@ -172,7 +172,7 @@ export class HostLlmSummaryProvider implements SummaryProvider {
         lengthTier: tier,
       };
     }
-    this.logEvent?.("warn", "summary parse failed (final)", {
+    this.diagnostic?.("warn", "meeting_summary_parse_failed.final", {
       length: typeof result === "string" ? result.length : 0,
     });
     return {

@@ -149,7 +149,8 @@
                   "id",
                   "slot",
                   "kind",
-                  "title"
+                  "title",
+                  "resourceUri"
                 ],
                 "properties": {
                   "id": {
@@ -163,9 +164,7 @@
                   },
                   "kind": {
                     "enum": [
-                      "embedded-module",
-                      "embedded-page",
-                      "info-card"
+                      "mcp-app"
                     ]
                   },
                   "displayName": {
@@ -177,17 +176,16 @@
                   "description": {
                     "type": "string"
                   },
-                  "defaults": {
-                    "type": "object"
+                  "locales": {
+                    "$ref": "#/definitions/pluginUiExtensionLocales"
                   },
-                  "entry": {
-                    "type": "string"
-                  },
-                  "exportName": {
-                    "type": "string"
-                  },
-                  "page": {
-                    "type": "string"
+                  "resourceUri": {
+                    "type": "string",
+                    "pattern": "^ui://",
+                    "maxLength": 512,
+                    "not": {
+                      "pattern": "[\\r\\n]"
+                    }
                   }
                 }
               },
@@ -195,7 +193,7 @@
             },
             "uiResources": {
               "type": "array",
-              "description": "MCP App ui:// resources this plugin serves (distinct from `ui[]`, which declares host-mounted React sidebar panels). DECLARED POLICY, SERVED CONTENT: each entry declares a `ui://<pluginId>/<path>` uri plus that resource's OWN _meta.ui security policy (csp/permissions); the card HTML itself is served by the plugin at read time (`RuntimePlugin.readUiResource(uri)`), exactly as an external MCP server answers resources/read with bytes — the host never reads a plugin-declared disk path. When a tool result carries `_meta.ui.resourceUri` matching one of these uris, the loopback host asks the plugin for the HTML and renders it through the same sandbox-proxy + main-computed CSP path as an external MCP server's ui:// resource. Security (enforced fail-closed at serve time): the uri authority MUST equal the plugin id (own-namespace-only), the uri MUST be declared here (declared-only — this is what binds served content to a reviewed policy), and main COMPUTES the CSP header AND the frame's Permissions-Policy `allow` attribute from csp/permissions — the plugin never supplies a policy header string or an allow-list. csp/permissions stay in the manifest (not on the hook's return) so they are statically reviewable and covered by manifestSha256. See mcpUiResourcePermissions for the accepted permission set (host-honorable, proven end-to-end).",
+              "description": "MCP App ui:// resources this plugin serves as interactive cards and resources placed in host panels by `ui[]`. DECLARED POLICY, SERVED CONTENT: each entry declares a `ui://<pluginId>/<path>` uri plus that resource's OWN _meta.ui security policy (csp/permissions); the card HTML itself is served by the plugin at read time (`RuntimePlugin.readUiResource(uri)`), exactly as an external MCP server answers resources/read with bytes — the host never reads a plugin-declared disk path. When a tool result carries `_meta.ui.resourceUri` matching one of these uris, the loopback host asks the plugin for the HTML and renders it through the same sandbox-proxy + main-computed CSP path as an external MCP server's ui:// resource. Security (enforced fail-closed at serve time): the uri authority MUST equal the plugin id (own-namespace-only), the uri MUST be declared here (declared-only — this is what binds served content to a reviewed policy), and main COMPUTES the CSP header AND the frame's Permissions-Policy `allow` attribute from csp/permissions — the plugin never supplies a policy header string or an allow-list. csp/permissions stay in the manifest (not on the hook's return) so they are statically reviewable and covered by manifestSha256. See mcpUiResourcePermissions for the accepted permission set (host-honorable, proven end-to-end).",
               "maxItems": 64,
               "items": {
                 "type": "object",
@@ -264,7 +262,7 @@
             },
             "capabilities": {
               "type": "array",
-              "description": "Free-form capability declarations (format-validated, NOT a closed enum). The host ENFORCES only two at runtime — 'external-auth-consumer' and 'host:overlay' (see src/plugins/capabilities.ts KNOWN_CAPABILITY_IDS). Every other string is a harmless self-declaration (strings on already-installed manifests that the host no longer reads). Kept free-form — rather than an enum — so an installed manifest declaring a removed capability still validates and loads instead of being rejected at schema validation. Emit authorization for event-source namespaces (email/calendar/meeting/index) is inferred from emittedEvents, not from a capability here. The pattern is format hygiene only (blocks uppercase/whitespace/garbage), not a vocabulary.",
+              "description": "Free-form capability declarations (format-validated, NOT a closed enum). The host ENFORCES only two at runtime — 'external-auth-consumer' and 'host:overlay' (see src/plugins/capabilities.ts KNOWN_CAPABILITY_IDS). Every other string is a harmless self-declaration (strings on already-installed manifests that the host no longer reads). Kept free-form — rather than an enum — so an installed manifest declaring a removed capability still validates and loads instead of being rejected at schema validation. The pattern is format hygiene only (blocks uppercase/whitespace/garbage), not a vocabulary.",
               "items": {
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9:-]*$",
@@ -356,72 +354,6 @@
                 }
               }
             },
-            "eventSubscriptions": {
-              "type": "array",
-              "items": {
-                "oneOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "required": [
-                      "type"
-                    ],
-                    "additionalProperties": false,
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "hint": {
-                        "type": "object",
-                        "required": [
-                          "category",
-                          "priority",
-                          "title"
-                        ],
-                        "additionalProperties": false,
-                        "properties": {
-                          "category": {
-                            "type": "string",
-                            "enum": [
-                              "task",
-                              "note",
-                              "session",
-                              "meeting",
-                              "email",
-                              "calendar",
-                              "system"
-                            ]
-                          },
-                          "priority": {
-                            "type": "string",
-                            "enum": [
-                              "high",
-                              "medium",
-                              "low"
-                            ]
-                          },
-                          "title": {
-                            "type": "string",
-                            "minLength": 1
-                          }
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            "emittedEvents": {
-              "type": "array",
-              "description": "Event types this plugin emits.",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
             "hostSecrets": {
               "type": "object",
               "description": "Explicit allowlist of host-managed LLM secrets the plugin reads via hostApi.getSecret. Default deny when unset.",
@@ -463,6 +395,9 @@
                   "type": "string",
                   "description": "Human-readable label for the auth surface, shown next to the badge (e.g. 'Microsoft 계정', 'Portal'). Defaults to the plugin's `name` if omitted.",
                   "maxLength": 64
+                },
+                "locales": {
+                  "$ref": "#/definitions/pluginAuthLocales"
                 },
                 "statusTool": {
                   "type": "string",
@@ -532,50 +467,6 @@
                         }
                       }
                     ]
-                  }
-                }
-              }
-            },
-            "workProposals": {
-              "type": "object",
-              "description": "Recommended-work channel declaration. Declaration IS authorization (no capability string): a plugin may post a proposal only in a kind declared here, and may hold at most ONE OPEN PROPOSAL PER DECLARED KIND — the declared list doubles as the nag ceiling. Absent or empty = the plugin may post nothing. A malformed block grants nothing rather than the entries that happened to parse.",
-              "additionalProperties": false,
-              "required": [
-                "kinds"
-              ],
-              "properties": {
-                "reasoning": {
-                  "type": "string",
-                  "description": "Human-readable justification surfaced to the user.",
-                  "maxLength": 400
-                },
-                "kinds": {
-                  "type": "array",
-                  "minItems": 1,
-                  "maxItems": 4,
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "label"
-                    ],
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "description": "Slot id, unique within the plugin. Namespaced by the host as <pluginId>:<kind>.",
-                        "pattern": "^[a-z][a-z0-9-]{0,31}$",
-                        "not": {
-                          "pattern": "[\\r\\n]"
-                        }
-                      },
-                      "label": {
-                        "type": "string",
-                        "description": "User-facing name of the slot, shown in the install disclosure and on the card.",
-                        "minLength": 1,
-                        "maxLength": 60
-                      }
-                    }
                   }
                 }
               }
@@ -754,31 +645,9 @@
                       "pluginId": {
                         "type": "string",
                         "minLength": 1
-                      },
-                      "events": {
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "uniqueItems": true
                       }
                     }
                   }
-                },
-                "agentApprovalScopes": {
-                  "type": "array",
-                  "description": "§8 P0 security — approval action scopes this plugin is permitted to issue and respond to via hostApi.agentApproval. Omitted or empty array means no approval scopes allowed (host enforces empty-list semantics). Known values: 'agent_file_share', 'agent_task_delegate', 'agent_external_api_call'.",
-                  "default": [],
-                  "items": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "^[a-z][a-z0-9_]*$",
-                    "not": {
-                      "pattern": "[\\r\\n]"
-                    }
-                  },
-                  "uniqueItems": true
                 }
               }
             },
@@ -894,6 +763,9 @@
                       },
                       "description": {
                         "type": "string"
+                      },
+                      "locales": {
+                        "$ref": "#/definitions/pluginConfigPropertyLocales"
                       },
                       "default": {
                         "description": "Default value for the form field. Outer JSON byte-size cap is enforced server-side (see marketplace publisher.py); the schema bounds object/array primitives so a pathological default can't blow up the catalog.",
@@ -1228,12 +1100,9 @@
                 "routineTemplates": false,
                 "capabilities": false,
                 "networkAccess": false,
-                "eventSubscriptions": false,
-                "emittedEvents": false,
                 "hostSecrets": false,
                 "startupTimeoutMs": false,
                 "auth": false,
-                "workProposals": false,
                 "alerts": false,
                 "configInherits": false,
                 "dependencies": false,
@@ -1712,7 +1581,7 @@
                 }
               }
             },
-            "ave/pathFields": {
+            "ai.agent-connector.ave/pathFields": {
               "type": "array",
               "uniqueItems": true,
               "items": {
@@ -1724,8 +1593,17 @@
                 }
               }
             },
-            "ave/operationPolicy": {
+            "ai.agent-connector.ave/operationPolicy": {
               "$ref": "#/definitions/pluginToolOperationPolicy"
+            }
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "readOnlyHint": {
+              "type": "boolean"
             }
           }
         }
@@ -1771,7 +1649,7 @@
       }
     },
     "mcpUiResourcePermissions": {
-      "$comment": "MCP Apps spec `McpUiResourcePermissions`, restricted to what this host can DEMONSTRABLY honor. Main derives the inner iframe's Permissions-Policy `allow` attribute AND the Electron session grant from this; the plugin never supplies either. An ABSENT key is denied. The inner frame carries `allow-same-origin` (spec origin requirement, apps.mdx:474-475), so it inherits the per-server proxy origin and a delegated feature can be honored. SOT for the accepted set: src/shared/mcp-app-permissions.ts MCP_APP_PERMISSION_FEATURES, proven end-to-end in test/e2e/ui/mcp-app-permissions.spec.ts. The spec's `clipboardWrite` is deliberately NOT accepted — measured, a script-initiated clipboard write is denied even when delegated — so declaring it FAILS validation loudly rather than silently doing nothing.",
+      "$comment": "MCP Apps resource permissions honored by the isolated app frame. Main derives iframe delegation and session grants from this declaration. Missing features are denied; clipboard writing requires a user action and clipboard reading is unsupported. The supported set is src/shared/mcp-app-permissions.ts, verified by test/e2e/ui/mcp-app-permissions.spec.ts.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -1788,6 +1666,11 @@
         "geolocation": {
           "type": "object",
           "description": "Request the Geolocation API for this card's frame. Absent means denied.",
+          "additionalProperties": false
+        },
+        "clipboardWrite": {
+          "type": "object",
+          "description": "Request clipboard writing for this app frame after a user action. Clipboard reading remains denied.",
           "additionalProperties": false
         }
       }
@@ -2191,6 +2074,111 @@
           "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
           "not": {
             "pattern": "[\\r\\n]"
+          }
+        }
+      }
+    },
+    "pluginLocalizedLabel": {
+      "type": "string",
+      "description": "One language's short label. Not blank, single line.",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "\\S",
+      "not": {
+        "pattern": "[\\r\\n]"
+      }
+    },
+    "pluginLocalizedDescription": {
+      "type": "string",
+      "description": "One language's helper text. Not blank; may span lines.",
+      "minLength": 1,
+      "maxLength": 2000,
+      "not": {
+        "pattern": "^\\s*$"
+      }
+    },
+    "pluginUiExtensionLocales": {
+      "type": "object",
+      "description": "Per-language overrides of this entry's displayName/title/description, keyed by a normalized lower-case BCP-47 tag. The host resolves against its UI language: the exact tag, then its base language, then the entry's own fields, then the plugin id. The entry's own fields stay the baseline for every language the map does not name. Requires Ave 0.14.1 or later: earlier hosts reject the key, so a plugin declaring it sets requires.minAppVersion to 0.14.1 or later.",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        "not": {
+          "pattern": "[\\r\\n]"
+        },
+        "maxLength": 35
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "displayName": {
+            "$ref": "#/definitions/pluginLocalizedLabel"
+          },
+          "title": {
+            "$ref": "#/definitions/pluginLocalizedLabel"
+          },
+          "description": {
+            "$ref": "#/definitions/pluginLocalizedDescription"
+          }
+        }
+      }
+    },
+    "pluginConfigPropertyLocales": {
+      "type": "object",
+      "description": "Per-language overrides of this property's title/description, keyed by a normalized lower-case BCP-47 tag; resolved exact tag, then base language, then the property's own fields, then the config key. Requires Ave 0.14.1 or later (requires.minAppVersion 0.14.1 or later).",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        "not": {
+          "pattern": "[\\r\\n]"
+        },
+        "maxLength": 35
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "title": {
+            "$ref": "#/definitions/pluginLocalizedLabel"
+          },
+          "description": {
+            "$ref": "#/definitions/pluginLocalizedDescription"
+          }
+        }
+      }
+    },
+    "pluginAuthLocales": {
+      "type": "object",
+      "description": "Per-language overrides of auth.label, keyed by a normalized lower-case BCP-47 tag; resolved exact tag, then base language, then the own label, then the plugin name. Requires Ave 0.14.1 or later (requires.minAppVersion 0.14.1 or later).",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+        "not": {
+          "pattern": "[\\r\\n]"
+        },
+        "maxLength": 35
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "\\S",
+            "not": {
+              "pattern": "[\\r\\n]"
+            }
           }
         }
       }

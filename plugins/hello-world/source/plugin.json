@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "hello-world",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Hello World demo extension for checking marketplace install and dynamic UI load.",
   "extensions": {
     "ai.agent-connector.ave": {
@@ -9,8 +9,8 @@
       "capabilities": [],
       "entry": "dist/hostPlugin.js",
       "requires": {
-        "hostProtocol": "3",
-        "minAppVersion": "0.14.0"
+        "hostProtocol": "5",
+        "minAppVersion": "0.14.2"
       },
       "tools": [
         {
@@ -31,6 +31,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         }
       ],
@@ -39,12 +42,16 @@
         {
           "id": "hello-control",
           "slot": "sidebar",
-          "kind": "embedded-module",
+          "kind": "mcp-app",
           "displayName": "Hello",
           "title": "Hello World",
           "description": "동적 익스텐션 UI 로드 테스트 샘플 (install/uninstall로 탭이 나타났다 사라지는 것을 확인).",
-          "entry": "dist/ui/hello-control.js",
-          "exportName": "default"
+          "resourceUri": "ui://hello-world/control"
+        }
+      ],
+      "uiResources": [
+        {
+          "uri": "ui://hello-world/control"
         }
       ]
     }

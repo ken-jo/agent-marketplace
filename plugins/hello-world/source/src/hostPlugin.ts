@@ -1,8 +1,9 @@
 /**
  * Hello World — the smallest complete Ave plugin: one tool handler and one
- * sidebar panel (`src/ui/hello-control.ts`) that calls it. It exists to check
- * install, uninstall and the renderer's dynamic UI load end to end.
+ * served MCP Apps sidebar that calls it.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { PluginToolHandler, RuntimePlugin, RuntimePluginFactory } from "@ave/plugin-contract";
 
 export const helloWorld: PluginToolHandler = async (input) => {
@@ -12,7 +13,11 @@ export const helloWorld: PluginToolHandler = async (input) => {
   return { content: [{ type: "text", text: `Hello, ${name}!` }] };
 };
 
-const createPlugin: RuntimePluginFactory = async (): Promise<RuntimePlugin> => ({
+const createPlugin: RuntimePluginFactory = async (context): Promise<RuntimePlugin> => ({
+  readUiResource(uri) {
+    if (uri !== "ui://hello-world/control") throw new Error(`Unknown UI resource: ${uri}`);
+    return readFileSync(join(context.pluginRoot, "dist/ui/hello-control.html"), "utf8");
+  },
   handlers: { hello_world: helloWorld },
 });
 

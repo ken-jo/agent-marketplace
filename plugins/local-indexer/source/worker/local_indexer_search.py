@@ -100,16 +100,13 @@ class SearchService:
         embedding_dimensions: Optional[int] = None,
         embedding_endpoint: str = "",
         embedding_api_version: str = "",
-        egress_broker_url: str = "",
-        egress_broker_uds: str = "",
+        egress_relay: Optional[Any] = None,
     ) -> None:
         self.sqlite_path = sqlite_path
-        # Egress broker (P3 ⑬): query-time vector search routes its embedding
-        # call through the broker too, holding only the session token.
-        self._egress_broker_base = (egress_broker_url or "").rstrip("/")
-        # The socket the broker actually listens on. The base above is only an
-        # authority the provider SDKs insist on parsing; nothing dials it.
-        self._egress_broker_uds = egress_broker_uds or ""
+        # Plugin-mediated egress: query-time vector search relays its embedding
+        # call to the plugin too, holding no key.
+        self._egress_relay = egress_relay
+        self._embedding_egress_enabled = False
         self._tokenizer = tokenizer
         self._embedding_client = embedding_client
         self._vector_store = vector_store
@@ -140,12 +137,13 @@ class SearchService:
             conn.close()
 
     @property
-    def egress_brokered(self) -> bool:
-        return bool(self._egress_broker_base)
+    def egress_relayed(self) -> bool:
+        return self._egress_relay is not None
 
-    @property
-    def egress_embedding_url(self) -> str:
-        return f"{self._egress_broker_base}/egress/embedding" if self._egress_broker_base else ""
+    def set_embedding_egress(self, enabled: bool) -> None:
+        """Turn relayed query embedding on or off (see ``LocalIndexer``)."""
+        self._embedding_egress_enabled = bool(enabled)
+        self._embedding_client = None
 
     # ------------------------------------------------------------------
     # Runtime key lifecycle
@@ -460,10 +458,9 @@ class SearchService:
     def _get_embedding_client(self) -> Any:
         if self._embedding_client is not None:
             return self._embedding_client
-        if self.egress_brokered:
-            # Broker mode: the credential is the per-session token (in
-            # _openai_api_key, pushed via /indexer/set_egress_token).
-            if not self._openai_api_key:
+        if self.egress_relayed:
+            # Relayed: the plugin holds the key; off until it says one exists.
+            if not self._embedding_egress_enabled:
                 return None
         elif self.embedding_provider == "openai" and not self._openai_api_key:
             return None
@@ -477,14 +474,12 @@ class SearchService:
             client = create_embedding_client(
                 provider=self.embedding_provider,
                 model=self.embedding_model,
-                api_key=None if self.egress_brokered else self._openai_api_key,
-                endpoint=None if self.egress_brokered else (self.embedding_endpoint or None),
+                api_key=None if self.egress_relayed else self._openai_api_key,
+                endpoint=None if self.egress_relayed else (self.embedding_endpoint or None),
                 api_version=self.embedding_api_version or None,
                 dimensions=self.embedding_dimensions,
                 target_rpm=400,
-                egress_broker_url=self.egress_embedding_url or None,
-                egress_broker_uds=self._egress_broker_uds or None,
-                egress_token=self._openai_api_key if self.egress_brokered else None,
+                egress_relay=self._egress_relay,
             )
             self._embedding_client = client
             return client

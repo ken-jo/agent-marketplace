@@ -76,6 +76,36 @@ class Chunk:
     content_ko: str = ""
 
 
+def _caused_by_os_error(exc: BaseException) -> bool:
+    seen = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, OSError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def parse_failure_kind(path: str, exc: BaseException) -> str:
+    """Why parsing ``path`` raised ``exc``: "io" or "unparseable".
+
+    "io" when the error is, or was caused by, an OSError, or when the file's
+    bytes cannot be read in full now: parsers wrap read failures in their own
+    errors, so a parser error alone does not prove the file is corrupt.
+    "unparseable" only when every byte reads and the parser still failed.
+    """
+    if _caused_by_os_error(exc):
+        return "io"
+    try:
+        with open(path, "rb") as handle:
+            while handle.read(1 << 20):
+                pass
+    except OSError:
+        return "io"
+    return "unparseable"
+
+
 @dataclass
 class IndexResult:
     doc_id: str
@@ -86,6 +116,18 @@ class IndexResult:
     page_count: Optional[int] = None
     line_count: Optional[int] = None
     errors: List[str] = field(default_factory=list)
+    # For status == "failed": True when the same file may index on a later
+    # try (the caption provider or relay was unavailable, rate limited, timed
+    # out, or refused egress for a runtime reason). False is the worker's
+    # verdict on the file itself: too large, unparseable, missing config.
+    retryable: bool = False
+    # For status == "failed": what failed. "unparseable" only when the file's
+    # bytes read in full and the format parser rejected them (a corrupt PDF, a
+    # truncated DOCX): the one failure that says the file itself cannot be
+    # indexed. "io" is a read failure (permissions, a sharing violation, a
+    # network volume), "caption" a caption or provider failure, "too_large"
+    # the size cap. None for an indexed result.
+    failure_kind: Optional[str] = None
     # True 면 vector(임베딩) 까지 성공적으로 생성. False 면 BM25 / chunk 까지는
     # 가능했지만 임베딩이 생략됐다는 뜻 (caption rejected, embedding client
     # unavailable, network 실패 등). 플러그인은 이 값이 False 면 사용자
@@ -125,11 +167,11 @@ class LocalIndexer:
         # optional base URL override.
         embedding_endpoint: str = "",
         embedding_api_version: str = "",
-        # Host-mediated egress broker base URL (P3 ⑬). When set, all provider
-        # egress (embeddings + captioning) is routed through the broker and the
-        # worker holds only the per-session token, never the provider key.
-        egress_broker_url: str = "",
-        egress_broker_uds: str = "",
+        # Plugin-mediated egress (``worker/stdio_egress.EgressRelay``). When
+        # set, all provider egress (embeddings + captioning) is relayed to the
+        # plugin over the worker control channel and the worker never holds a
+        # provider key or names an upstream.
+        egress_relay: Optional[Any] = None,
         target_rpm: int = 400,
         target_tokens: int = _DEFAULT_TARGET_TOKENS,
         overlap_tokens: int = _DEFAULT_OVERLAP_TOKENS,
@@ -157,12 +199,11 @@ class LocalIndexer:
         self.embedding_dimensions: Optional[int] = embedding_dimensions
         self.embedding_endpoint = embedding_endpoint or ""
         self.embedding_api_version = embedding_api_version or ""
-        # Egress broker (P3 ⑬). The two channel URLs are derived from the single
-        # base so the worker never needs the real provider endpoints.
-        self._egress_broker_base = (egress_broker_url or "").rstrip("/")
-        # The socket the broker actually listens on. The base above is only an
-        # authority the provider SDKs insist on parsing; nothing dials it.
-        self._egress_broker_uds = egress_broker_uds or ""
+        self._egress_relay = egress_relay
+        # Relayed embedding is off until the plugin says a credential exists
+        # (``set_embedding_egress``); until then indexing is BM25-only, which
+        # is what it was when no key had been pushed.
+        self._embedding_egress_enabled = False
         self.target_tokens = target_tokens
         self.overlap_tokens = overlap_tokens
         self.target_rpm = target_rpm
@@ -198,19 +239,22 @@ class LocalIndexer:
         self._init_schema()
 
     # ------------------------------------------------------------------
-    # Egress broker channel URLs (P3 ⑬)
+    # Plugin-mediated egress
     # ------------------------------------------------------------------
     @property
-    def egress_brokered(self) -> bool:
-        return bool(self._egress_broker_base)
+    def egress_relayed(self) -> bool:
+        return self._egress_relay is not None
 
-    @property
-    def egress_embedding_url(self) -> str:
-        return f"{self._egress_broker_base}/egress/embedding" if self._egress_broker_base else ""
+    def set_embedding_egress(self, enabled: bool) -> None:
+        """Turn relayed embedding on or off (the plugin knows whether a key exists).
 
-    @property
-    def egress_caption_url(self) -> str:
-        return f"{self._egress_broker_base}/egress/caption" if self._egress_broker_base else ""
+        The worker holds no credential: whether a provider key is available is
+        decided by the plugin per request. This flag only spares the plugin a
+        refused request for every chunk when it already said there is no key.
+        Resets the cached client so the next ``index_file`` rebuilds it.
+        """
+        self._embedding_egress_enabled = bool(enabled)
+        self._embedding_client = None
 
     # ------------------------------------------------------------------
     # Schema / connection
@@ -330,6 +374,7 @@ class LocalIndexer:
                     chunk_count=0,
                     status="failed",
                     errors=[reason],
+                    failure_kind="too_large",
                 )
 
         _info(log, "indexer.file.start", doc_id=doc_id, path=abs_path, type=doc_type)
@@ -355,10 +400,28 @@ class LocalIndexer:
                 chunk_count=0,
                 status="failed",
                 errors=[str(exc)],
+                retryable=bool(getattr(exc, "retryable", False)),
+                failure_kind="caption",
             )
-        except Exception as exc:  # pragma: no cover - parser runtime error
+        except Exception as exc:
+            # A failed result, not a raised error (which the plugin reads as a
+            # worker fault). Whether it is a verdict on the file depends on
+            # why: a read failure (EACCES, a Windows sharing violation, EIO on
+            # a network volume) may pass, so only a parser rejection of bytes
+            # that read in full is "unparseable".
             self._mark_failed(doc_id, abs_path, doc_name, doc_type, mtime_ms)
-            raise RuntimeError(f"Layer A parse failed: {exc}") from exc
+            kind = parse_failure_kind(abs_path, exc)
+            _info(log, "indexer.file.parse_failed", doc_id=doc_id, path=abs_path, kind=kind, error=str(exc))
+            return IndexResult(
+                doc_id=doc_id,
+                doc_name=doc_name,
+                doc_type=doc_type,
+                chunk_count=0,
+                status="failed",
+                errors=[f"Layer A parse failed: {exc}"],
+                retryable=kind == "io",
+                failure_kind=kind,
+            )
 
         # 빈 doc 은 에러 아님 — 캡션 모델이 description 못 만들었거나 (정상
         # 응답으로 빈 문자열), 텍스트 추출 결과가 비었어도 doc 자체는 등록한다.
@@ -600,6 +663,26 @@ class LocalIndexer:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_documents_page(self, after: Optional[str], limit: int) -> List[Dict[str, Any]]:
+        """One page of documents in ``doc_id`` order, after the cursor ``after``.
+
+        Keyset paging, not offset: a document indexed or removed between two
+        pages neither shifts the rest nor repeats one.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT doc_id, path, doc_name, doc_type, page_count, line_count, "
+                "       mtime_ms, indexed_at, status, content_state "
+                "FROM documents WHERE doc_id > ? ORDER BY doc_id LIMIT ?",
+                (after or "", int(limit)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def count_documents(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS n FROM documents").fetchone()
+        return int(row["n"])
+
     def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(
@@ -769,7 +852,7 @@ class LocalIndexer:
     ) -> None:
         """Update image-embedding settings without restarting the worker.
 
-        Called from the worker HTTP endpoint when the host UI toggle
+        Called from the worker control handler when the host UI toggle
         flips. The next ``index_file`` call observes the new state, so
         re-indexing existing docs with the toggle on (re-scan) brings
         their image captions into the index without process churn.
@@ -783,12 +866,9 @@ class LocalIndexer:
         ``model=""`` clears the previous provider's model instead of
         carrying it across.
 
-        ``api_key`` is the egress session token the host mints for the
-        caption channel (in broker mode the worker never holds a provider
-        key). ``""`` keeps the current token: the host omits it on
-        toggle-only pushes, and a credential is set, rotated, and cleared
-        through ``/indexer/set_egress_token`` — pushing ``""`` here is
-        never a clear.
+        ``api_key`` is used only on the direct (eval/test) path; relayed, the
+        plugin supplies the caption credential per request and pushes none.
+        ``""`` keeps the current key.
         """
         if provider not in ("openai", "azure-openai-chat", "azure-openai-responses"):
             raise ValueError(f"unknown caption provider: {provider!r}")
@@ -938,11 +1018,11 @@ class LocalIndexer:
                 f"image_captioner 모듈 import 실패: {exc}"
             ) from exc
 
-        # Path validation: the HTTP `/indexer/caption_image` endpoint applies
+        # Path validation: the `indexer_caption_image` method applies
         # `_validate_file_path_within_roots`, but `_caption_one` is also called
         # from the in-process `index_file` path for extracted images and
         # standalone image docs. Re-validate here so a path that bypassed the
-        # HTTP gate (e.g. a corrupt extractor output pointing outside the
+        # method's check (e.g. a corrupt extractor output pointing outside the
         # workspace) can never reach Pillow / the OpenAI uploader.
         try:
             from local_indexer_worker import _validate_file_path_within_roots  # type: ignore
@@ -957,8 +1037,12 @@ class LocalIndexer:
             )
         except Exception as exc:
             _info(log, "indexer.caption.rejected_path", path=image_path, error=str(exc))
+            # Outside the roots is runtime state (the host pushes the roots),
+            # so a later try after a roots sync may pass.
+            outside_roots = type(exc).__name__ == "PathNotAllowed"
             raise CaptionError(
-                f"이미지 경로가 워커 allowed_roots 밖입니다: {exc}"
+                f"이미지 경로가 워커 allowed_roots 밖입니다: {exc}",
+                retryable=outside_roots,
             ) from exc
 
         # The host pushes the api_key matching the active provider via
@@ -970,15 +1054,11 @@ class LocalIndexer:
             self._image_caption_api_key or self._openai_api_key or None
         )
         caption_endpoint = self._image_caption_endpoint or None
-        egress_token = None
-        if self.egress_brokered:
-            # Route captioning through the broker (P3 ⑬): the credential becomes
-            # the egress token (carried as x-ave-egress-token), the endpoint
-            # becomes the broker caption channel, and the real provider auth is
-            # injected host-side. The worker never holds the caption key.
-            egress_token = provider_api_key
+        if self.egress_relayed:
+            # Relayed: the plugin resolves the caption upstream and credential
+            # per request. The worker holds neither.
             provider_api_key = None
-            caption_endpoint = self.egress_caption_url
+            caption_endpoint = None
 
         try:
             result = caption_image(
@@ -988,8 +1068,7 @@ class LocalIndexer:
                 api_key=provider_api_key,
                 endpoint=caption_endpoint,
                 api_version=self._image_caption_api_version or None,
-                egress_token=egress_token,
-                egress_uds=self._egress_broker_uds or None,
+                egress_relay=self._egress_relay,
             )
         except CaptionError as exc:
             _info(log, "indexer.caption.failed", path=safe_path, error=str(exc))
@@ -1798,12 +1877,10 @@ class LocalIndexer:
         """
         if self._embedding_client is not None:
             return self._embedding_client
-        if self.egress_brokered:
-            # Broker mode: the credential is the per-session token (held in
-            # _openai_api_key, pushed via /indexer/set_egress_token). Without it
-            # the worker cannot authenticate to the broker yet → BM25-only until
-            # the host pushes it. The real key/endpoint live host-side only.
-            if not self._openai_api_key:
+        if self.egress_relayed:
+            # Relayed: the plugin holds the key and endpoint. Until it says a
+            # key exists (set_embedding_egress), indexing stays BM25-only.
+            if not self._embedding_egress_enabled:
                 return None
         # OpenAI 시 key 필수
         elif self.embedding_provider == "openai" and not self._openai_api_key:
@@ -1819,14 +1896,12 @@ class LocalIndexer:
             client = create_embedding_client(
                 provider=self.embedding_provider,
                 model=self.embedding_model,
-                api_key=None if self.egress_brokered else self._openai_api_key,
-                endpoint=None if self.egress_brokered else (self.embedding_endpoint or None),
+                api_key=None if self.egress_relayed else self._openai_api_key,
+                endpoint=None if self.egress_relayed else (self.embedding_endpoint or None),
                 api_version=self.embedding_api_version or None,
                 dimensions=self.embedding_dimensions,
                 target_rpm=self.target_rpm,
-                egress_broker_url=self.egress_embedding_url or None,
-                egress_broker_uds=self._egress_broker_uds or None,
-                egress_token=self._openai_api_key if self.egress_brokered else None,
+                egress_relay=self._egress_relay,
             )
             # IMPORTANT: client construction is cheap; the first network call
             # happens lazily on embed_batch. A failure at that point is handled
