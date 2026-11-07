@@ -476,7 +476,7 @@ export class FolderAutoIndexer {
               await this.client.removeDocument(docId);
             } catch (err) {
               console.warn(
-                `[FolderAutoIndexer] scanOnce prune removeDocument failed for ${filePath}:`,
+                "[FolderAutoIndexer] scanOnce prune removeDocument failed:",
                 err,
               );
               continue;
@@ -634,7 +634,7 @@ export class FolderAutoIndexer {
 
   private async handleUnlinkEvent(filePath: string): Promise<void> {
     if (!(await this.isWithinConfiguredRoots(filePath))) {
-      console.warn(`[FolderAutoIndexer] unlink event outside configured roots dropped: ${filePath}`);
+      console.warn("[FolderAutoIndexer] unlink event outside configured roots dropped");
       return;
     }
     const docId = this.docIdByPath.get(filePath);
@@ -643,7 +643,7 @@ export class FolderAutoIndexer {
       try {
         await this.client.removeDocument(docId);
       } catch (err) {
-        console.warn(`[FolderAutoIndexer] removeDocument failed for ${filePath}:`, err);
+        console.warn("[FolderAutoIndexer] removeDocument failed:", err);
         return;
       }
     }
@@ -663,7 +663,7 @@ export class FolderAutoIndexer {
   private async handleFileEvent(filePath: string): Promise<void> {
     if (!this.isSupportedFile(filePath)) return;
     if (!(await this.isWithinConfiguredRoots(filePath))) {
-      console.warn(`[FolderAutoIndexer] file event outside configured roots dropped: ${filePath}`);
+      console.warn("[FolderAutoIndexer] file event outside configured roots dropped");
       return;
     }
 
@@ -775,7 +775,7 @@ export class FolderAutoIndexer {
       }
       return files;
     } catch (err) {
-      console.warn(`[FolderAutoIndexer] walkDir: readdir failed for ${dirPath}:`, err);
+      console.warn("[FolderAutoIndexer] walkDir: readdir failed:", (err as NodeJS.ErrnoException).code ?? (err as Error).name);
       unreadable.push(dirPath);
       return [];
     }

@@ -495,6 +495,14 @@ function getBlockedIndexPathMessage(
  * host-supplied `userHome`, pass absolute paths through, and refuse forms with
  * no meaningful base here: relative paths and `~user`.
  */
+/** A refused folder argument. `reason` is path-free so diagnostics can log it. */
+export class FolderArgumentError extends Error {
+  constructor(message: string, readonly reason: string) {
+    super(message);
+    this.name = "FolderArgumentError";
+  }
+}
+
 export function resolveFolderArgument(
   raw: string,
   userHome: string,
@@ -506,10 +514,16 @@ export function resolveFolderArgument(
     return path.resolve(userHome, raw.slice(2));
   }
   if (raw.startsWith("~")) {
-    throw new Error(`폴더 경로는 '~' 또는 '~/' 로만 홈을 가리킬 수 있습니다 (다른 사용자 홈 '~user' 형식은 지원하지 않음): ${raw}`);
+    throw new FolderArgumentError(
+      `폴더 경로는 '~' 또는 '~/' 로만 홈을 가리킬 수 있습니다 (다른 사용자 홈 '~user' 형식은 지원하지 않음): ${raw}`,
+      "~user form",
+    );
   }
   if (!path.isAbsolute(raw)) {
-    throw new Error(`폴더 경로는 절대 경로 또는 '~/' 로 시작해야 합니다 (상대 경로는 지원하지 않음): ${raw}`);
+    throw new FolderArgumentError(
+      `폴더 경로는 절대 경로 또는 '~/' 로 시작해야 합니다 (상대 경로는 지원하지 않음): ${raw}`,
+      "relative path",
+    );
   }
   return path.resolve(raw);
 }
@@ -644,7 +658,7 @@ async function expandDroppedPaths(
     try {
       entry = resolveFolderArgument(filePath, home);
     } catch (err) {
-      addBlocked(filePath, (err as Error).message);
+      addBlocked(filePath, err instanceof FolderArgumentError ? err.reason : (err as Error).name);
       continue;
     }
     await visit(entry);
@@ -718,7 +732,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const legacyExists = await stat(legacyWorkspace).then(() => true, () => false);
       const targetExists = await stat(workspace).then(() => true, () => false);
       if (legacyExists && !targetExists) {
-        console.error(`migrating workspace from ${legacyWorkspace} to ${workspace}`);
+        console.error("info", "local_indexer.workspace_migration.start", {});
         // Ensure target parent (pluginDataDir or absolute parent) exists so
         // rename does not fail with ENOENT when the host has not yet created
         // pluginDataDir on first boot.
@@ -733,10 +747,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // scratch, all of it REBUILDABLE. The cost of not migrating is one full
       // re-scan, not lost data, which is why nothing here falls back to copying
       // the tree out. Logged with the path so the leftover is findable.
-      console.error(
-        `workspace migration skipped (${legacyWorkspace} → ${workspace}); `
-          + `the index rebuilds from scratch. reason: ${(err as Error).message}`,
-      );
+      console.error("warn", "local_indexer.workspace_migration.skipped", {
+        error: (err as Error).name,
+        code: (err as NodeJS.ErrnoException).code,
+        note: "the index rebuilds from scratch",
+      });
     }
   }
   const scanFoldersRaw = getConfig("scanFolders") ?? config.scanFolders;
@@ -1178,8 +1193,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         imageSettingsCache = next;
       } catch (err) {
         console.error("warn", "image_settings.write_failed", {
-          path: imageSettingsPath,
-          error: (err as Error).message,
+          error: (err as Error).name,
+          code: (err as NodeJS.ErrnoException).code,
         });
         // Surface the error so the UI rolls back the toggle.
         throw new Error(
@@ -1391,7 +1406,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       _surfacedWarningKeys.clear();
       _surfacedWarningKeys.add(dedupeKey);
     }
-    console.error("warn", `local_indexer.worker.${w.kind}`, w);
+    console.error("warn", `local_indexer.worker.${w.kind}`, { kind: w.kind, reason: w.reason ?? w.error });
     emitIndexWarning(w);
   };
   const handleWorkerLogLine = (line: string): void => {
@@ -1705,10 +1720,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       invalidateFolderSummaryCache();
       try {
         await recordIndexedState(filePath, docId);
-        console.error("info", "local_indexer.record_state_ok", { filePath, docId });
+        console.error("info", "local_indexer.record_state_ok", { docId });
       } catch (err) {
         console.error("warn", "local_indexer.record_state_failed", {
-          filePath,
           docId,
           error: (err as Error).message,
         });
@@ -1726,18 +1740,18 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const stateResults = await Promise.allSettled(indexStateStores.map((store) => store.removeEntry(filePath)));
       const stateFails = stateResults.filter((r) => r.status === "rejected").length;
       if (stateFails > 0) {
-        console.error("warn", "local_indexer.remove_failed_file_state_partial_failure", { filePath, failed: stateFails });
+        console.error("warn", "local_indexer.remove_failed_file_state_partial_failure", { docId, failed: stateFails });
       } else {
-        console.error("info", "local_indexer.remove_failed_file_state_ok", { filePath, docId });
+        console.error("info", "local_indexer.remove_failed_file_state_ok", { docId });
       }
       // Also remove from DB so the folder summary (built from DB when worker is running)
       // shows the file as pending rather than indexed.
       if (docId) {
         try {
           await plugin.removeDocument(docId);
-          console.error("info", "local_indexer.remove_failed_file_db_ok", { filePath, docId });
+          console.error("info", "local_indexer.remove_failed_file_db_ok", { docId });
         } catch (err) {
-          console.error("warn", "local_indexer.remove_failed_file_db_failure", { filePath, docId, error: (err as Error).message });
+          console.error("warn", "local_indexer.remove_failed_file_db_failure", { docId, error: (err as Error).message });
         }
       }
       // Surface the per-file failure to the UI warning banner so the top
@@ -1760,9 +1774,9 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       const results = await Promise.allSettled(indexStateStores.map((store) => store.removeEntry(filePath)));
       const failCount = results.filter((r) => r.status === "rejected").length;
       if (failCount > 0) {
-        console.error("warn", "local_indexer.remove_state_partial_fail", { filePath, failed: failCount });
+        console.error("warn", "local_indexer.remove_state_partial_fail", { failed: failCount });
       } else {
-        console.error("info", "local_indexer.remove_state_ok", { filePath });
+        console.error("info", "local_indexer.remove_state_ok", {});
       }
     };
     indexer.onScanProgress = (snapshot: ScanProgressSnapshot) => {
@@ -1807,7 +1821,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             }
             const absPath = resolve(trimmed);
             if (isHighChurnFolderPath(absPath, userHome)) {
-              console.error("warn", "index_folders.skip_high_churn_folder", { folder: absPath });
+              console.error("warn", "index_folders.skip_high_churn_folder", {});
               needsRewrite = true;
               continue;
             }
@@ -2153,7 +2167,6 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       }
     }
     console.error("info", "buildFolderSummary.detail", {
-      folder: folderPath,
       stateMapSize: mergedState.size,
       folderStateEntries: folderStateEntries.length,
       totalFiles: visibleFiles.length,
@@ -2219,7 +2232,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     } catch {
       // Keep the current timestamp if the file disappeared immediately after indexing.
     }
-    console.error("info", "local_indexer.record_state", { filePath, docId, mtimeMs });
+    console.error("info", "local_indexer.record_state", { docId, mtimeMs });
     await Promise.all(indexStateStores.map((store) => store.addEntry(filePath, docId, mtimeMs, "mtime-only")));
   }
 
@@ -2272,7 +2285,6 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         failed += 1;
         console.error("warn", "index_remove_folder.document_remove_failed", {
           docId: doc.doc_id,
-          path: doc.path,
           error: (err as Error).message,
         });
       }
@@ -2635,13 +2647,11 @@ export default async function createPlugin(context: PluginRuntimeContext) {
               ok = result.status === "indexed" && result.embedded === true;
               if (!ok) {
                 console.error("warn", "local_indexer.reconcile_heal_failed", {
-                  path,
                   error: result.errors?.join(", ") || "indexed without vectors",
                 });
               }
             } catch (err) {
               console.error("warn", "local_indexer.reconcile_heal_failed", {
-                path,
                 error: (err as Error).message,
               });
             }
@@ -2958,20 +2968,21 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       status.phase === "kept-old" ? "warn" : "info",
       `local_indexer.index_migration.${status.phase}`,
       {
-        legacyIndexDir: status.legacyIndexDir,
-        indexRoot: status.indexRoot,
         attempt: status.attempt,
         maxAttempts: status.maxAttempts,
         retriesExhausted: status.retriesExhausted,
         documentsBefore: status.documentsBefore,
         documentsAfter: status.documentsAfter,
-        scan: status.scan,
+        scan: status.scan
+          ? { ...status.scan, unreadableFolders: status.scan.unreadableFolders?.length }
+          : undefined,
         legacyDocuments: status.legacyDocuments,
         coverage: status.coverage
           ? { ...status.coverage, excludedCorrupt: status.coverage.excludedCorrupt.length }
           : undefined,
         deferred: status.deferred,
-        notes: status.notes,
+        // notes name excluded documents by path; the status object keeps them.
+        notes: status.notes?.length,
         reason: status.reason,
       },
     );
@@ -2991,15 +3002,14 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     if (!existsSync(join(location.legacyIndexDir, "fts5.sqlite"))) {
       void rm(indexMigrationManifestPath, { force: true }).catch(() => {});
       if (indexMigrationStatus?.phase === "kept-old") {
-        console.error("info", "local_indexer.index_migration.cleared", { legacyIndexDir: location.legacyIndexDir });
+        console.error("info", "local_indexer.index_migration.cleared", {});
         indexMigrationStatus = null;
       }
       return;
     }
-    console.error(
-      `index location changed: rebuilding ${location.indexRoot} from the registered folders; ` +
-        `${location.legacyIndexDir} is removed once the rebuild is verified`,
-    );
+    console.error("info", "local_indexer.index_location_changed", {
+      note: "rebuilding from the registered folders; the legacy index is removed once the rebuild is verified",
+    });
     const warmup = startupWarmupPromise;
     indexMigrationPromise = (async () => {
       // The warmup syncs the worker's allowed roots; the scan needs them.
@@ -3611,7 +3621,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             source: "db",
             docCount: docs.length,
             stateMapSize: stateForScan.size,
-            sampleMtimes: docs.slice(0, 3).map((d) => ({ path: d.path, mtime_ms: d.mtime_ms })),
+            sampleMtimes: docs.slice(0, 3).map((d) => d.mtime_ms),
           });
         } catch (err) {
           stateForScan = await loadMergedIndexState();
@@ -3642,7 +3652,6 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         for (const folder of allFolders) {
           const summary = await buildFolderSummary(folder, stateForScan);
           console.error("info", "index_scan.folder_summary", {
-            folder,
             status: summary.status,
             totalFiles: summary.totalFiles,
             indexedFiles: summary.indexedFiles,
@@ -3668,7 +3677,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         console.error("info", "index_scan.target_folders", {
           total: allFolders.length,
           pending: pendingFolders.length,
-          scanning: foldersToScan,
+          scanning: foldersToScan.length,
         });
 
         const res = await autoIndexer.scanOnce(foldersToScan);
@@ -3768,7 +3777,10 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           includeImages,
         });
         if (blocked.length > 0) {
-          console.error("warn", "document_index_scan.blocked_paths_skipped", { blocked });
+          console.error("warn", "document_index_scan.blocked_paths_skipped", {
+            count: blocked.length,
+            reasons: [...new Set(blocked.map((b) => b.reason))],
+          });
         }
         if (files.length === 0) {
           return { indexed: 0, failed: 0, jobId, message: "No indexable files found." };
@@ -3788,7 +3800,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             indexed += 1;
           } catch (err) {
             failed += 1;
-            console.error(`document_index_scan: failed to index ${filePath}`, err);
+            console.error("warn", "document_index_scan.index_failed", { error: (err as Error).message });
             emitIndexWarning({
               kind: "indexDocument.failed",
               path: filePath,
@@ -3798,13 +3810,15 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
           if (docId) {
             await recordIndexedState(filePath, docId).catch((e) => {
-              console.error(`document_index_scan: state record failed for ${filePath}`, e);
+              console.error("warn", "document_index_scan.state_record_failed", { error: (e as Error).message });
             });
           }
         }
-        console.error(`document_index_scan: indexed=${indexed} failed=${failed}`, {
-          inputPaths: paths,
-          expandedFiles: files,
+        console.error("info", "document_index_scan.done", {
+          indexed,
+          failed,
+          inputPaths: paths.length,
+          expandedFiles: files.length,
         });
         invalidateFolderSummaryCache();
         changes.publish("index.document.updated");
@@ -4195,7 +4209,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             folders,
             message: `폴더 추가: ${absPath}`,
           });
-          console.error("info", "index_add_folder", { folder: absPath, total: folders.length, allFolders: folders });
+          console.error("info", "index_add_folder", { total: folders.length });
           const summary = await buildFolderSummary(absPath);
           return { folders, added: true, message: `폴더 추가: ${absPath}`, summary };
         });
@@ -4278,7 +4292,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
               added,
               message: `폴더 ${added.length}개 추가`,
             });
-            console.error("info", "index_add_folders", { added, skipped, failures, total: folders.length });
+            console.error("info", "index_add_folders", {
+              added: added.length,
+              skipped: skipped.length,
+              failures: failures.length,
+              total: folders.length,
+            });
           }
 
           return { folders, added, skipped, failures };
@@ -4327,7 +4346,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             folders,
             message,
           });
-          console.error("info", "index_remove_folder", { folder: absPath, total: folders.length });
+          console.error("info", "index_remove_folder", { total: folders.length });
           return { folders, removed: true, removedDocuments: purgeResult.removed, failedDocuments: purgeResult.failed, message };
         });
       },
@@ -4412,7 +4431,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           };
         } catch (err) {
           const message = (err as Error).message;
-          console.error(`index_search worker search failed: ${message}`, { mode, query });
+          console.error(`index_search worker search failed: ${message}`, { mode, queryLength: query.length });
           throw new Error(`index_search failed (${mode}): ${message}`);
         }
       },

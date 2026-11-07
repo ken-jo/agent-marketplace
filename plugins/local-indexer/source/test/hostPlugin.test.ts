@@ -1346,7 +1346,8 @@ describe("hostPlugin createPlugin", () => {
       const targets = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
         .filter(([, event]: [string, string]) => event === "index_scan.target_folders")
         .map(([, , fields]: [string, string, any]) => fields);
-      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: [docs, mount] });
+      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: 2 });
+      expect(JSON.stringify(targets.at(0))).not.toContain(hostRoot);
       await plugin.stop();
     });
 
@@ -1744,13 +1745,13 @@ describe("hostPlugin createPlugin", () => {
       const res = await plugin.handlers.index_scan({ paths: ["./rel.md", "~/Drops", "~other/x", "rel-bare.md"] });
       expect(res.indexed).toBe(1);
       expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(drops, "dropped.md")]);
+      // The diagnostic carries a count and the distinct path-free reasons only.
       const skipped = logs.find(([key]) => key === "warn:document_index_scan.blocked_paths_skipped");
-      expect(skipped?.[1].blocked.map((b) => b.path)).toEqual(["./rel.md", "~other/x", "rel-bare.md"]);
-      expect(skipped?.[1].blocked.map((b) => b.reason)).toEqual([
-        expect.stringMatching(/상대 경로/),
-        expect.stringMatching(/~user/),
-        expect.stringMatching(/상대 경로/),
-      ]);
+      expect(skipped?.[1]).toEqual({ count: 3, reasons: ["relative path", "~user form"] });
+      const logged = JSON.stringify(skipped?.[1]);
+      for (const leaked of ["./rel.md", "~other/x", "rel-bare.md", hostRoot, fixtureUserHome(hostRoot)]) {
+        expect(logged).not.toContain(leaked);
+      }
     } finally {
       await plugin.stop();
     }

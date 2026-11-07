@@ -155,7 +155,7 @@ export class IndexState {
     } catch (err) {
       const isNotFound = err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT";
       if (!isNotFound) {
-        console.warn(`[IndexState] Failed to load state file (${this.statePath}), starting fresh:`, err);
+        console.warn("[IndexState] Failed to load state file, starting fresh:", (err as NodeJS.ErrnoException).code ?? (err as Error).name);
       }
       this.entries = new Map();
     }
