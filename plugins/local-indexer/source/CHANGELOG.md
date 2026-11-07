@@ -2,7 +2,7 @@
 
 ## [0.8.1] - Unreleased
 
-Use a neutral example path (`~/Documents`) in the index_folder `folder` description.
+Use a neutral example path (`~/Documents`) in the index_folders `folder` description, and make that example mean what the user approved: folder arguments now expand `~` and `~/…` (`~\…` on Windows) against the host-supplied user home instead of resolving against the plugin's working directory. Relative paths and `~user` forms are refused with a clear error, and the schema pattern no longer admits `.`-relative paths.
 
 ## [0.8.0] - 2026-11-07
 

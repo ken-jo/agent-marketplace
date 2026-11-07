@@ -9,6 +9,7 @@ import {
   isTrustedEndpointUrl,
   normalizeUncRoot,
   resolveAzureResourceEndpoint,
+  resolveFolderArgument,
   validateEndpointUrl,
 } from "../src/hostPlugin.js";
 import { flattenAgentPluginsManifest } from "@ave/plugin-contract";
@@ -361,9 +362,12 @@ describe("manifest contract — input schema length & pattern guards", () => {
     expect(schema.additionalProperties).toBe(false);
   });
 
-  it("index_folders.folder enforces absolute / ~ / . prefix (former index_add_folder.folder)", () => {
+  it("index_folders.folder enforces absolute / ~ prefix and no relative paths (former index_add_folder.folder)", () => {
     const f = toolByName.get("index_folders")!.inputSchema.properties.folder;
-    expect(f.pattern).toBe("^([A-Za-z]:[\\\\/]|/|~|\\.)");
+    expect(f.pattern).toBe("^([A-Za-z]:[\\\\/]|/|~)");
+    const re = new RegExp(f.pattern);
+    expect(re.test("./docs")).toBe(false);
+    expect(re.test("~/Documents")).toBe(true);
     expect(f.maxLength).toBe(4096);
   });
 
@@ -372,6 +376,38 @@ describe("manifest contract — input schema length & pattern guards", () => {
     expect(f.maxItems).toBe(200);
     expect(f.minItems).toBe(1);
     expect(f.items.maxLength).toBe(4096);
+  });
+});
+
+describe("resolveFolderArgument — folder tool argument to absolute path", () => {
+  const home = "/home/tester";
+  const winHome = "C:\\Users\\tester";
+
+  it("expands ~ and ~/… against the host-supplied user home", () => {
+    expect(resolveFolderArgument("~/Documents", home, "linux")).toBe("/home/tester/Documents");
+    expect(resolveFolderArgument("~", home, "darwin")).toBe("/home/tester");
+    expect(resolveFolderArgument("~/Documents", winHome, "win32")).toBe("C:\\Users\\tester\\Documents");
+    expect(resolveFolderArgument("~\\Documents", winHome, "win32")).toBe("C:\\Users\\tester\\Documents");
+  });
+
+  it("passes absolute paths through unchanged", () => {
+    expect(resolveFolderArgument("/srv/docs", home, "linux")).toBe("/srv/docs");
+    expect(resolveFolderArgument("D:\\work\\docs", winHome, "win32")).toBe("D:\\work\\docs");
+    expect(resolveFolderArgument("D:/work/docs", winHome, "win32")).toBe("D:\\work\\docs");
+  });
+
+  it("refuses relative paths instead of resolving them against pluginRoot", () => {
+    for (const raw of ["./x", "x", "../x", "."]) {
+      expect(() => resolveFolderArgument(raw, home, "linux")).toThrow(/상대 경로/);
+    }
+    expect(() => resolveFolderArgument(".\\x", winHome, "win32")).toThrow(/상대 경로/);
+  });
+
+  it("refuses ~user forms (another user's home)", () => {
+    expect(() => resolveFolderArgument("~other/x", home, "linux")).toThrow(/~user/);
+    expect(() => resolveFolderArgument("~other", home, "linux")).toThrow(/~user/);
+    // `~\` is a home separator only on Windows; on POSIX it is a `~user` name.
+    expect(() => resolveFolderArgument("~\\x", home, "linux")).toThrow(/~user/);
   });
 });
 

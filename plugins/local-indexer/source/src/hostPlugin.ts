@@ -2,7 +2,7 @@ import { copyFile, lstat, mkdir, opendir, readFile, readdir, realpath, rename, r
 import { ChangeStream } from "./changeStream.js";
 import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep as pathSep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, posix as posixPath, relative, resolve, sep as pathSep, win32 as win32Path } from "node:path";
 import { platform as osPlatform, tmpdir as osTmpdir } from "node:os";
 /**
  * One in-flight-or-settled answer per drive, for this session.
@@ -483,6 +483,35 @@ function getBlockedIndexPathMessage(
   return isBlockedIndexPath(absPath, opts)
     ? `보안: '${absPath}' 경로는 인덱싱 대상으로 추가할 수 없습니다.`
     : null;
+}
+
+/**
+ * Turn a tool's `folder` argument into the absolute path the plugin acts on.
+ *
+ * The host expands `~` only for its permission decision; the argument reaches
+ * the plugin verbatim, and this child's cwd is pluginRoot. A bare `resolve()`
+ * would therefore index `<pluginRoot>/~/Documents` after the user approved
+ * `$HOME/Documents`. Expand `~` and `~/…` (`~\…` on Windows) against the
+ * host-supplied `userHome`, pass absolute paths through, and refuse forms with
+ * no meaningful base here: relative paths and `~user`.
+ */
+export function resolveFolderArgument(
+  raw: string,
+  userHome: string,
+  platform: NodeJS.Platform = osPlatform(),
+): string {
+  const path = platform === "win32" ? win32Path : posixPath;
+  if (raw === "~") return path.resolve(userHome);
+  if (raw.startsWith("~/") || (platform === "win32" && raw.startsWith("~\\"))) {
+    return path.resolve(userHome, raw.slice(2));
+  }
+  if (raw.startsWith("~")) {
+    throw new Error(`폴더 경로는 '~' 또는 '~/' 로만 홈을 가리킬 수 있습니다 (다른 사용자 홈 '~user' 형식은 지원하지 않음): ${raw}`);
+  }
+  if (!path.isAbsolute(raw)) {
+    throw new Error(`폴더 경로는 절대 경로 또는 '~/' 로 시작해야 합니다 (상대 경로는 지원하지 않음): ${raw}`);
+  }
+  return path.resolve(raw);
 }
 
 // 사용자 홈 디렉터리 바로 아래에 있는지 (중첩된 하위 경로는 제외).
@@ -3964,7 +3993,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       index_refresh_folder: async (payload?: unknown) => {
         const p = (payload ?? {}) as { folder?: string };
         if (!p.folder) throw new Error("folder path is required");
-        const folder = resolve(p.folder);
+        const folder = resolveFolderArgument(p.folder, userHome);
         const folders = await loadPersistedFolders();
         if (!folders.includes(folder)) throw new Error("folder is not registered");
 
@@ -4038,7 +4067,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         if (!p.folder || typeof p.folder !== "string") {
           throw new Error("folder 경로가 필요합니다.");
         }
-        const absPath = resolve(p.folder);
+        let absPath: string;
+        try {
+          absPath = resolveFolderArgument(p.folder, userHome);
+        } catch (err) {
+          return { folder: p.folder, total: 0, byType: {}, sample: [], error: (err as Error).message };
+        }
         // UI 모달이 여러 폴더 미리보기를 함께 띄우므로 검증 실패는 throw 대신
         // error 필드로 반환 — 한 폴더의 차단/오류가 다른 폴더 미리보기를
         // 같이 무산시키지 않도록.
@@ -4105,7 +4139,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       index_add_folder: async (payload?: unknown) => {
         const p = (payload ?? {}) as { folder?: string };
         if (!p.folder) throw new Error("folder 경로가 필요합니다.");
-        const absPath = resolve(p.folder);
+        const absPath = resolveFolderArgument(p.folder, userHome);
         const blockedMessage = getBlockedIndexPathMessage(absPath, blockOpts);
         if (blockedMessage) {
           throw new Error(blockedMessage);
@@ -4174,7 +4208,13 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           const failures: Array<{ folder: string; error: string }> = [];
 
           for (const raw of inputs) {
-            const absPath = resolve(raw);
+            let absPath: string;
+            try {
+              absPath = resolveFolderArgument(raw, userHome);
+            } catch (err) {
+              failures.push({ folder: raw, error: (err as Error).message });
+              continue;
+            }
             const blocked = getBlockedIndexPathMessage(absPath, blockOpts);
             if (blocked) {
               failures.push({ folder: absPath, error: blocked });
@@ -4238,7 +4278,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       index_remove_folder: async (payload?: unknown) => {
         const p = (payload ?? {}) as { folder?: string };
         if (!p.folder) throw new Error("folder 경로가 필요합니다.");
-        const absPath = resolve(p.folder);
+        const absPath = resolveFolderArgument(p.folder, userHome);
         return withFoldersLock(async () => {
           let folders = await loadPersistedFolders();
           const before = folders.length;

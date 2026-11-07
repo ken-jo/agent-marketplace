@@ -1684,6 +1684,49 @@ describe("hostPlugin createPlugin", () => {
     }
   });
 
+  it("index_folders expands ~/ against userHome, not pluginRoot, and refuses relative / ~user forms", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const documents = join(fixtureUserHome(hostRoot), "Documents");
+    await mkdir(documents, { recursive: true });
+    const foldersJson = join(hostRoot, "plugin-data", ".local-indexer-workspace", "folders.json");
+    try {
+      const addRes = await plugin.handlers.index_folders({ action: "add", folder: "~/Documents" });
+      expect(addRes.added).toBe(true);
+      expect(addRes.folders).toContain(documents);
+      const saved = JSON.parse(await readFile(foldersJson, "utf-8"));
+      expect(saved.folders).toContain(documents);
+      // Nothing may land under the child's cwd (pluginRoot) as a literal `~` segment.
+      expect(saved.folders.filter((f) => f.split(/[\\/]/).includes("~"))).toEqual([]);
+
+      const preview = await plugin.handlers.index_preview_folder({ folder: "~/Documents" });
+      expect(preview.folder).toBe(documents);
+      expect(preview.error).toBeUndefined();
+
+      await expect(
+        plugin.handlers.index_folders({ action: "add", folder: "./Documents" }),
+      ).rejects.toThrow(/상대 경로/);
+      await expect(
+        plugin.handlers.index_folders({ action: "add", folder: "~other/Documents" }),
+      ).rejects.toThrow(/~user/);
+      const relPreview = await plugin.handlers.index_preview_folder({ folder: "./Documents" });
+      expect(relPreview.error).toMatch(/상대 경로/);
+
+      const batch = await plugin.handlers.index_folders({
+        action: "add",
+        folders: ["./Documents", "~other/x"],
+      });
+      expect(batch.added).toEqual([]);
+      expect(batch.failures.map((f) => f.folder)).toEqual(["./Documents", "~other/x"]);
+
+      const rmRes = await plugin.handlers.index_folders({ action: "remove", folder: "~/Documents" });
+      expect(rmRes.removed).toBe(true);
+      expect(rmRes.folders).not.toContain(documents);
+    } finally {
+      await plugin.stop();
+    }
+  });
+
   it("restarts the worker when the started flag is stale but the process is gone", async () => {
     const { ctx, logs } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);

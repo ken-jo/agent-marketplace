@@ -135,8 +135,8 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 4096,
-                "pattern": "^([A-Za-z]:[\\\\/]|/|~|\\.)",
-                "description": "add(단일) 또는 remove 대상 폴더의 절대 경로 또는 ~ / 상대 경로 (예: ~/Documents). NUL 바이트는 호스트 측에서 거부됩니다."
+                "pattern": "^([A-Za-z]:[\\\\/]|/|~)",
+                "description": "add(단일) 또는 remove 대상 폴더의 절대 경로 또는 ~/ 로 시작하는 홈 기준 경로만 허용 (예: ~/Documents). 다른 사용자 홈(~user)은 거부됩니다. NUL 바이트는 호스트 측에서 거부됩니다."
               },
               "folders": {
                 "type": "array",
