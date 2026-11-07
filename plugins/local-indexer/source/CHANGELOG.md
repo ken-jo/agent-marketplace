@@ -2,7 +2,7 @@
 
 ## [0.8.1] - Unreleased
 
-Use a neutral example path (`~/Documents`) in the index_folders `folder` description, and make that example mean what the user approved: folder arguments now expand `~` and `~/…` (`~\…` on Windows) against the host-supplied user home instead of resolving against the plugin's working directory. Relative paths and `~user` forms are refused with a clear error, and the schema pattern no longer admits `.`-relative paths.
+Use a neutral example path (`~/Documents`) in the index_folders `folder` description, and make that example mean what the user approved: folder arguments and index_scan `paths` entries now expand `~` and `~/…` (`~\…` on Windows) against the host-supplied user home instead of resolving against the plugin's working directory. Relative paths and `~user` forms are refused with a clear error (a refused `paths` entry is blocked on its own and the rest still scan), and the schema pattern no longer admits `.`-relative paths.
 
 ## [0.8.0] - 2026-11-07
 

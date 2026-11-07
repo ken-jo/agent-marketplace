@@ -566,12 +566,12 @@ async function expandDroppedPaths(
   paths: string[],
   configuredFolders: string[],
   options: IndexPathPolicy & { includeImages?: boolean },
-): Promise<{ files: string[]; roots: string[]; blocked: string[] }> {
+): Promise<{ files: string[]; roots: string[]; blocked: Array<{ path: string; reason: string }> }> {
   const files: string[] = [];
   const fileSeen = new Set<string>();
   const roots: string[] = [];
   const rootSeen = new Set<string>();
-  const blocked: string[] = [];
+  const blocked: Array<{ path: string; reason: string }> = [];
   const blockedSeen = new Set<string>();
 
   const addRoot = (root: string) => {
@@ -580,10 +580,10 @@ async function expandDroppedPaths(
     roots.push(root);
   };
 
-  const addBlocked = (target: string) => {
+  const addBlocked = (target: string, reason: string) => {
     if (blockedSeen.has(target)) return;
     blockedSeen.add(target);
-    blocked.push(target);
+    blocked.push({ path: target, reason });
   };
 
   const home = options.userHome;
@@ -594,13 +594,13 @@ async function expandDroppedPaths(
   const visit = async (targetPath: string, inheritedRoot?: string): Promise<void> => {
     const absPath = resolve(targetPath);
     if (isBlockedIndexPath(absPath, blockOpts)) {
-      addBlocked(absPath);
+      addBlocked(absPath, "system or sensitive path");
       return;
     }
     const withinHome = absPath === home || absPath.startsWith(home + pathSep);
     const withinConfigured = configuredFolders.some((f) => isWithinFolder(absPath, f));
     if (!withinHome && !withinConfigured) {
-      addBlocked(absPath);
+      addBlocked(absPath, "outside the user home and registered folders");
       return;
     }
 
@@ -637,7 +637,17 @@ async function expandDroppedPaths(
   };
 
   for (const filePath of paths) {
-    await visit(filePath);
+    // Entry paths are tool input: expand `~` against the host's userHome and
+    // refuse relative / `~user` forms, which would otherwise resolve against
+    // this child's cwd (pluginRoot). A refusal blocks only that entry.
+    let entry: string;
+    try {
+      entry = resolveFolderArgument(filePath, home);
+    } catch (err) {
+      addBlocked(filePath, (err as Error).message);
+      continue;
+    }
+    await visit(entry);
   }
 
   return { files, roots, blocked };
@@ -2820,7 +2830,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     const folders = await loadPersistedFolders();
     const includeImages = isImageEmbeddingEnabled();
     const { files, roots, blocked } = await expandDroppedPaths(paths, folders, { ...blockOpts, includeImages });
-    const results: DirectIndexResult[] = blocked.map((path) => ({
+    const results: DirectIndexResult[] = blocked.map(({ path }) => ({
       path, indexed: false, retryable: false, failureKind: "blocked",
     }));
     if (files.length === 0) return results;

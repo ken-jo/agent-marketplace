@@ -1709,6 +1709,13 @@ describe("hostPlugin createPlugin", () => {
       await expect(
         plugin.handlers.index_folders({ action: "add", folder: "~other/Documents" }),
       ).rejects.toThrow(/~user/);
+      // The refresh body (index_scan {folder}) must look up the same expanded path.
+      await writeFile(join(documents, "note.md"), "refresh through ~/", "utf-8");
+      indexDocumentMock.mockClear();
+      const refreshed = await plugin.handlers.index_scan({ folder: "~/Documents" });
+      expect(refreshed.folder).toBe(documents);
+      expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(documents, "note.md")]);
+
       const relPreview = await plugin.handlers.index_preview_folder({ folder: "./Documents" });
       expect(relPreview.error).toMatch(/상대 경로/);
 
@@ -1722,6 +1729,28 @@ describe("hostPlugin createPlugin", () => {
       const rmRes = await plugin.handlers.index_folders({ action: "remove", folder: "~/Documents" });
       expect(rmRes.removed).toBe(true);
       expect(rmRes.folders).not.toContain(documents);
+    } finally {
+      await plugin.stop();
+    }
+  });
+
+  it("index_scan paths expands ~/ per entry and blocks relative / ~user entries without dropping the rest", async () => {
+    const { ctx, logs } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const drops = join(fixtureUserHome(hostRoot), "Drops");
+    await mkdir(drops, { recursive: true });
+    await writeFile(join(drops, "dropped.md"), "dropped through ~/", "utf-8");
+    try {
+      const res = await plugin.handlers.index_scan({ paths: ["./rel.md", "~/Drops", "~other/x", "rel-bare.md"] });
+      expect(res.indexed).toBe(1);
+      expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(drops, "dropped.md")]);
+      const skipped = logs.find(([key]) => key === "warn:document_index_scan.blocked_paths_skipped");
+      expect(skipped?.[1].blocked.map((b) => b.path)).toEqual(["./rel.md", "~other/x", "rel-bare.md"]);
+      expect(skipped?.[1].blocked.map((b) => b.reason)).toEqual([
+        expect.stringMatching(/상대 경로/),
+        expect.stringMatching(/~user/),
+        expect.stringMatching(/상대 경로/),
+      ]);
     } finally {
       await plugin.stop();
     }
