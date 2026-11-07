@@ -6,6 +6,7 @@ import {
   endpointHostForLog,
   endpointQueryParam,
   endpointRoot,
+  expandDroppedPaths,
   isTrustedEndpointUrl,
   normalizeUncRoot,
   resolveAzureResourceEndpoint,
@@ -433,6 +434,20 @@ describe("workerLineDiagnostic — what the host echoes from worker stderr", () 
     });
   });
 
+  it("drops keys the worker does not emit, whatever their value", () => {
+    expect(
+      workerLineDiagnostic(JSON.stringify({ event: "indexer.x", target: "C:", user: "alice", title: "Q3 plan", chunks: 2 })),
+    ).toEqual({ event: "local_indexer.worker.event", fields: { event: "indexer.x", chunks: 2 } });
+  });
+
+  it("drops an allowlisted key whose value looks like a path", () => {
+    expect(
+      workerLineDiagnostic(JSON.stringify({
+        event: "indexer.x", reason: "C:\\Users\\tester\\a.pdf", model: "/home/tester/model", note: "x".repeat(201), kind: "io",
+      })),
+    ).toEqual({ event: "local_indexer.worker.event", fields: { event: "indexer.x", kind: "io" } });
+  });
+
   it("reduces any other line to its length", () => {
     for (const line of ['Traceback (most recent call last):', '  File "/home/tester/x.py", line 1', "{not json", '{"no_event":1}']) {
       expect(workerLineDiagnostic(line)).toEqual({
@@ -440,6 +455,23 @@ describe("workerLineDiagnostic — what the host echoes from worker stderr", () 
         fields: { length: line.length },
       });
     }
+  });
+});
+
+describe("expandDroppedPaths — entry refusals", () => {
+  it("blocks a refused entry with its reason", async () => {
+    const res = await expandDroppedPaths(["./x", "~other/x"], [], { userHome: "/home/tester" });
+    expect(res.blocked).toEqual([
+      { path: "./x", reason: "relative path" },
+      { path: "~other/x", reason: "~user form" },
+    ]);
+  });
+
+  it("lets an unexpected error propagate instead of blocking the entry", async () => {
+    // A missing userHome is a host contract violation, not a refused argument.
+    await expect(
+      expandDroppedPaths(["~/x"], [], { userHome: undefined as unknown as string }),
+    ).rejects.toThrow(TypeError);
   });
 });
 

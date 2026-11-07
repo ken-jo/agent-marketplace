@@ -856,6 +856,29 @@ describe("hostPlugin createPlugin", () => {
     expect(status.warnings).toEqual([]);
   });
 
+  it("SSRF-guard rejections log the endpoint host only, never userinfo or path", async () => {
+    const { ctx } = makeContext(hostRoot, {}, {
+      pluginDataDir: hostRoot,
+      configValues: {
+        embeddingProvider: "openai",
+        embeddingEndpoint: "http://user:pass@evil.example/tenant/v1",
+        imageCaptionProvider: "openai",
+        imageCaptionEndpoint: "user:pass tenant not a url",
+      },
+    });
+    const plugin = await createPlugin(ctx);
+    await plugin.handlers.index_scan_status();
+    const calls = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls;
+    const embedding = calls.find(([, event]) => event === "embeddingEndpoint rejected by SSRF guard");
+    expect(embedding?.[2]).toMatchObject({ endpointHost: "evil.example" });
+    expect(embedding?.[2]).not.toHaveProperty("value");
+    const caption = calls.find(([, event]) => event === "imageCaptionEndpoint rejected by SSRF guard");
+    expect(caption?.[2]).toMatchObject({ parsable: false });
+    const written = JSON.stringify(calls);
+    for (const secret of ["user", "pass", "tenant"]) expect(written).not.toContain(secret);
+    await plugin.stop();
+  });
+
   it("host stderr never echoes worker lines or fs error messages that carry paths", async () => {
     const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
     const plugin = await createPlugin(ctx);

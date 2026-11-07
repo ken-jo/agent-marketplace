@@ -185,6 +185,15 @@ export function endpointHostForLog(value: string): string {
   }
 }
 
+/**
+ * A configured endpoint as a diagnostic may show it: the host only, never the
+ * userinfo, path or query, and nothing at all when the value does not parse.
+ */
+function endpointFieldsForLog(value: string): { endpointHost: string } | { parsable: false } {
+  const host = endpointHostForLog(value);
+  return host ? { endpointHost: host } : { parsable: false };
+}
+
 export function endpointRoot(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) return "";
   try {
@@ -495,10 +504,18 @@ function getBlockedIndexPathMessage(
  * host-supplied `userHome`, pass absolute paths through, and refuse forms with
  * no meaningful base here: relative paths and `~user`.
  */
-// Field names whose values are paths, file names or free text (exception
-// messages, tracebacks) in worker log lines. Dropped before the host echoes a
-// line: those values carry the user's account name.
-const WORKER_LOG_DROPPED_KEY = /path|file|folder|dir|root|name|error|exc|trace|message|msg|detail|query|text/i;
+// The worker log fields the host may echo: the keyword fields the worker's
+// `_info` / `_log` calls emit today (worker/*.py) plus structlog's `level` and
+// `timestamp`, minus the ones that carry paths or free text (`path`,
+// `index_root`, `workspace`, `error`, `extra`). Any other key is dropped, so a
+// new worker field stays out of the host log until it is reviewed here.
+const WORKER_LOG_ALLOWED_KEYS = new Set([
+  "batch", "bytes", "cap", "chunk_count", "chunks", "count", "doc_id", "drifted_docs",
+  "embedded", "empty", "failure_kind", "frameBytesMax", "id", "kind", "level", "limit",
+  "max_bytes", "meta_chunks", "method", "model", "note", "original", "orphan_vectors",
+  "processed", "protocol", "provider", "reason", "size_bytes", "stored_table",
+  "timestamp", "total", "type",
+]);
 
 /**
  * What the host writes to its own stderr for one worker stderr line. A parsed
@@ -522,7 +539,7 @@ export function workerLineDiagnostic(line: string): { event: string; fields: Rec
       if (name && /^[A-Za-z0-9_.:-]{1,120}$/.test(name)) {
         const fields: Record<string, unknown> = { event: name };
         for (const [key, value] of Object.entries(record)) {
-          if (key === "event" || WORKER_LOG_DROPPED_KEY.test(key)) continue;
+          if (!WORKER_LOG_ALLOWED_KEYS.has(key)) continue;
           if (typeof value === "number" || typeof value === "boolean" || value === null) {
             fields[key] = value;
           } else if (typeof value === "string" && value.length <= 200 && !/[\\/]/.test(value)) {
@@ -625,7 +642,7 @@ function isHighChurnFolderPath(absPath: string, userHome: string): boolean {
   return false;
 }
 
-async function expandDroppedPaths(
+export async function expandDroppedPaths(
   paths: string[],
   configuredFolders: string[],
   options: IndexPathPolicy & { includeImages?: boolean },
@@ -707,7 +724,9 @@ async function expandDroppedPaths(
     try {
       entry = resolveFolderArgument(filePath, home);
     } catch (err) {
-      addBlocked(filePath, err instanceof FolderArgumentError ? err.reason : (err as Error).name);
+      // Only a refused argument blocks its entry; anything else is a bug.
+      if (!(err instanceof FolderArgumentError)) throw err;
+      addBlocked(filePath, err.reason);
       continue;
     }
     await visit(entry);
@@ -959,7 +978,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       if (!_warnedEndpoints.has(key)) {
         _warnedEndpoints.add(key);
         console.error("warn", "imageCaptionEndpoint rejected by SSRF guard", {
-          value: raw,
+          ...endpointFieldsForLog(raw),
           reason: allowLoopback
             ? "scheme must be https, or http+loopback"
             : "scheme must be https (loopback only allowed for openai provider)",
@@ -1364,7 +1383,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     if (!_warnedEndpoints.has(key)) {
       _warnedEndpoints.add(key);
       console.error("warn", "embeddingEndpoint rejected by SSRF guard", {
-        value: _embeddingEndpointRaw,
+        ...endpointFieldsForLog(_embeddingEndpointRaw),
         reason: _embeddingAllowLoopback
           ? "scheme must be https, or http+loopback"
           : "scheme must be https (loopback only allowed for openai provider)",
