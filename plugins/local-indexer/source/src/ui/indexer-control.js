@@ -1195,7 +1195,7 @@ export async function mount(context) {
 
 export default mount;
 
-const app = new App({ name: "local-indexer", version: "0.8.0" }, {}, { autoResize: false });
+const app = new App({ name: "local-indexer", version: "0.8.1" }, {}, { autoResize: false });
 try {
   await app.connect();
   await app.sendSizeChanged({ height: 640 });

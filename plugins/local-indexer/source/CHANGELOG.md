@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.8.0] - Unreleased
+## [0.8.1] - Unreleased
+
+Use a neutral example path (`~/Documents`) in the index_folder `folder` description.
+
+## [0.8.0] - 2026-11-07
 
 Serve the sidebar as MCP Apps HTML with standard host context and staged question drafts. Add app-only index_wait_changes with bounded cursors for progress, warnings, documents, folders and completion. Use delegated stdio worker control and hostFetch secret leases; rebuild legacy indexes in worker-owned state. Log to stderr and close through the runtime lifecycle. Require host protocol 5 and Ave 0.14.2.
 
