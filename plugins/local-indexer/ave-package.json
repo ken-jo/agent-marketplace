@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "local-indexer",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "minAppVersion": "0.14.2",
   "hostProtocol": "5",
   "displayName": "Ave Local Indexer",
@@ -71,9 +71,9 @@
     "artifact": {
       "release": {
         "repo": "ken-jo/agent-marketplace",
-        "tag": "local-indexer-v0.8.0",
-        "asset": "local-indexer-0.8.0.zip",
-        "sha256": "de8eeaadb3d636128949f48fc4e2a1360a1cfbb90533272041fbcae465ff166b"
+        "tag": "local-indexer-v0.8.1",
+        "asset": "local-indexer-0.8.1.zip",
+        "sha256": "fec38ffd613adc40e72f2d6a439579e018703612c5a441f611d5b403cd393a6a"
       }
     }
   }
