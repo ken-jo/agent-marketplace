@@ -633,7 +633,7 @@ describe("hostPlugin createPlugin", () => {
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
     expect(logs).toContainEqual([
       "warn:local_indexer.startup_warmup_failed",
-      { error: warmupError.message },
+      { error: { name: "Error" } },
     ]);
   });
 
@@ -854,6 +854,72 @@ describe("hostPlugin createPlugin", () => {
     await plugin.handlers.index_clear_warnings();
     status = await plugin.handlers.index_scan_status();
     expect(status.warnings).toEqual([]);
+  });
+
+  it("SSRF-guard rejections log the endpoint host only, never userinfo or path", async () => {
+    const { ctx } = makeContext(hostRoot, {}, {
+      pluginDataDir: hostRoot,
+      configValues: {
+        embeddingProvider: "openai",
+        embeddingEndpoint: "http://user:pass@evil.example/tenant/v1",
+        imageCaptionProvider: "openai",
+        imageCaptionEndpoint: "user:pass tenant not a url",
+      },
+    });
+    const plugin = await createPlugin(ctx);
+    await plugin.handlers.index_scan_status();
+    const calls = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls;
+    const embedding = calls.find(([, event]) => event === "embeddingEndpoint rejected by SSRF guard");
+    expect(embedding?.[2]).toMatchObject({ endpointHost: "evil.example" });
+    expect(embedding?.[2]).not.toHaveProperty("value");
+    const caption = calls.find(([, event]) => event === "imageCaptionEndpoint rejected by SSRF guard");
+    expect(caption?.[2]).toMatchObject({ parsable: false });
+    const written = JSON.stringify(calls);
+    for (const secret of ["user", "pass", "tenant"]) expect(written).not.toContain(secret);
+    await plugin.stop();
+  });
+
+  it("host stderr never echoes worker lines or fs error messages that carry paths", async () => {
+    const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+    const plugin = await createPlugin(ctx);
+    const stderr = ctx.stderr as ReturnType<typeof vi.fn>;
+    const secretPath = join(fixtureUserHome(hostRoot), "Documents", "empty.pdf");
+    stderr.mockClear();
+
+    // A parsed worker event: the warning channel still sees the path.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(
+      JSON.stringify({ event: "indexer.file.empty", level: "info", doc_id: "d1", path: secretPath, error: `empty: ${secretPath}`, chunks: 0 }),
+    );
+    // An unparsed line, as a Python traceback prints it.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(`  File "${secretPath}", line 12, in parse`);
+    const status = await plugin.handlers.index_scan_status();
+    expect(status.warnings).toHaveLength(1);
+    expect(status.warnings[0]).toMatchObject({ kind: "file.empty", path: secretPath });
+
+    // An fs error whose message embeds a path: the settings file is a directory.
+    await mkdir(join(hostRoot, "image-embedding-settings.json"), { recursive: true });
+    await writeFile(join(hostRoot, "image-embedding-settings.json", "x"), "x");
+    await expect(
+      plugin.handlers.index_set_image_embedding({ enabled: true, mode: "cloud" }),
+    ).rejects.toThrow(hostRoot);
+
+    const calls = stderr.mock.calls.map(([level, event, fields]) => ({ level, event, fields }));
+    expect(calls).toContainEqual({
+      level: "info",
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.file.empty", level: "info", doc_id: "d1", chunks: 0 },
+    });
+    expect(calls).toContainEqual({
+      level: "info",
+      event: "local_indexer.worker.unparsed_line",
+      fields: { length: `  File "${secretPath}", line 12, in parse`.length },
+    });
+    const writeFailed = calls.find((c) => c.event === "image_settings.write_failed");
+    expect(writeFailed?.fields.error).toMatchObject({ name: "Error", code: expect.any(String) });
+    const written = JSON.stringify(stderr.mock.calls);
+    expect(written).not.toContain(hostRoot);
+    expect(written).not.toContain("empty.pdf");
+    await plugin.stop();
   });
 
   describe("0.8.0 index location rebuild", () => {
@@ -1233,6 +1299,11 @@ describe("hostPlugin createPlugin", () => {
       const status = await settledMigration(plugin);
       expect(status.phase).toBe("kept-old");
       expect(status.reason).toMatch(/the rebuild scan failed: .*embeddingEndpoint/);
+      const keptLog = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .find(([, event]) => event === "local_indexer.index_migration.kept-old")?.[2];
+      expect(keptLog?.reason).toMatch(/^the rebuild scan failed: \w+/);
+      expect(keptLog?.reason).not.toContain("embeddingEndpoint");
+      expect(JSON.stringify(keptLog)).not.toContain(hostRoot);
       expect(status.coverage).toBeUndefined();
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
@@ -1314,14 +1385,23 @@ describe("hostPlugin createPlugin", () => {
     it("keeps the old index when the old index cannot be read", async () => {
       const legacy = await legacyIndexFixture();
       await savedFolders();
-      legacyIndexManifestMock.mockRejectedValueOnce(new Error("database disk image is malformed"));
+      const corruptAt = join(legacy, "fts5.sqlite");
+      legacyIndexManifestMock.mockRejectedValueOnce(
+        Object.assign(new Error(`database disk image is malformed: ${corruptAt}`), { code: "SQLITE_CORRUPT" }),
+      );
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
       expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
+      // The caller keeps the full cause; the stderr diagnostic names only the error.
       expect(status.reason).toMatch(/old index could not be read: database disk image is malformed/);
+      expect(status.reason).toContain(corruptAt);
+      const keptLog = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .find(([, event]) => event === "local_indexer.index_migration.kept-old")?.[2];
+      expect(keptLog?.reason).toBe("the old index could not be read: Error (SQLITE_CORRUPT)");
+      expect(JSON.stringify(keptLog)).not.toContain(hostRoot);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       await plugin.stop();
@@ -1346,7 +1426,8 @@ describe("hostPlugin createPlugin", () => {
       const targets = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
         .filter(([, event]: [string, string]) => event === "index_scan.target_folders")
         .map(([, , fields]: [string, string, any]) => fields);
-      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: [docs, mount] });
+      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: 2 });
+      expect(JSON.stringify(targets.at(0))).not.toContain(hostRoot);
       await plugin.stop();
     });
 
@@ -1681,6 +1762,78 @@ describe("hostPlugin createPlugin", () => {
       expect(String(changed.at(-1)?.[1]?.message ?? "")).toContain("문서 1개 삭제");
     } finally {
       await rm(safeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("index_folders expands ~/ against userHome, not pluginRoot, and refuses relative / ~user forms", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const documents = join(fixtureUserHome(hostRoot), "Documents");
+    await mkdir(documents, { recursive: true });
+    const foldersJson = join(hostRoot, "plugin-data", ".local-indexer-workspace", "folders.json");
+    try {
+      const addRes = await plugin.handlers.index_folders({ action: "add", folder: "~/Documents" });
+      expect(addRes.added).toBe(true);
+      expect(addRes.folders).toContain(documents);
+      const saved = JSON.parse(await readFile(foldersJson, "utf-8"));
+      expect(saved.folders).toContain(documents);
+      // Nothing may land under the child's cwd (pluginRoot) as a literal `~` segment.
+      expect(saved.folders.filter((f) => f.split(/[\\/]/).includes("~"))).toEqual([]);
+
+      const preview = await plugin.handlers.index_preview_folder({ folder: "~/Documents" });
+      expect(preview.folder).toBe(documents);
+      expect(preview.error).toBeUndefined();
+
+      await expect(
+        plugin.handlers.index_folders({ action: "add", folder: "./Documents" }),
+      ).rejects.toThrow(/상대 경로/);
+      await expect(
+        plugin.handlers.index_folders({ action: "add", folder: "~other/Documents" }),
+      ).rejects.toThrow(/~user/);
+      // The refresh body (index_scan {folder}) must look up the same expanded path.
+      await writeFile(join(documents, "note.md"), "refresh through ~/", "utf-8");
+      indexDocumentMock.mockClear();
+      const refreshed = await plugin.handlers.index_scan({ folder: "~/Documents" });
+      expect(refreshed.folder).toBe(documents);
+      expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(documents, "note.md")]);
+
+      const relPreview = await plugin.handlers.index_preview_folder({ folder: "./Documents" });
+      expect(relPreview.error).toMatch(/상대 경로/);
+
+      const batch = await plugin.handlers.index_folders({
+        action: "add",
+        folders: ["./Documents", "~other/x"],
+      });
+      expect(batch.added).toEqual([]);
+      expect(batch.failures.map((f) => f.folder)).toEqual(["./Documents", "~other/x"]);
+
+      const rmRes = await plugin.handlers.index_folders({ action: "remove", folder: "~/Documents" });
+      expect(rmRes.removed).toBe(true);
+      expect(rmRes.folders).not.toContain(documents);
+    } finally {
+      await plugin.stop();
+    }
+  });
+
+  it("index_scan paths expands ~/ per entry and blocks relative / ~user entries without dropping the rest", async () => {
+    const { ctx, logs } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const drops = join(fixtureUserHome(hostRoot), "Drops");
+    await mkdir(drops, { recursive: true });
+    await writeFile(join(drops, "dropped.md"), "dropped through ~/", "utf-8");
+    try {
+      const res = await plugin.handlers.index_scan({ paths: ["./rel.md", "~/Drops", "~other/x", "rel-bare.md"] });
+      expect(res.indexed).toBe(1);
+      expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(drops, "dropped.md")]);
+      // The diagnostic carries a count and the distinct path-free reasons only.
+      const skipped = logs.find(([key]) => key === "warn:document_index_scan.blocked_paths_skipped");
+      expect(skipped?.[1]).toEqual({ count: 3, reasons: ["relative path", "~user form"] });
+      const logged = JSON.stringify(skipped?.[1]);
+      for (const leaked of ["./rel.md", "~other/x", "rel-bare.md", hostRoot, fixtureUserHome(hostRoot)]) {
+        expect(logged).not.toContain(leaked);
+      }
+    } finally {
+      await plugin.stop();
     }
   });
 

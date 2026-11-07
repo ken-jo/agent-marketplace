@@ -6,9 +6,12 @@ import {
   endpointHostForLog,
   endpointQueryParam,
   endpointRoot,
+  expandDroppedPaths,
   isTrustedEndpointUrl,
   normalizeUncRoot,
   resolveAzureResourceEndpoint,
+  resolveFolderArgument,
+  workerLineDiagnostic,
   validateEndpointUrl,
 } from "../src/hostPlugin.js";
 import { flattenAgentPluginsManifest } from "@ave/plugin-contract";
@@ -361,9 +364,12 @@ describe("manifest contract — input schema length & pattern guards", () => {
     expect(schema.additionalProperties).toBe(false);
   });
 
-  it("index_folders.folder enforces absolute / ~ / . prefix (former index_add_folder.folder)", () => {
+  it("index_folders.folder enforces absolute / ~ prefix and no relative paths (former index_add_folder.folder)", () => {
     const f = toolByName.get("index_folders")!.inputSchema.properties.folder;
-    expect(f.pattern).toBe("^([A-Za-z]:[\\\\/]|/|~|\\.)");
+    expect(f.pattern).toBe("^([A-Za-z]:[\\\\/]|/|~)");
+    const re = new RegExp(f.pattern);
+    expect(re.test("./docs")).toBe(false);
+    expect(re.test("~/Documents")).toBe(true);
     expect(f.maxLength).toBe(4096);
   });
 
@@ -372,6 +378,100 @@ describe("manifest contract — input schema length & pattern guards", () => {
     expect(f.maxItems).toBe(200);
     expect(f.minItems).toBe(1);
     expect(f.items.maxLength).toBe(4096);
+  });
+});
+
+describe("resolveFolderArgument — folder tool argument to absolute path", () => {
+  const home = "/home/tester";
+  const winHome = "C:\\Users\\tester";
+
+  it("expands ~ and ~/… against the host-supplied user home", () => {
+    expect(resolveFolderArgument("~/Documents", home, "linux")).toBe("/home/tester/Documents");
+    expect(resolveFolderArgument("~", home, "darwin")).toBe("/home/tester");
+    expect(resolveFolderArgument("~/Documents", winHome, "win32")).toBe("C:\\Users\\tester\\Documents");
+    expect(resolveFolderArgument("~\\Documents", winHome, "win32")).toBe("C:\\Users\\tester\\Documents");
+  });
+
+  it("passes absolute paths through unchanged", () => {
+    expect(resolveFolderArgument("/srv/docs", home, "linux")).toBe("/srv/docs");
+    expect(resolveFolderArgument("D:\\work\\docs", winHome, "win32")).toBe("D:\\work\\docs");
+    expect(resolveFolderArgument("D:/work/docs", winHome, "win32")).toBe("D:\\work\\docs");
+  });
+
+  it("refuses relative paths instead of resolving them against pluginRoot", () => {
+    for (const raw of ["./x", "x", "../x", "."]) {
+      expect(() => resolveFolderArgument(raw, home, "linux")).toThrow(/상대 경로/);
+    }
+    expect(() => resolveFolderArgument(".\\x", winHome, "win32")).toThrow(/상대 경로/);
+  });
+
+  it("refuses ~user forms (another user's home)", () => {
+    expect(() => resolveFolderArgument("~other/x", home, "linux")).toThrow(/~user/);
+    expect(() => resolveFolderArgument("~other", home, "linux")).toThrow(/~user/);
+    // `~\` is a home separator only on Windows; on POSIX it is a `~user` name.
+    expect(() => resolveFolderArgument("~\\x", home, "linux")).toThrow(/~user/);
+  });
+});
+
+describe("workerLineDiagnostic — what the host echoes from worker stderr", () => {
+  it("keeps the event name and scalar non-path fields of a JSON event", () => {
+    expect(
+      workerLineDiagnostic(JSON.stringify({
+        event: "indexer.file.start", level: "info", doc_id: "d1", type: "pdf", chunks: 3,
+        path: "/home/tester/a.pdf", abs_path: "C:\\Users\\tester\\a.pdf", error: "boom", note: "see /home/tester",
+        nested: { path: "/home/tester" },
+      })),
+    ).toEqual({
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.file.start", level: "info", doc_id: "d1", type: "pdf", chunks: 3 },
+    });
+  });
+
+  it("takes the event from a `[name] {json}` prefix", () => {
+    expect(workerLineDiagnostic('[indexer.egress.denied] {"reason":"quota","path":"/home/tester"}')).toEqual({
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.egress.denied", reason: "quota" },
+    });
+  });
+
+  it("drops keys the worker does not emit, whatever their value", () => {
+    expect(
+      workerLineDiagnostic(JSON.stringify({ event: "indexer.x", target: "C:", user: "alice", title: "Q3 plan", chunks: 2 })),
+    ).toEqual({ event: "local_indexer.worker.event", fields: { event: "indexer.x", chunks: 2 } });
+  });
+
+  it("drops an allowlisted key whose value looks like a path", () => {
+    expect(
+      workerLineDiagnostic(JSON.stringify({
+        event: "indexer.x", reason: "C:\\Users\\tester\\a.pdf", model: "/home/tester/model", note: "x".repeat(201), kind: "io",
+      })),
+    ).toEqual({ event: "local_indexer.worker.event", fields: { event: "indexer.x", kind: "io" } });
+  });
+
+  it("reduces any other line to its length", () => {
+    for (const line of ['Traceback (most recent call last):', '  File "/home/tester/x.py", line 1', "{not json", '{"no_event":1}']) {
+      expect(workerLineDiagnostic(line)).toEqual({
+        event: "local_indexer.worker.unparsed_line",
+        fields: { length: line.length },
+      });
+    }
+  });
+});
+
+describe("expandDroppedPaths — entry refusals", () => {
+  it("blocks a refused entry with its reason", async () => {
+    const res = await expandDroppedPaths(["./x", "~other/x"], [], { userHome: "/home/tester" });
+    expect(res.blocked).toEqual([
+      { path: "./x", reason: "relative path" },
+      { path: "~other/x", reason: "~user form" },
+    ]);
+  });
+
+  it("lets an unexpected error propagate instead of blocking the entry", async () => {
+    // A missing userHome is a host contract violation, not a refused argument.
+    await expect(
+      expandDroppedPaths(["~/x"], [], { userHome: undefined as unknown as string }),
+    ).rejects.toThrow(TypeError);
   });
 });
 

@@ -77,6 +77,22 @@ export class WorkerIndexFailure extends Error {
 }
 
 /**
+ * What a diagnostic may say about an error: its class name and a code, never
+ * its message. Messages (fs errno text, worker errors, Python exceptions) embed
+ * file paths and with them the user's account name; tool results that reach
+ * the caller keep the message, stderr does not.
+ */
+export function errorLogFields(err: unknown): { name: string; code?: string | number } {
+  if (!(err instanceof Error)) return { name: typeof err };
+  const e = err as Error & { code?: unknown; workerCode?: unknown; failureKind?: unknown };
+  const code =
+    typeof e.code === "string" || typeof e.code === "number" ? e.code
+    : typeof e.failureKind === "string" ? e.failureKind
+    : undefined;
+  return code === undefined ? { name: e.name } : { name: e.name, code };
+}
+
+/**
  * Worker refusals that are a verdict on the request itself: invalid params
  * (a bad mode, a malformed path) and a file that is not there. A path outside
  * the allowed roots has its own code (-32011, PATH_NOT_ALLOWED) because the

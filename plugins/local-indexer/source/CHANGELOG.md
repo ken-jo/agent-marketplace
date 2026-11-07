@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.8.0] - Unreleased
+## [0.8.1] - Unreleased
+
+Use a neutral example path (`~/Documents`) in the index_folders `folder` description, and make that example mean what the user approved: folder arguments and index_scan `paths` entries now expand `~` and `~/…` (`~\…` on Windows) against the host-supplied user home instead of resolving against the plugin's working directory. Relative paths and `~user` forms are refused with a clear error (a refused `paths` entry is blocked on its own and the rest still scan), and the schema pattern no longer admits `.`-relative paths. Plugin diagnostics on stderr no longer include file, folder or index paths (or search queries); they log counts and path-free reasons instead. Errors are logged as `{ name, code }` without their messages, rejected endpoints as their host only, worker stderr lines are no longer echoed raw (a JSON event keeps its name and the scalar, path-free values of the fields the worker is known to emit; any other line, tracebacks included, is logged only by length), the plugin's own worker-exit, shutdown and config messages are structured diagnostics, and the rebuild `kept-old` log names the error by class and code while `index_scan_status` keeps the full reason.
+
+## [0.8.0] - 2026-11-07
 
 Serve the sidebar as MCP Apps HTML with standard host context and staged question drafts. Add app-only index_wait_changes with bounded cursors for progress, warnings, documents, folders and completion. Use delegated stdio worker control and hostFetch secret leases; rebuild legacy indexes in worker-owned state. Log to stderr and close through the runtime lifecycle. Require host protocol 5 and Ave 0.14.2.
 

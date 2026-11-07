@@ -107,6 +107,11 @@ export interface LocalIndexerWorkerOptions {
    */
   onWorkerStderr?: (line: string) => void;
   /**
+   * A diagnostic this plugin generates itself (worker exit, shutdown failure,
+   * config warnings). Structured and path-free, unlike raw worker stderr.
+   */
+  onDiagnostic?: (level: "info" | "warn", event: string, fields: Record<string, unknown>) => void;
+  /**
    * #955 round-2 architect Minor: surface azure-inherit config-missing
    * states beyond stderr so the host can emit a UI-visible warning event
    * (e.g. `local_indexer.config_warning`). Called once per scan-start
