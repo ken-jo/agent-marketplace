@@ -10,6 +10,7 @@ import {
   normalizeUncRoot,
   resolveAzureResourceEndpoint,
   resolveFolderArgument,
+  workerLineDiagnostic,
   validateEndpointUrl,
 } from "../src/hostPlugin.js";
 import { flattenAgentPluginsManifest } from "@ave/plugin-contract";
@@ -408,6 +409,37 @@ describe("resolveFolderArgument — folder tool argument to absolute path", () =
     expect(() => resolveFolderArgument("~other", home, "linux")).toThrow(/~user/);
     // `~\` is a home separator only on Windows; on POSIX it is a `~user` name.
     expect(() => resolveFolderArgument("~\\x", home, "linux")).toThrow(/~user/);
+  });
+});
+
+describe("workerLineDiagnostic — what the host echoes from worker stderr", () => {
+  it("keeps the event name and scalar non-path fields of a JSON event", () => {
+    expect(
+      workerLineDiagnostic(JSON.stringify({
+        event: "indexer.file.start", level: "info", doc_id: "d1", type: "pdf", chunks: 3,
+        path: "/home/tester/a.pdf", abs_path: "C:\\Users\\tester\\a.pdf", error: "boom", note: "see /home/tester",
+        nested: { path: "/home/tester" },
+      })),
+    ).toEqual({
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.file.start", level: "info", doc_id: "d1", type: "pdf", chunks: 3 },
+    });
+  });
+
+  it("takes the event from a `[name] {json}` prefix", () => {
+    expect(workerLineDiagnostic('[indexer.egress.denied] {"reason":"quota","path":"/home/tester"}')).toEqual({
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.egress.denied", reason: "quota" },
+    });
+  });
+
+  it("reduces any other line to its length", () => {
+    for (const line of ['Traceback (most recent call last):', '  File "/home/tester/x.py", line 1', "{not json", '{"no_event":1}']) {
+      expect(workerLineDiagnostic(line)).toEqual({
+        event: "local_indexer.worker.unparsed_line",
+        fields: { length: line.length },
+      });
+    }
   });
 });
 

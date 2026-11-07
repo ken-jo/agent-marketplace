@@ -29,6 +29,7 @@
 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { FolderAutoIndexerResult } from "./types.js";
+import { errorLogFields } from "./workerClient.js";
 import type { IndexLocation } from "./localIndexerPlugin.js";
 
 export type IndexMigrationPhase = "rebuilding" | "completed" | "kept-old";
@@ -220,6 +221,15 @@ export interface CoverageDeps {
 }
 
 /** One file indexed by CoverageDeps.indexDirect. */
+/**
+ * The status reason reaches stderr and the panel, so it names the error by
+ * class and code only: messages embed paths (and the user's account name).
+ */
+function errorSummary(err: unknown): string {
+  const { name, code } = errorLogFields(err);
+  return code === undefined ? name : `${name} (${code})`;
+}
+
 export interface DirectIndexResult {
   path: string;
   indexed: boolean;
@@ -697,7 +707,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
       status.deferred = err.kind;
       return keep(err.message, false);
     }
-    return keep(`the old index could not be read: ${(err as Error).message}`);
+    return keep(`the old index could not be read: ${errorSummary(err)}`);
   }
   status.legacyDocuments = manifest.documents.length;
 
@@ -706,7 +716,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
   try {
     scan = await deps.runFullScan(status);
   } catch (err) {
-    return keep(`the rebuild scan failed: ${(err as Error).message}`);
+    return keep(`the rebuild scan failed: ${errorSummary(err)}`);
   }
   const { result } = scan;
   status.scan = {
@@ -776,7 +786,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
       assessed.coverage.backfill = backfill;
     }
   } catch (err) {
-    return keep(`the new index could not be checked: ${(err as Error).message}`);
+    return keep(`the new index could not be checked: ${errorSummary(err)}`);
   }
   status.coverage = assessed.coverage;
   const notes = coverageNotes(assessed.coverage);
@@ -784,7 +794,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
   try {
     status.documentsAfter = await deps.documentCount();
   } catch (err) {
-    return keep(`the worker did not report its documents: ${(err as Error).message}`);
+    return keep(`the worker did not report its documents: ${errorSummary(err)}`);
   }
 
   const gap = coverageGapReason(assessed.coverage);
@@ -793,7 +803,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
   try {
     await deps.removeDirectory(legacyIndexDir);
   } catch (err) {
-    return keep(`the old index directory could not be removed: ${(err as Error).message}`);
+    return keep(`the old index directory could not be removed: ${errorSummary(err)}`);
   }
   try {
     await deps.attempts.clear();

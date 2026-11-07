@@ -2,7 +2,7 @@
 
 ## [0.8.1] - Unreleased
 
-Use a neutral example path (`~/Documents`) in the index_folders `folder` description, and make that example mean what the user approved: folder arguments and index_scan `paths` entries now expand `~` and `~/…` (`~\…` on Windows) against the host-supplied user home instead of resolving against the plugin's working directory. Relative paths and `~user` forms are refused with a clear error (a refused `paths` entry is blocked on its own and the rest still scan), and the schema pattern no longer admits `.`-relative paths. Plugin diagnostics on stderr no longer include file, folder or index paths (or search queries); they log counts and path-free reasons instead.
+Use a neutral example path (`~/Documents`) in the index_folders `folder` description, and make that example mean what the user approved: folder arguments and index_scan `paths` entries now expand `~` and `~/…` (`~\…` on Windows) against the host-supplied user home instead of resolving against the plugin's working directory. Relative paths and `~user` forms are refused with a clear error (a refused `paths` entry is blocked on its own and the rest still scan), and the schema pattern no longer admits `.`-relative paths. Plugin diagnostics on stderr no longer include file, folder or index paths (or search queries); they log counts and path-free reasons instead. Errors are logged as `{ name, code }` without their messages, worker stderr lines are no longer echoed raw (a JSON event keeps its name and scalar non-path fields; any other line, tracebacks included, is logged only by length), and rebuild `kept-old` reasons name the error by class and code.
 
 ## [0.8.0] - 2026-11-07
 

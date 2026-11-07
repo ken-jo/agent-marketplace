@@ -20,7 +20,7 @@ import {
   TEMP_FILE_PREFIXES,
 } from "./indexingFiles.js";
 import { SKIP_DIR_NAMES } from "./skipDirs.js";
-import { isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
+import { errorLogFields, isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
 
 /** Simple ReDoS heuristic: detect nested quantifiers like (...+)+ or (...*)*. */
 const NESTED_QUANTIFIER_RE = /\([^)]*[+*][^)]*\)[+*]/;
@@ -238,7 +238,7 @@ export class FolderAutoIndexer {
           void this.handleUnlinkEvent(filePath);
         });
         this.watcher.on("error", (err) => {
-          console.warn("[FolderAutoIndexer] watcher error:", err);
+          console.warn("[FolderAutoIndexer] watcher error:", errorLogFields(err));
         });
       } catch (err) {
         this.watcher = null;
@@ -412,7 +412,7 @@ export class FolderAutoIndexer {
                   const cbResult = this.onFileIndexed(filePath, docId);
                   if (cbResult instanceof Promise) await cbResult;
                 } catch (cbErr) {
-                  console.warn("[FolderAutoIndexer] onFileIndexed callback failed:", cbErr);
+                  console.warn("[FolderAutoIndexer] onFileIndexed callback failed:", errorLogFields(cbErr));
                 }
               }
             }
@@ -435,7 +435,7 @@ export class FolderAutoIndexer {
                 const cbResult = this.onFileFailed(filePath, failedDocId, (err as Error).message);
                 if (cbResult instanceof Promise) await cbResult;
               } catch (cbErr) {
-                console.warn("[FolderAutoIndexer] onFileFailed callback failed:", cbErr);
+                console.warn("[FolderAutoIndexer] onFileFailed callback failed:", errorLogFields(cbErr));
               }
             }
           } finally {
@@ -475,10 +475,7 @@ export class FolderAutoIndexer {
             try {
               await this.client.removeDocument(docId);
             } catch (err) {
-              console.warn(
-                "[FolderAutoIndexer] scanOnce prune removeDocument failed:",
-                err,
-              );
+              console.warn("[FolderAutoIndexer] scanOnce prune removeDocument failed:", errorLogFields(err));
               continue;
             }
           }
@@ -489,7 +486,7 @@ export class FolderAutoIndexer {
               const cbResult = this.onFileRemoved(filePath, docId);
               if (cbResult instanceof Promise) await cbResult;
             } catch (cbErr) {
-              console.warn("[FolderAutoIndexer] onFileRemoved callback failed (scanOnce):", cbErr);
+              console.warn("[FolderAutoIndexer] onFileRemoved callback failed (scanOnce):", errorLogFields(cbErr));
             }
           }
         }
@@ -643,7 +640,7 @@ export class FolderAutoIndexer {
       try {
         await this.client.removeDocument(docId);
       } catch (err) {
-        console.warn("[FolderAutoIndexer] removeDocument failed:", err);
+        console.warn("[FolderAutoIndexer] removeDocument failed:", errorLogFields(err));
         return;
       }
     }
@@ -655,7 +652,7 @@ export class FolderAutoIndexer {
         const cbResult = this.onFileRemoved(filePath, docId);
         if (cbResult instanceof Promise) await cbResult;
       } catch (cbErr) {
-        console.warn("[FolderAutoIndexer] onFileRemoved callback failed (unlink):", cbErr);
+        console.warn("[FolderAutoIndexer] onFileRemoved callback failed (unlink):", errorLogFields(cbErr));
       }
     }
   }
@@ -676,7 +673,7 @@ export class FolderAutoIndexer {
             const cbResult = this.onFileIndexed(filePath, docId);
             if (cbResult instanceof Promise) await cbResult;
           } catch (cbErr) {
-            console.warn("[FolderAutoIndexer] onFileIndexed callback failed (watcher):", cbErr);
+            console.warn("[FolderAutoIndexer] onFileIndexed callback failed (watcher):", errorLogFields(cbErr));
           }
         }
       }
@@ -775,7 +772,7 @@ export class FolderAutoIndexer {
       }
       return files;
     } catch (err) {
-      console.warn("[FolderAutoIndexer] walkDir: readdir failed:", (err as NodeJS.ErrnoException).code ?? (err as Error).name);
+      console.warn("[FolderAutoIndexer] walkDir: readdir failed:", errorLogFields(err));
       unreadable.push(dirPath);
       return [];
     }

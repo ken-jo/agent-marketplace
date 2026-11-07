@@ -71,7 +71,7 @@ import {
   RESCAN_LEDGER_FILENAME,
 } from "./rescanSuggestion.js";
 import { LocalIndexerPlugin } from "./localIndexerPlugin.js";
-import { isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
+import { errorLogFields, isTransientIndexFailure, WorkerIndexFailure } from "./workerClient.js";
 import {
   MigrationDeferred,
   migrateLegacyIndex,
@@ -495,6 +495,55 @@ function getBlockedIndexPathMessage(
  * host-supplied `userHome`, pass absolute paths through, and refuse forms with
  * no meaningful base here: relative paths and `~user`.
  */
+// Field names whose values are paths, file names or free text (exception
+// messages, tracebacks) in worker log lines. Dropped before the host echoes a
+// line: those values carry the user's account name.
+const WORKER_LOG_DROPPED_KEY = /path|file|folder|dir|root|name|error|exc|trace|message|msg|detail|query|text/i;
+
+/**
+ * What the host writes to its own stderr for one worker stderr line. A parsed
+ * JSON event keeps its event name and scalar fields that cannot be a path; any
+ * other line (plain text, a traceback, a crash note) is reduced to its length.
+ * `handleWorkerLogLine` still reads the raw line for the warning channel.
+ */
+export function workerLineDiagnostic(line: string): { event: string; fields: Record<string, unknown> } {
+  const jsonStart = line.indexOf("{");
+  if (jsonStart >= 0) {
+    let obj: unknown;
+    try {
+      obj = JSON.parse(line.slice(jsonStart));
+    } catch {
+      obj = undefined;
+    }
+    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+      const record = obj as Record<string, unknown>;
+      const prefixed = /^\[([A-Za-z0-9_.:-]+)\] /.exec(line)?.[1];
+      const name = typeof record.event === "string" ? record.event : prefixed;
+      if (name && /^[A-Za-z0-9_.:-]{1,120}$/.test(name)) {
+        const fields: Record<string, unknown> = { event: name };
+        for (const [key, value] of Object.entries(record)) {
+          if (key === "event" || WORKER_LOG_DROPPED_KEY.test(key)) continue;
+          if (typeof value === "number" || typeof value === "boolean" || value === null) {
+            fields[key] = value;
+          } else if (typeof value === "string" && value.length <= 200 && !/[\\/]/.test(value)) {
+            fields[key] = value;
+          }
+        }
+        return { event: "local_indexer.worker.event", fields };
+      }
+    }
+  }
+  return { event: "local_indexer.worker.unparsed_line", fields: { length: line.length } };
+}
+
+/** A flat record with every array replaced by its length, for diagnostics. */
+function arraysAsCounts(record: object | undefined): Record<string, unknown> | undefined {
+  if (!record) return undefined;
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key, Array.isArray(value) ? value.length : value]),
+  );
+}
+
 /** A refused folder argument. `reason` is path-free so diagnostics can log it. */
 export class FolderArgumentError extends Error {
   constructor(message: string, readonly reason: string) {
@@ -748,8 +797,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       // re-scan, not lost data, which is why nothing here falls back to copying
       // the tree out. Logged with the path so the leftover is findable.
       console.error("warn", "local_indexer.workspace_migration.skipped", {
-        error: (err as Error).name,
-        code: (err as NodeJS.ErrnoException).code,
+        error: errorLogFields(err),
         note: "the index rebuilds from scratch",
       });
     }
@@ -1193,8 +1241,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         imageSettingsCache = next;
       } catch (err) {
         console.error("warn", "image_settings.write_failed", {
-          error: (err as Error).name,
-          code: (err as NodeJS.ErrnoException).code,
+          error: errorLogFields(err),
         });
         // Surface the error so the UI rolls back the toggle.
         throw new Error(
@@ -1211,7 +1258,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           await setConfig("imageEmbeddingEnabled", next.imageEmbeddingEnabled);
         } catch (err) {
           console.error("warn", "image_settings.config_set_failed", {
-            error: (err as Error).message,
+            error: errorLogFields(err),
           });
         }
       }
@@ -1406,7 +1453,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       _surfacedWarningKeys.clear();
       _surfacedWarningKeys.add(dedupeKey);
     }
-    console.error("warn", `local_indexer.worker.${w.kind}`, { kind: w.kind, reason: w.reason ?? w.error });
+    console.error("warn", `local_indexer.worker.${w.kind}`, { kind: w.kind, reason: w.reason });
     emitIndexWarning(w);
   };
   const handleWorkerLogLine = (line: string): void => {
@@ -1647,7 +1694,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     onWorkerStderr: (line) => {
       // stdout carries control frames only, so every worker log line — the
       // JSON events included — arrives on stderr.
-      console.error(`[worker] ${line}`);
+      const diagnostic = workerLineDiagnostic(line);
+      console.error("info", diagnostic.event, diagnostic.fields);
       // Surface critical worker events as UI-visible warnings. The worker
       // logs path-confinement failures (`caption.rejected_path`) and other
       // soft errors at INFO level only, which means a misconfigured allowed-
@@ -1724,7 +1772,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       } catch (err) {
         console.error("warn", "local_indexer.record_state_failed", {
           docId,
-          error: (err as Error).message,
+          error: errorLogFields(err),
         });
       }
       structureCache.invalidate(docId);
@@ -1751,7 +1799,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           await plugin.removeDocument(docId);
           console.error("info", "local_indexer.remove_failed_file_db_ok", { docId });
         } catch (err) {
-          console.error("warn", "local_indexer.remove_failed_file_db_failure", { docId, error: (err as Error).message });
+          console.error("warn", "local_indexer.remove_failed_file_db_failure", { docId, error: errorLogFields(err) });
         }
       }
       // Surface the per-file failure to the UI warning banner so the top
@@ -1888,7 +1936,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       .then(() => undefined)
       .catch((err) => {
         console.error("local-indexer:rescan-suggestion:unexpected", {
-          error: (err as Error).message,
+          error: errorLogFields(err),
         });
       })
       .finally(() => {
@@ -1949,7 +1997,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         entries.push(...result.value);
       } else {
         console.error("warn", "indexState.store_load_failed", {
-          error: (result.reason as Error)?.message,
+          error: errorLogFields(result.reason),
         });
       }
     }
@@ -2285,7 +2333,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         failed += 1;
         console.error("warn", "index_remove_folder.document_remove_failed", {
           docId: doc.doc_id,
-          error: (err as Error).message,
+          error: errorLogFields(err),
         });
       }
     }
@@ -2414,7 +2462,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       console.error("info", "local_indexer.allowed_roots.synced", { count: roots.length });
     } catch (err) {
       console.error("warn", "local_indexer.allowed_roots.sync_failed", {
-        error: (err as Error).message,
+        error: errorLogFields(err),
       });
     }
   }
@@ -2647,12 +2695,13 @@ export default async function createPlugin(context: PluginRuntimeContext) {
               ok = result.status === "indexed" && result.embedded === true;
               if (!ok) {
                 console.error("warn", "local_indexer.reconcile_heal_failed", {
-                  error: result.errors?.join(", ") || "indexed without vectors",
+                  errors: result.errors?.length ?? 0,
+                  note: "indexed without vectors",
                 });
               }
             } catch (err) {
               console.error("warn", "local_indexer.reconcile_heal_failed", {
-                error: (err as Error).message,
+                error: errorLogFields(err),
               });
             }
             const key = resolve(path);
@@ -2683,7 +2732,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       }
     } catch (err) {
       console.error("warn", "local_indexer.reconcile_failed", {
-        error: (err as Error).message,
+        error: errorLogFields(err),
       });
     }
   }
@@ -2752,7 +2801,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         console.error("warn", "local_indexer.index_migration.manifest_unreadable", {
-          error: (err as Error).message,
+          error: errorLogFields(err),
         });
       }
     }
@@ -2973,17 +3022,18 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         retriesExhausted: status.retriesExhausted,
         documentsBefore: status.documentsBefore,
         documentsAfter: status.documentsAfter,
-        scan: status.scan
-          ? { ...status.scan, unreadableFolders: status.scan.unreadableFolders?.length }
-          : undefined,
+        // Arrays in these records list folders and documents by path: log counts.
+        scan: arraysAsCounts(status.scan),
         legacyDocuments: status.legacyDocuments,
-        coverage: status.coverage
-          ? { ...status.coverage, excludedCorrupt: status.coverage.excludedCorrupt.length }
-          : undefined,
+        coverage: arraysAsCounts(status.coverage),
         deferred: status.deferred,
         // notes name excluded documents by path; the status object keeps them.
         notes: status.notes?.length,
-        reason: status.reason,
+        // Coverage reasons name the folders the user must fix; the status
+        // returned to callers keeps them, the log does not.
+        reason: status.reason && /[\\/]/.test(status.reason)
+          ? "(names paths; see index_scan_status)"
+          : status.reason,
       },
     );
     // The rebuilding notice is raised by index_scan itself, after it clears
@@ -3060,7 +3110,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
       });
     })()
       .catch((err) => {
-        console.error("warn", "local_indexer.index_migration.failed", { error: (err as Error).message });
+        console.error("warn", "local_indexer.index_migration.failed", { error: errorLogFields(err) });
       })
       .finally(() => {
         indexMigrationPromise = null;
@@ -3133,7 +3183,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         }
       } catch (err) {
         console.error("warn", "local_indexer.image_captioning_sync_failed", {
-          error: (err as Error).message,
+          error: errorLogFields(err),
         });
       }
       // Tell the freshly-started worker that embedding may go through, so
@@ -3169,7 +3219,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         }
       } catch (err) {
         console.error("warn", "local_indexer.embedding_key_warmup_failed", {
-          error: (err as Error).message,
+          error: errorLogFields(err),
         });
       }
       // Start는 worker readiness까지만 blocking하고, 캐시 동기화/워처 준비는
@@ -3179,7 +3229,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         startupWarmupPromise = runStartupWarmup(folders)
           .catch((err) => {
             console.error("warn", "local_indexer.startup_warmup_failed", {
-              error: (err as Error).message,
+              error: errorLogFields(err),
             });
           })
           .finally(() => {
@@ -3564,7 +3614,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             await workerClient.setEmbeddingEgress(true);
           } catch (err) {
             console.error("warn", "index_scan.embedding_key_sync_failed", {
-              error: (err as Error).message,
+              error: errorLogFields(err),
             });
           }
         }
@@ -3602,7 +3652,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             );
           } catch (err) {
             console.error("warn", "index_scan.caption_key_sync_failed", {
-              error: (err as Error).message,
+              error: errorLogFields(err),
             });
           }
         }
@@ -3628,7 +3678,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           console.error("warn", "index_scan.state_source", {
             source: "indexState_fallback",
             stateMapSize: stateForScan.size,
-            error: (err as Error).message,
+            error: errorLogFields(err),
           });
         }
         // Purge orphaned docs (files deleted from disk but still in DB/IndexState)
@@ -3710,7 +3760,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             try { await embeddingHandle.release(); } catch (err) {
               console.error("warn", "local_indexer.resolve_api_key.release_failed", {
                 purpose: "embedding",
-                error: (err as Error).message,
+                error: errorLogFields(err),
               });
             }
           }
@@ -3718,7 +3768,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             try { await captionHandle.release(); } catch (err) {
               console.error("warn", "local_indexer.resolve_api_key.release_failed", {
                 purpose: "vision",
-                error: (err as Error).message,
+                error: errorLogFields(err),
               });
             }
           }
@@ -3800,7 +3850,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             indexed += 1;
           } catch (err) {
             failed += 1;
-            console.error("warn", "document_index_scan.index_failed", { error: (err as Error).message });
+            console.error("warn", "document_index_scan.index_failed", { error: errorLogFields(err) });
             emitIndexWarning({
               kind: "indexDocument.failed",
               path: filePath,
@@ -3810,7 +3860,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           }
           if (docId) {
             await recordIndexedState(filePath, docId).catch((e) => {
-              console.error("warn", "document_index_scan.state_record_failed", { error: (e as Error).message });
+              console.error("warn", "document_index_scan.state_record_failed", { error: errorLogFields(e) });
             });
           }
         }
@@ -3847,7 +3897,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           docs = uniqueDocuments((await plugin.listDocuments()) as LocalIndexerDocumentMeta[]);
           console.error("info", "index_documents.worker_list_ok", { count: docs.length });
         } catch (err) {
-          console.error("warn", "index_documents.worker_list_failed", { error: (err as Error).message });
+          console.error("warn", "index_documents.worker_list_failed", { error: errorLogFields(err) });
         }
 
         if (docs.length === 0) {
@@ -3935,7 +3985,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
             console.error("info", "index_folders.from_worker", { count: dbState.size });
           } catch (err) {
             dbFailed = true;
-            console.error("warn", "index_folders.worker_failed", { error: (err as Error).message });
+            console.error("warn", "index_folders.worker_failed", { error: errorLogFields(err) });
           }
           if (dbState.size > 0) {
             // DB 항목에 IndexState mtime으로 정밀도 보정 (Python int→Node.js float 오차)
@@ -4382,7 +4432,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           };
         } catch (err) {
           const message = (err as Error).message;
-          console.error(`chat_preview bm25 search failed: ${message}`);
+          console.error("warn", "chat_preview.bm25_search_failed", { error: errorLogFields(err) });
           throw new Error(`chat_preview requires the Local Indexer worker BM25 search endpoint: ${message}`);
         }
       },
@@ -4431,7 +4481,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
           };
         } catch (err) {
           const message = (err as Error).message;
-          console.error(`index_search worker search failed: ${message}`, { mode, queryLength: query.length });
+          console.error("warn", "index_search.worker_search_failed", { mode, queryLength: query.length, error: errorLogFields(err) });
           throw new Error(`index_search failed (${mode}): ${message}`);
         }
       },
@@ -4593,7 +4643,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         } catch (err) {
           workerSyncError = (err as Error).message;
           console.error("warn", "index_set_image_embedding.worker_sync_failed", {
-            error: workerSyncError,
+            error: errorLogFields(err),
           });
           // UI 경고 배너에도 표시 — 토글이 디스크엔 저장됐지만 다음 스캔까지
           // 워커가 반영을 못 한다는 사실을 사용자에게 보여준다.
@@ -4670,7 +4720,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         // ensureStarted so registered folders are loaded before the gate check.
         void runRescanSuggestionOnLaunch();
       } catch (err) {
-        console.error("local-indexer plugin startup failed", err);
+        console.error("warn", "local_indexer.startup_failed", { error: errorLogFields(err) });
         throw err;
       }
     },
@@ -4706,7 +4756,7 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         try {
           await indexMigrationAttempts.clear();
         } catch (err) {
-          console.error("warn", "local_indexer.index_migration.ledger_reset_failed", { error: (err as Error).message });
+          console.error("warn", "local_indexer.index_migration.ledger_reset_failed", { error: errorLogFields(err) });
         }
         if (stopped) {
           console.error("info", "local_indexer.index_migration.manual_retry", {});

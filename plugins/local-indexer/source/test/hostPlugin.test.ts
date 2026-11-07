@@ -633,7 +633,7 @@ describe("hostPlugin createPlugin", () => {
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
     expect(logs).toContainEqual([
       "warn:local_indexer.startup_warmup_failed",
-      { error: warmupError.message },
+      { error: { name: "Error" } },
     ]);
   });
 
@@ -854,6 +854,49 @@ describe("hostPlugin createPlugin", () => {
     await plugin.handlers.index_clear_warnings();
     status = await plugin.handlers.index_scan_status();
     expect(status.warnings).toEqual([]);
+  });
+
+  it("host stderr never echoes worker lines or fs error messages that carry paths", async () => {
+    const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+    const plugin = await createPlugin(ctx);
+    const stderr = ctx.stderr as ReturnType<typeof vi.fn>;
+    const secretPath = join(fixtureUserHome(hostRoot), "Documents", "empty.pdf");
+    stderr.mockClear();
+
+    // A parsed worker event: the warning channel still sees the path.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(
+      JSON.stringify({ event: "indexer.file.empty", level: "info", doc_id: "d1", path: secretPath, error: `empty: ${secretPath}`, chunks: 0 }),
+    );
+    // An unparsed line, as a Python traceback prints it.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(`  File "${secretPath}", line 12, in parse`);
+    const status = await plugin.handlers.index_scan_status();
+    expect(status.warnings).toHaveLength(1);
+    expect(status.warnings[0]).toMatchObject({ kind: "file.empty", path: secretPath });
+
+    // An fs error whose message embeds a path: the settings file is a directory.
+    await mkdir(join(hostRoot, "image-embedding-settings.json"), { recursive: true });
+    await writeFile(join(hostRoot, "image-embedding-settings.json", "x"), "x");
+    await expect(
+      plugin.handlers.index_set_image_embedding({ enabled: true, mode: "cloud" }),
+    ).rejects.toThrow(hostRoot);
+
+    const calls = stderr.mock.calls.map(([level, event, fields]) => ({ level, event, fields }));
+    expect(calls).toContainEqual({
+      level: "info",
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.file.empty", level: "info", doc_id: "d1", chunks: 0 },
+    });
+    expect(calls).toContainEqual({
+      level: "info",
+      event: "local_indexer.worker.unparsed_line",
+      fields: { length: `  File "${secretPath}", line 12, in parse`.length },
+    });
+    const writeFailed = calls.find((c) => c.event === "image_settings.write_failed");
+    expect(writeFailed?.fields.error).toMatchObject({ name: "Error", code: expect.any(String) });
+    const written = JSON.stringify(stderr.mock.calls);
+    expect(written).not.toContain(hostRoot);
+    expect(written).not.toContain("empty.pdf");
+    await plugin.stop();
   });
 
   describe("0.8.0 index location rebuild", () => {
@@ -1232,7 +1275,7 @@ describe("hostPlugin createPlugin", () => {
       await plugin.onPublished?.();
       const status = await settledMigration(plugin);
       expect(status.phase).toBe("kept-old");
-      expect(status.reason).toMatch(/the rebuild scan failed: .*embeddingEndpoint/);
+      expect(status.reason).toMatch(/^the rebuild scan failed: Error$/);
       expect(status.coverage).toBeUndefined();
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
@@ -1321,7 +1364,8 @@ describe("hostPlugin createPlugin", () => {
 
       const status = await settledMigration(plugin);
       expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
-      expect(status.reason).toMatch(/old index could not be read: database disk image is malformed/);
+      expect(status.reason).toMatch(/^the old index could not be read: \w+/);
+      expect(status.reason).not.toContain(hostRoot);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       await plugin.stop();
