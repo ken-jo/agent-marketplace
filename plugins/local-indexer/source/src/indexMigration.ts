@@ -166,6 +166,11 @@ export interface IndexMigrationStatus {
   documentsAfter?: number;
   /** Why the old directory was kept. */
   reason?: string;
+  /**
+   * `reason` for stderr: the same cause with the error named by class and code
+   * only, set when `reason` carries an error message (which can embed paths).
+   */
+  diagnosticReason?: string;
   /** What the user should know even when the rebuild completed. */
   notes?: string[];
 }
@@ -220,15 +225,16 @@ export interface CoverageDeps {
   caseInsensitive: (folder: string) => Promise<boolean>;
 }
 
-/** One file indexed by CoverageDeps.indexDirect. */
 /**
- * The status reason reaches stderr and the panel, so it names the error by
- * class and code only: messages embed paths (and the user's account name).
+ * An error named by class and code only, for `diagnosticReason`: messages
+ * embed paths (and the user's account name), so stderr never gets them.
  */
 function errorSummary(err: unknown): string {
   const { name, code } = errorLogFields(err);
   return code === undefined ? name : `${name} (${code})`;
 }
+
+/** One file indexed by CoverageDeps.indexDirect. */
 
 export interface DirectIndexResult {
   path: string;
@@ -675,11 +681,12 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
 
   // `counted: false` for a cancelled scan: quitting the app mid-rebuild is
   // not a failed attempt, and must not use up the bound.
-  const keep = async (reason: string, counted = true): Promise<IndexMigrationStatus> => {
+  const keep = async (reason: string, counted = true, diagnosticReason?: string): Promise<IndexMigrationStatus> => {
     const kept: IndexMigrationStatus = {
       ...status,
       phase: "kept-old",
       reason,
+      ...(diagnosticReason !== undefined ? { diagnosticReason } : {}),
       ...(counted && status.attempt >= maxAttempts ? { retriesExhausted: true } : {}),
     };
     if (counted) {
@@ -692,6 +699,9 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
     deps.report(kept);
     return kept;
   };
+  // The caller sees the error's message; stderr sees its class and code.
+  const keepForError = (cause: string, err: unknown): Promise<IndexMigrationStatus> =>
+    keep(`${cause}: ${(err as Error).message}`, true, `${cause}: ${errorSummary(err)}`);
 
   if (isInside(location.indexRoot, legacyIndexDir) || isInside(deps.workspace, legacyIndexDir)) {
     // The new index or the scratch workspace sits inside the old directory;
@@ -707,7 +717,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
       status.deferred = err.kind;
       return keep(err.message, false);
     }
-    return keep(`the old index could not be read: ${errorSummary(err)}`);
+    return keepForError("the old index could not be read", err);
   }
   status.legacyDocuments = manifest.documents.length;
 
@@ -716,7 +726,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
   try {
     scan = await deps.runFullScan(status);
   } catch (err) {
-    return keep(`the rebuild scan failed: ${errorSummary(err)}`);
+    return keepForError("the rebuild scan failed", err);
   }
   const { result } = scan;
   status.scan = {
@@ -786,7 +796,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
       assessed.coverage.backfill = backfill;
     }
   } catch (err) {
-    return keep(`the new index could not be checked: ${errorSummary(err)}`);
+    return keepForError("the new index could not be checked", err);
   }
   status.coverage = assessed.coverage;
   const notes = coverageNotes(assessed.coverage);
@@ -794,7 +804,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
   try {
     status.documentsAfter = await deps.documentCount();
   } catch (err) {
-    return keep(`the worker did not report its documents: ${errorSummary(err)}`);
+    return keepForError("the worker did not report its documents", err);
   }
 
   const gap = coverageGapReason(assessed.coverage);
@@ -803,7 +813,7 @@ export async function migrateLegacyIndex(deps: IndexMigrationDeps): Promise<Inde
   try {
     await deps.removeDirectory(legacyIndexDir);
   } catch (err) {
-    return keep(`the old index directory could not be removed: ${errorSummary(err)}`);
+    return keepForError("the old index directory could not be removed", err);
   }
   try {
     await deps.attempts.clear();

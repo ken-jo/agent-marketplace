@@ -1275,7 +1275,12 @@ describe("hostPlugin createPlugin", () => {
       await plugin.onPublished?.();
       const status = await settledMigration(plugin);
       expect(status.phase).toBe("kept-old");
-      expect(status.reason).toMatch(/^the rebuild scan failed: Error$/);
+      expect(status.reason).toMatch(/the rebuild scan failed: .*embeddingEndpoint/);
+      const keptLog = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .find(([, event]) => event === "local_indexer.index_migration.kept-old")?.[2];
+      expect(keptLog?.reason).toMatch(/^the rebuild scan failed: \w+/);
+      expect(keptLog?.reason).not.toContain("embeddingEndpoint");
+      expect(JSON.stringify(keptLog)).not.toContain(hostRoot);
       expect(status.coverage).toBeUndefined();
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
@@ -1357,15 +1362,23 @@ describe("hostPlugin createPlugin", () => {
     it("keeps the old index when the old index cannot be read", async () => {
       const legacy = await legacyIndexFixture();
       await savedFolders();
-      legacyIndexManifestMock.mockRejectedValueOnce(new Error("database disk image is malformed"));
+      const corruptAt = join(legacy, "fts5.sqlite");
+      legacyIndexManifestMock.mockRejectedValueOnce(
+        Object.assign(new Error(`database disk image is malformed: ${corruptAt}`), { code: "SQLITE_CORRUPT" }),
+      );
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
       expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
-      expect(status.reason).toMatch(/^the old index could not be read: \w+/);
-      expect(status.reason).not.toContain(hostRoot);
+      // The caller keeps the full cause; the stderr diagnostic names only the error.
+      expect(status.reason).toMatch(/old index could not be read: database disk image is malformed/);
+      expect(status.reason).toContain(corruptAt);
+      const keptLog = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .find(([, event]) => event === "local_indexer.index_migration.kept-old")?.[2];
+      expect(keptLog?.reason).toBe("the old index could not be read: Error (SQLITE_CORRUPT)");
+      expect(JSON.stringify(keptLog)).not.toContain(hostRoot);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       await plugin.stop();

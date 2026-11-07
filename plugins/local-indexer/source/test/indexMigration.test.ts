@@ -658,23 +658,31 @@ describe("migrateLegacyIndex — keeps the old index", () => {
       const paths = await writeDocs(docs, ["a.md"]);
       const manifest = await oldIndexOf(paths);
       const m = scanDeps(fx, new FakeWorker(), [docs], manifest);
-      // The reason names the error by class and code; its message (here a path) stays out.
+      // The caller's reason carries the full cause; the stderr form names the
+      // error by class and code, so a path in the message stays out of it.
+      const corruptAt = join(fx.root, "index");
       m.deps.loadManifest = async () => {
-        throw Object.assign(new Error(`database disk image is malformed: ${join(fx.root, "index")}`), { code: "SQLITE_CORRUPT" });
+        throw Object.assign(new Error(`database disk image is malformed: ${corruptAt}`), { code: "SQLITE_CORRUPT" });
       };
-      expectKept(await migrateLegacyIndex(m.deps), fx, /^the old index could not be read: Error \(SQLITE_CORRUPT\)$/);
+      const unreadable = await migrateLegacyIndex(m.deps);
+      expectKept(unreadable, fx, /old index could not be read: database disk image is malformed: /);
+      expect(unreadable?.reason).toContain(corruptAt);
+      expect(unreadable?.diagnosticReason).toBe("the old index could not be read: Error (SQLITE_CORRUPT)");
       const a = scanDeps(fx, new FakeWorker(), [docs], manifest);
       a.deps.runFullScan = async () => { throw new Error("worker gone"); };
-      expectKept(await migrateLegacyIndex(a.deps), fx, /rebuild scan failed: Error$/);
+      expectKept(await migrateLegacyIndex(a.deps), fx, /rebuild scan failed: worker gone/);
       const l = scanDeps(fx, new FakeWorker(), [docs], manifest);
       l.deps.coverage.listNewDocuments = async () => { throw new Error("timeout"); };
-      expectKept(await migrateLegacyIndex(l.deps), fx, /new index could not be checked: Error$/);
+      expectKept(await migrateLegacyIndex(l.deps), fx, /new index could not be checked: timeout/);
       const b = scanDeps(fx, new FakeWorker(), [docs], manifest);
       b.deps.documentCount = async () => { throw new Error("timeout"); };
-      expectKept(await migrateLegacyIndex(b.deps), fx, /did not report its documents: Error$/);
+      expectKept(await migrateLegacyIndex(b.deps), fx, /did not report its documents: timeout/);
       const c = scanDeps(fx, new FakeWorker(), [docs], manifest);
       c.deps.removeDirectory = async () => { throw Object.assign(new Error(`EACCES: ${fx.root}`), { code: "EACCES" }); };
-      expectKept(await migrateLegacyIndex(c.deps), fx, /could not be removed: Error \(EACCES\)$/);
+      const removal = await migrateLegacyIndex(c.deps);
+      expectKept(removal, fx, /could not be removed: EACCES: /);
+      expect(removal?.diagnosticReason).toBe("the old index directory could not be removed: Error (EACCES)");
+      expect(removal?.diagnosticReason).not.toContain(fx.root);
     });
   });
 

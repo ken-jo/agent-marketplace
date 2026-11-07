@@ -1686,6 +1686,8 @@ export default async function createPlugin(context: PluginRuntimeContext) {
     corpCaPath,
     egressUpstreamFetch,
     onEgressEvent: (level, event, fields) => console.error(level, event, fields),
+    // The plugin's own lifecycle and config diagnostics: structured, no paths.
+    onDiagnostic: (level, event, fields) => console.error(level, event, fields),
     // #955: forward the host's active LLM vendor so the embedding/captioning
     // provider auto-inherits Azure when the host is Azure AI Foundry. Plugin-
     // level explicit overrides (embeddingProvider / embeddingModel prefix)
@@ -3029,11 +3031,12 @@ export default async function createPlugin(context: PluginRuntimeContext) {
         deferred: status.deferred,
         // notes name excluded documents by path; the status object keeps them.
         notes: status.notes?.length,
-        // Coverage reasons name the folders the user must fix; the status
-        // returned to callers keeps them, the log does not.
-        reason: status.reason && /[\\/]/.test(status.reason)
-          ? "(names paths; see index_scan_status)"
-          : status.reason,
+        // The status returned to callers keeps the full reason (error text,
+        // folders the user must fix); the log gets the path-free form.
+        reason: status.diagnosticReason
+          ?? (status.reason && /[\\/]/.test(status.reason)
+            ? "(names paths; see index_scan_status)"
+            : status.reason),
       },
     );
     // The rebuilding notice is raised by index_scan itself, after it clears

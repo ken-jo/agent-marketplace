@@ -11,7 +11,7 @@ import type {
   PluginWorkerExitInfo,
 } from "./types.js";
 import { EgressBroker } from "./egressBroker.js";
-import { WorkerClient, type WorkerRuntimeInfo } from "./workerClient.js";
+import { errorLogFields, WorkerClient, type WorkerRuntimeInfo } from "./workerClient.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -149,9 +149,7 @@ export class LocalIndexerPlugin {
       try {
         await this.stop();
       } catch (stopErr) {
-        this.options.onWorkerStderr?.(
-          `[ave-local-indexer] start failure cleanup failed: ${(stopErr as Error).message}`,
-        );
+        this.options.onDiagnostic?.("warn", "local_indexer.worker.start_cleanup_failed", errorLogFields(stopErr));
       }
       throw err;
     } finally {
@@ -171,17 +169,13 @@ export class LocalIndexerPlugin {
         signal: AbortSignal.timeout(this.options.shutdownGraceMs ?? DEFAULT_SHUTDOWN_GRACE_MS),
       });
     } catch (err) {
-      this.options.onWorkerStderr?.(
-        `[ave-local-indexer] worker_shutdown failed: ${(err as Error).message}`,
-      );
+      this.options.onDiagnostic?.("warn", "local_indexer.worker.shutdown_failed", errorLogFields(err));
     }
     this.workerClient.attach(null);
     try {
       handle.stop();
     } catch (err) {
-      this.options.onWorkerStderr?.(
-        `[ave-local-indexer] worker handle stop failed: ${(err as Error).message}`,
-      );
+      this.options.onDiagnostic?.("warn", "local_indexer.worker.handle_stop_failed", errorLogFields(err));
     }
   }
 
@@ -343,11 +337,10 @@ export class LocalIndexerPlugin {
     );
     const embModel = this.options.embeddingModel ?? DEFAULT_OPENAI_MODEL;
     if (embProvider === "openai" && !this.options.apiKey) {
-      this.options.onWorkerStderr?.(
-        "[ave-local-indexer] WARNING: embeddingModel이 OpenAI 모델로 설정되었지만 apiKey가 없습니다. " +
-          "벡터 임베딩이 비활성화되어 BM25 검색만 동작합니다. " +
-          "플러그인 설정 → '[임베딩] API 키' 에 입력하세요.",
-      );
+      this.options.onDiagnostic?.("warn", "local_indexer.config.openai_api_key_missing", {
+        embeddingModel: embModel,
+        note: "vector embedding disabled; BM25 search only",
+      });
     }
     if (embProvider === "azure" && (!this.options.embeddingEndpoint || !this.options.apiKey)) {
       // Issue #955 round-1 critic (MAJOR 2): host vendor inherit으로 azure가
@@ -361,12 +354,12 @@ export class LocalIndexerPlugin {
       const inheritedFrom = this.options.embeddingProvider
         ? `explicit embeddingProvider=azure`
         : `host vendor inherit (hostVendor=${this.options.hostVendor ?? "?"})`;
-      this.options.onWorkerStderr?.(
-        `[ave-local-indexer] CONFIG REQUIRED: embeddingModel=${embModel}이 azure provider로 ` +
-          `${inheritedFrom} 결정되었지만 ${missing.join(", ")} 미설정. ` +
-          `벡터 임베딩이 비활성화되어 BM25-only fallback으로 동작합니다. ` +
-          `플러그인 사이드카 UI(설정 → [임베딩])에서 endpoint URL과 API 키를 입력하세요.`,
-      );
+      this.options.onDiagnostic?.("warn", "local_indexer.config.azure_config_required", {
+        embeddingModel: embModel,
+        inheritedFrom,
+        missing,
+        note: "vector embedding disabled; BM25-only fallback",
+      });
       // #955 round-2 architect Minor: stderr only is invisible to the UI.
       // Surface the same condition as a structured callback so the host can
       // emit a UI-visible host event (e.g. `local_indexer.config_warning`).
@@ -492,9 +485,11 @@ export class LocalIndexerPlugin {
       this.flushWorkerStderr();
       this.workerHandle = null;
       this.workerClient.attach(null);
-      this.options.onWorkerStderr?.(
-        `[ave-local-indexer] worker exited (${info.reason}, code ${info.code ?? "none"}${info.signal ? `, ${info.signal}` : ""})`,
-      );
+      this.options.onDiagnostic?.("warn", "local_indexer.worker.exited", {
+        reason: info.reason,
+        code: info.code ?? null,
+        signal: info.signal ?? null,
+      });
     });
     this.workerHandle = handle;
     this.workerClient.attach(handle);
