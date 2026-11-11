@@ -439,26 +439,13 @@ describe("repository check", () => {
     assert.match(r.tool("check.mjs", "--base", base).stderr, /a published version cannot leave the index/u);
   });
 
-  it("keeps the Korean pack within the current English interface catalog", () => {
-    const messages = JSON.parse(readFileSync(join(REAL_ROOT, "languages/korean/messages.json"), "utf8"));
-    assert.equal(Object.hasOwn(messages, "overlayCard.pluginNotice"), false);
-    assert.equal(messages["alerts.pluginIdOnly"], "익스텐션: {id}");
-    const languageProblems = checkMarketplaceRepository(workingTree(), { sourceId: "ave", official: true, alertsReleaseVersion: "0.11.0", releasedManifests: new Map() })
-      .filter((problem) => problem.subject === "language/korean");
-    assert.deepEqual(languageProblems, []);
-  });
-
-  it("matches Korean index version floors to their committed descriptors", () => {
+  it("withdraws Korean completely because the app includes it", () => {
+    const withdrawn = JSON.parse(readFileSync(join(REAL_ROOT, "tools/withdrawn.json"), "utf8"));
+    assert.ok(withdrawn.withdrawn.some((entry) => entry.kind === "language" && entry.name === "korean" && entry.reason === "built into Ave"));
+    const tree = workingTree();
+    assert.deepEqual(tree.list("languages/korean"), []);
     const index = JSON.parse(readFileSync(join(REAL_ROOT, "marketplace.json"), "utf8"));
-    const korean = index.packages.find((entry) => entry.kind === "language" && entry.name === "korean");
-    for (const version of ["1.0.5", "1.0.6", "1.0.7", "1.0.8"]) {
-      const pin = korean.versions.find((entry) => entry.version === version);
-      assert.equal(pin.minAppVersion, version === "1.0.5" ? "0.14.0" : "0.14.2");
-      const descriptor = JSON.parse(execFileSync("git", ["show", `${pin.commit}:languages/korean/ave-package.json`], { cwd: REAL_ROOT, encoding: "utf8" }));
-      assert.equal(descriptor.version, version);
-      assert.equal(descriptor.minAppVersion, pin.minAppVersion);
-      assert.equal(descriptor.description, `Korean interface translation for Ave ${pin.minAppVersion} and later.`);
-    }
+    assert.equal(index.packages.some((entry) => entry.kind === "language" && entry.name === "korean"), false);
   });
 
   it("requires protocol 2 in 0.12 source, descriptor, index, and released manifest", () => {
