@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "meeting",
-  "version": "0.11.0",
-  "description": "회의 녹음·음성 전사(STT)·요약 생성 익스텐션. 녹음 시작/중지, 실시간 오디오 청크 전사(OpenAI Whisper), AI 요약·하이라이트·액션 아이템 자동 추출. 액션 아이템은 meeting.summary.created 이벤트의 actionItems 페이로드로 broadcast 되며, 요약은 로컬 SessionStore(JSON)에 영속화. MS Teams·Zoom 등 회의 후처리 지원.",
+  "version": "0.10.3",
+  "description": "회의 녹음, 전사, 준비 및 요약. 사용자 또는 에이전트가 시작한 회의록은 로컬에 저장됩니다.",
   "extensions": {
     "ai.agent-connector.ave": {
       "displayName": "Ave Meeting",
@@ -228,6 +228,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -245,6 +248,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -279,6 +285,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -305,6 +314,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -322,6 +334,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -372,6 +387,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -397,6 +415,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -828,6 +849,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -873,6 +897,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -1189,6 +1216,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -1246,6 +1276,9 @@
                 "app"
               ]
             }
+          },
+          "annotations": {
+            "readOnlyHint": true
           }
         },
         {
@@ -1315,18 +1348,10 @@
           }
         },
         {
-          "name": "meeting_recorder_resize",
+          "name": "meeting_recorder_close",
           "inputSchema": {
             "type": "object",
-            "properties": {
-              "height": {
-                "type": "number",
-                "description": "요청 높이(px). 호스트가 dock 전체 상한에 맞춰 clamp 하며, 실제 적용된 값이 반환됨."
-              }
-            },
-            "required": [
-              "height"
-            ],
+            "properties": {},
             "additionalProperties": false
           },
           "_meta": {
@@ -1338,10 +1363,80 @@
           }
         },
         {
-          "name": "meeting_recorder_close",
+          "name": "meeting_view_state",
+          "description": "Read meeting view configuration and recorder state.",
           "inputSchema": {
             "type": "object",
             "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "_meta": {
+            "ui": {
+              "visibility": [
+                "app"
+              ]
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "meeting_wait_changes",
+          "description": "Wait for bounded meeting invalidations after a cursor.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "cursor": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "waitMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "cursor",
+              "waitMs"
+            ],
+            "additionalProperties": false
+          },
+          "_meta": {
+            "ui": {
+              "visibility": [
+                "app"
+              ]
+            }
+          },
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "meeting_set_prompt",
+          "description": "Save a meeting summary prompt.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "enum": [
+                  "customSummaryFinalPrompt",
+                  "customSummaryIntermediatePrompt"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 20000
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ],
             "additionalProperties": false
           },
           "_meta": {
@@ -1368,57 +1463,25 @@
         ],
         "reasoning": "STT transcription egress to Azure OpenAI / OpenAI Whisper endpoints via host-mediated fetch. github.com and release-assets.githubusercontent.com carry the FFmpeg runtime archive that a marketplace install downloads on first use: the release URL is on github.com and answers 302 to release-assets.githubusercontent.com, and because the host re-runs the full gate on every hop, BOTH hosts have to be declared for the download to complete."
       },
-      "pluginAccess": {
-        "plugins": [
-          {
-            "pluginId": "ms-graph",
-            "events": [
-              "calendar.events.loaded",
-              "calendar.event.added",
-              "calendar.event.upcoming",
-              "calendar.event.starting"
-            ]
-          }
-        ]
-      },
-      "eventSubscriptions": [
-        "calendar.events.loaded",
-        "calendar.event.added",
-        "calendar.event.upcoming",
-        "calendar.event.starting"
-      ],
-      "emittedEvents": [
-        "meeting.started",
-        "meeting.ended",
-        "meeting.transcript.updated",
-        "meeting.summary.created",
-        "meeting.summary.degraded",
-        "meeting.error",
-        "meeting.prep.opened",
-        "meeting.prep.registered",
-        "meeting.calendar.snapshot.requested"
-      ],
       "startupTimeoutMs": 5000,
       "ui": [
         {
           "id": "meeting-control",
           "slot": "sidebar",
-          "kind": "embedded-module",
+          "kind": "mcp-app",
           "displayName": "미팅",
           "title": "Meeting Recorder",
           "description": "회의 세션 시작/청크 주입/종료/전사 조회를 테스트합니다.",
-          "entry": "dist/ui/meeting-control.js",
-          "exportName": "default"
+          "resourceUri": "ui://meeting/control"
         },
         {
           "id": "meeting-recorder-card",
           "slot": "floating",
-          "kind": "embedded-module",
+          "kind": "mcp-app",
           "displayName": "녹음",
           "title": "Meeting Recorder",
           "description": "녹음 중인 회의의 타이머·파형·메모를 호스트 플로팅 독에 표시합니다.",
-          "entry": "dist/ui/recorder-card.js",
-          "exportName": "default"
+          "resourceUri": "ui://meeting/recorder"
         }
       ],
       "hostSecrets": {
@@ -1551,12 +1614,6 @@
             "description": "회의 진행 중 자동 생성되는 중간 요약(라이브 카드)의 system prompt. 비워두면 내장 기본 사용. 커스텀 입력 시 그대로 사용. JSON 형식 필요: {\"summary\", \"highlights\":[]}. 런타임 cap 은 8192 UTF-8 bytes.",
             "maxLength": 8192,
             "default": ""
-          },
-          "calendarAutomationEnabled": {
-            "type": "boolean",
-            "title": "캘린더 자동 회의 준비",
-            "description": "연결된 일정에서 예정 회의를 등록하고 시작 시 녹음을 준비합니다.",
-            "default": false
           }
         }
       },
@@ -1564,13 +1621,6 @@
         "minAppVersion": "0.14.2",
         "hostProtocol": "5"
       },
-      "configInherits": [
-        {
-          "pluginId": "work-assistant",
-          "to": "calendarAutomationEnabled",
-          "value": true
-        }
-      ],
       "alerts": {
         "reasoning": "Meeting summaries and degraded summary generation are useful to surface promptly after a recording.",
         "kinds": [
@@ -1669,7 +1719,21 @@
             }
           }
         ]
-      }
+      },
+      "uiResources": [
+        {
+          "uri": "ui://meeting/control",
+          "permissions": {
+            "clipboardWrite": {}
+          }
+        },
+        {
+          "uri": "ui://meeting/recorder",
+          "permissions": {
+            "clipboardWrite": {}
+          }
+        }
+      ]
     }
   }
 }

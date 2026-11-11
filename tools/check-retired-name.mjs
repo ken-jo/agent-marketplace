@@ -38,15 +38,7 @@ export const RETIRED_NAME_PATTERN = new RegExp(
   "u",
 );
 
-
-/**
- * Where the name may stay: `[path, reason]`, each one exact path. The three
- * files are byte-pinned to the signed Ave contract bundle (contract/sources.json,
- * tools/vendor/sources.json) and cannot be edited; `node tools/vendor.mjs sync
- * --ref <tag>` from an Ave release without the name clears them, and the stale
- * check then forces their removal here.
- */
-// Empty since the vendored contract and checker were re-synced from an Ave commit that no longer carries the name.
+/** No upstream files currently require a retired-name exception. */
 export const ALLOWLIST = Object.freeze([]);
 
 const BINARY_PROBE_BYTES = 8000;

@@ -350,4 +350,3 @@ def test_an_image_outside_the_current_roots_is_a_retryable_failed_result(tmp_pat
     assert result.status == "failed"
     assert result.retryable is True
     assert plugin.calls == []
-

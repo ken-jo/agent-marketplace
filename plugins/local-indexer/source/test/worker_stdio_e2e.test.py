@@ -136,7 +136,7 @@ def test_the_real_worker_speaks_stdio_control_v1(worker: WorkerProcess, tmp_path
     second.write_text("# 출장 규정\n\n출장비는 영수증으로 정산한다.\n", encoding="utf-8")
 
     # The hello is answered first, before anything else is written.
-    worker.send({"id": 0, "method": "$/ave/hello",
+    worker.send({"id": 0, "method": "$/ai.agent-connector.ave/hello",
                  "params": {"protocol": "ave-worker-stdio-control", "versions": ["1"], "frameBytesMax": 16777216}})
     assert worker.recv() == {"jsonrpc": "2.0", "id": 0,
                              "result": {"protocol": "ave-worker-stdio-control", "version": "1"}}
@@ -172,7 +172,7 @@ def test_the_real_worker_speaks_stdio_control_v1(worker: WorkerProcess, tmp_path
     reindex_id = worker.request("indexer_reindex", {"file_path": str(second)})
     egress_request = worker.recv()
     assert egress_request["method"] == "egress_embedding"
-    worker.send({"method": "$/ave/cancel", "params": {"id": reindex_id}})
+    worker.send({"method": "$/ai.agent-connector.ave/cancel", "params": {"id": reindex_id}})
     worker.send({"id": egress_request["id"], "result": embedding_answer(egress_request["params"])})
     cancelled = worker.answer_until(reindex_id, [])
     assert cancelled["error"]["code"] == -32800
@@ -194,10 +194,10 @@ def test_the_real_worker_speaks_stdio_control_v1(worker: WorkerProcess, tmp_path
 
 
 def test_shutdown_notification_ends_the_worker(worker: WorkerProcess) -> None:
-    worker.send({"id": 0, "method": "$/ave/hello",
+    worker.send({"id": 0, "method": "$/ai.agent-connector.ave/hello",
                  "params": {"protocol": "ave-worker-stdio-control", "versions": ["1"], "frameBytesMax": 16777216}})
     worker.recv()
     assert worker.call("worker_shutdown") == {"bye": True}
-    worker.send({"method": "$/ave/shutdown"})
+    worker.send({"method": "$/ai.agent-connector.ave/shutdown"})
     assert worker.proc.wait(30) == 0
     assert worker.non_frames == []

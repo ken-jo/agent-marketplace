@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional
 HELLO = {
     "jsonrpc": "2.0",
     "id": 0,
-    "method": "$/ave/hello",
+    "method": "$/ai.agent-connector.ave/hello",
     "params": {"protocol": "ave-worker-stdio-control", "versions": ["1"], "frameBytesMax": 16777216},
 }
 

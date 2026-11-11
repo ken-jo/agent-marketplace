@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { flattenAgentPluginsManifest, type PluginWorkerSpec } from "@ave/plugin-contract";
 import {
   LEGACY_INDEX_DIR_NAME,
@@ -174,8 +174,8 @@ describe("LocalIndexerPlugin — lifecycle", () => {
       const first = readyWorker({ indexer_reindex: () => new Promise(() => {}) });
       const second = readyWorker({ metrics: () => ({ processed: 2 }) });
       const { spawnWorker, specs } = spawnSequence(first, second);
-      const onWorkerStderr = vi.fn();
-      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir, onWorkerStderr });
+      const onDiagnostic = vi.fn();
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir, onDiagnostic });
       await plugin.start();
 
       const pending = plugin.indexDocument("/slow.md");
@@ -184,7 +184,11 @@ describe("LocalIndexerPlugin — lifecycle", () => {
       // The call in flight is not replayed: it fails with the control error.
       await expect(pending).rejects.toThrow(/worker-incarnation-ended/);
       expect(plugin.isRunning).toBe(false);
-      expect(onWorkerStderr.mock.calls.some(([l]) => /worker exited \(control-violation, code 137\)/.test(String(l)))).toBe(true);
+      expect(onDiagnostic).toHaveBeenCalledWith("warn", "local_indexer.worker.exited", {
+        reason: "control-violation",
+        code: 137,
+        signal: null,
+      });
       await expect(plugin.getWorkerClient().getMetrics()).rejects.toThrow(/not running/);
 
       await plugin.start();
@@ -258,15 +262,32 @@ describe("LocalIndexerPlugin — spawn spec", () => {
     });
   });
 
-  it("grants read access to the interpreter and the worker script only", async () => {
+  it("grants the worker module directory without widening system interpreter access", async () => {
     await withTempDir("ave-li-read-", async (dir) => {
       const { spawnWorker, specs } = spawnSequence(readyWorker());
       const plugin = makePlugin(spawnWorker, { pluginDataDir: dir });
       await plugin.start();
       const reads = specs[0]!.allowReadPaths ?? [];
-      expect(reads).toHaveLength(2);
+      expect(reads).toHaveLength(3);
       expect(reads[0]).toBe("/usr/bin/python3");
       expect(reads[1]).toMatch(/[\\/]local_indexer_worker\.py$/);
+      expect(reads[2]).toBe(dirname(reads[1]));
+      expect(reads).not.toContain("/usr");
+      await plugin.stop();
+    });
+  });
+
+  it("grants only the selected managed environment's venv and interpreter tree", async () => {
+    await withTempDir("ave-li-python-read-", async (dir) => {
+      const runtime = resolve(dir, "runtime/python-envs/lock-id");
+      const { spawnWorker, specs } = spawnSequence(readyWorker());
+      const plugin = makePlugin(spawnWorker, { pluginDataDir: dir, pythonExecutable: resolve(runtime, "venv/bin/python") });
+      await plugin.start();
+      const reads = specs[0]!.allowReadPaths ?? [];
+      expect(reads).toContain(resolve(runtime, "venv"));
+      expect(reads).toContain(resolve(runtime, "python"));
+      expect(reads).not.toContain(runtime);
+      expect(reads).not.toContain(resolve(runtime, ".."));
       await plugin.stop();
     });
   });
@@ -310,17 +331,19 @@ describe("LocalIndexerPlugin — spawn spec", () => {
   it("azure provider with missing endpoint/apiKey invokes onConfigWarning", async () => {
     await withTempDir("ave-li-warn-", async (dir) => {
       const onConfigWarning = vi.fn();
-      const onWorkerStderr = vi.fn();
+      const onDiagnostic = vi.fn();
       const plugin = makePlugin(spawnSequence(readyWorker()).spawnWorker, {
         pluginDataDir: dir,
         embeddingProvider: "azure",
         embeddingModel: "text-embedding-3-small",
         hostVendor: "azure-foundry",
         onConfigWarning,
-        onWorkerStderr,
+        onDiagnostic,
       });
       await plugin.start();
-      expect(onWorkerStderr.mock.calls.some(([l]) => String(l).includes("CONFIG REQUIRED"))).toBe(true);
+      expect(onDiagnostic).toHaveBeenCalledWith("warn", "local_indexer.config.azure_config_required", expect.objectContaining({
+        missing: ["embeddingEndpoint", "apiKey"],
+      }));
       expect(onConfigWarning).toHaveBeenCalledTimes(1);
       expect(onConfigWarning).toHaveBeenCalledWith({
         reason: "azure-inherit-missing-config",

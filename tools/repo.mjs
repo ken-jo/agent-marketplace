@@ -6,9 +6,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifiedRuntime } from "./verified-import.mjs";
-
-const { components: { deriveAgentPluginComponents } } = await verifiedRuntime();
+import { deriveAgentPluginComponents } from "./vendor/agent-plugin-components.js";
 
 /** The repository the tools read; MARKETPLACE_ROOT points them at another checkout (the tools' tests use it). */
 export const ROOT = resolve(process.env.MARKETPLACE_ROOT ?? fileURLToPath(new URL("..", import.meta.url)));
@@ -32,13 +30,15 @@ export const ALERTS_RELEASE_VERSION = "0.11.0";
 export const AUTHORITY_FIELDS = ["capabilities", "networkAccess", "hostSecrets", "pluginAccess", "auth", "requires", "dependencies", "sandbox"];
 
 /** Top-level package directories and the kind each holds (design §3.1, §3.3). */
+/** Kinds explicitly retired by Ave; unknown kinds are validation errors. */
+export const RETIRED_KINDS = Object.freeze(["theme"]);
+
 export const KIND_DIRS = new Map([
   ["plugins", "plugin"],
   ["agent-plugins", "agent-plugin"],
   ["mcp", "mcp"],
   ["skills", "skill"],
   ["agents", "agent"],
-  ["themes", "theme"],
   ["fonts", "font"],
   ["languages", "language"],
   ["providers", "provider"],
@@ -224,10 +224,9 @@ export function isPrerelease(version) {
 
 /**
  * The host protocol an app line serves, newest first: 0.12.x and 0.13.x serve
- * protocol 2, Ave 0.14.0 serves protocol 3, and Ave 0.14.2 and later
- * serve protocol 5 only (the app's `HOST_PROTOCOL_FIRST_APP_VERSION`; protocol 4
- * was never released). A plugin's `minAppVersion` picks the one protocol it must
- * declare; below 0.12.0 there was none.
+ * protocol 2, Ave 0.14.0 serves protocol 3, and Ave 0.14.2 and later serve
+ * protocol 5 (the app's `HOST_PROTOCOL_FIRST_APP_VERSION`). A plugin's
+ * `minAppVersion` picks the protocol it must declare; below 0.12.0 there was none.
  */
 export const HOST_PROTOCOL_FLOORS = Object.freeze([["0.14.2", "5"], ["0.14.0", "3"], ["0.12.0", "2"]]);
 

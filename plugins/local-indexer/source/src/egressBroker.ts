@@ -135,7 +135,7 @@ export interface EgressBrokerOptions {
   /** Upstream transport: the plugin's hostFetch adapter. */
   upstreamFetch: EgressUpstreamFetch;
   /** Host-only audit sink (never secret material). */
-  logEvent?: (
+  audit?: (
     level: "info" | "warn" | "error",
     event: string,
     fields: Record<string, unknown>,
@@ -279,7 +279,7 @@ export class EgressBroker {
         return this.deny(405, "egress method not allowed");
       }
       if (!isSafeRemainder(request.path)) {
-        this.opts.logEvent?.("warn", "local_indexer.egress_refused", { channel: channelName, reason: "invalid path" });
+        this.opts.audit?.("warn", "local_indexer.egress_refused", { channel: channelName, reason: "invalid path" });
         return this.deny(400, "invalid egress path");
       }
 
@@ -291,7 +291,7 @@ export class EgressBroker {
       if (channelName === "caption" && body.length > CAPTION_REQUEST_BYTES_MAX) {
         // The worker refuses an image over the cap before sending; a body this
         // large means one got through, so say which limit it broke.
-        this.opts.logEvent?.("warn", "local_indexer.egress_refused", {
+        this.opts.audit?.("warn", "local_indexer.egress_refused", {
           channel: channelName,
           reason: "caption image over the relay cap",
           bytes: body.length,
@@ -313,7 +313,7 @@ export class EgressBroker {
 
       // Allow-list gate (defence-in-depth) on the host-resolved base.
       if (!this.opts.isUpstreamAllowed(upstreamBase)) {
-        this.opts.logEvent?.("warn", "local_indexer.egress_refused", {
+        this.opts.audit?.("warn", "local_indexer.egress_refused", {
           channel: channelName,
           upstreamHost: originOf(upstreamBase),
           reason: "upstream not allow-listed",
@@ -323,7 +323,7 @@ export class EgressBroker {
 
       const upstreamUrl = joinUpstream(upstreamBase, request.path);
       if (originOf(upstreamUrl) !== originOf(upstreamBase)) {
-        this.opts.logEvent?.("warn", "local_indexer.egress_refused", { channel: channelName, reason: "path changes the authority" });
+        this.opts.audit?.("warn", "local_indexer.egress_refused", { channel: channelName, reason: "path changes the authority" });
         return this.deny(400, "invalid egress path");
       }
 
@@ -348,12 +348,12 @@ export class EgressBroker {
         ...encodeAnswerBody(upstream.body),
       };
       if (Buffer.byteLength(JSON.stringify(answer), "utf8") > WORKER_FRAME_BYTES_MAX - ANSWER_FRAME_HEADROOM_BYTES) {
-        this.opts.logEvent?.("warn", "local_indexer.egress_upstream_error", { code: "response-too-large" });
+        this.opts.audit?.("warn", "local_indexer.egress_upstream_error", { code: "response-too-large" });
         return this.deny(502, "upstream response too large for the worker channel");
       }
 
       // Audit (host-only, no secret material).
-      this.opts.logEvent?.("info", "local_indexer.egress_brokered", {
+      this.opts.audit?.("info", "local_indexer.egress_brokered", {
         channel: channelName,
         upstreamHost: originOf(upstreamBase),
         status: upstream.status,
@@ -369,7 +369,7 @@ export class EgressBroker {
       if (err instanceof EgressLeaseDenied || [
         "lease-unavailable", "lease-audience-denied", "credential-conflict", "effect-boundary-denied",
       ].includes(code)) {
-        this.opts.logEvent?.("warn", "indexer.egress.denied", { reason: code });
+        this.opts.audit?.("warn", "indexer.egress.denied", { reason: code });
         return this.denyStructured(403, code);
       }
       if (code === "rate-limited") {
@@ -382,7 +382,7 @@ export class EgressBroker {
       if (abort.signal.aborted || code === "aborted" || (err instanceof Error && err.name === "AbortError")) {
         return this.denyStructured(499, signal.aborted ? "cancelled" : "timeout");
       }
-      this.opts.logEvent?.("warn", "local_indexer.egress_upstream_error", { code: "transport-failure" });
+      this.opts.audit?.("warn", "local_indexer.egress_upstream_error", { code: "transport-failure" });
       return this.deny(502, "upstream request failed");
     } finally {
       clearTimeout(timer);
@@ -391,7 +391,7 @@ export class EgressBroker {
         try {
           await lease.release();
         } catch (err) {
-          this.opts.logEvent?.("warn", "indexer.egress.lease_release_failed", {
+          this.opts.audit?.("warn", "indexer.egress.lease_release_failed", {
             reason: err instanceof Error ? err.name : "unknown",
           });
         }

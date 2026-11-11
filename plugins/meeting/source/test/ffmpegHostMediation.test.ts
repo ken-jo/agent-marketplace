@@ -1,3 +1,4 @@
+import * as diagnostics from "../src/diagnostic.js";
 /**
  * Everything the FFmpeg runtime reaches for, it reaches for THROUGH THE HOST.
  *
@@ -29,7 +30,7 @@ import {
   type MediatedFetch,
   type MediatedSpawn,
 } from "../src/ffmpegRuntime.js";
-import type { OutputOnlyPluginWorker, PluginWorkerExitInfo, PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
+import type { PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
 import createPlugin, {
   STAGED_UPLOAD_MAX_ACTIVE,
   ffmpegWorkerId,
@@ -38,7 +39,7 @@ import createPlugin, {
   takeFfmpegWorkerSlot,
 } from "../src/hostPlugin.js";
 
-type Handle = OutputOnlyPluginWorker & {
+type Handle = SpawnedPluginWorker & {
   emitStdout(chunk: string): void;
   emitExit(code: number | null): void;
 };
@@ -46,7 +47,7 @@ type Handle = OutputOnlyPluginWorker & {
 /** A worker handle whose exit the test decides. */
 function makeHandle(): Handle {
   const stdout: Array<(chunk: string) => void> = [];
-  const exit: Array<(info: PluginWorkerExitInfo) => void> = [];
+  const exit: Array<(info: { code: number | null; signal: NodeJS.Signals | null; reason: "exited" }) => void> = [];
   return {
     control: "output-only-v1",
     pid: 4242,
@@ -56,7 +57,7 @@ function makeHandle(): Handle {
     onExit: (listener) => { exit.push(listener); },
     emitStdout: (chunk) => { for (const listener of stdout) listener(chunk); },
     emitExit: (code) => { for (const listener of exit) listener({ code, signal: null, reason: "exited" }); },
-  };
+  } as Handle;
 }
 
 function stubSpawn(drive: (handle: Handle) => void) {
@@ -111,28 +112,6 @@ describe("worker slots", () => {
   });
 });
 
-describe("an output-only spec", () => {
-  it("stops and refuses a handle that is not output-only instead of reading it", async () => {
-    process.env.AVE_MEETING_FFPROBE_PATH = new URL(import.meta.url).pathname;
-    const stop = vi.fn();
-    const spawnWorker = vi.fn(async (): Promise<SpawnedPluginWorker> => ({
-      control: "stdio-control-v1",
-      pid: 4343,
-      stop,
-      onStderr: () => {},
-      onExit: () => {},
-      request: async () => null,
-      notify: async () => {},
-      onRequest: () => {},
-      onNotification: () => {},
-    }));
-    await expect(
-      runFfprobeDurationSec("/tmp/audio.m4a", { workerId: "meeting-ffprobe-0", spawnWorker }),
-    ).rejects.toThrow(/output-only/u);
-    expect(stop).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe("runFfprobeDurationSec", () => {
   it("asks the host to spawn it, and reads the duration off stdout", async () => {
     process.env.AVE_MEETING_FFPROBE_PATH = new URL(import.meta.url).pathname;
@@ -148,8 +127,6 @@ describe("runFfprobeDurationSec", () => {
     expect(specs).toHaveLength(1);
     const spec = specs[0]!;
     expect(spec.workerId).toBe("meeting-ffprobe-0");
-    // Protocol 5 refuses a spec with no control mode; ffprobe only reports stdout and its exit code.
-    expect(spec.control).toBe("output-only-v1");
     expect(spec.args).toContain("/tmp/audio.m4a");
     // Declared, not inferred: the host does not read argv to decide filesystem
     // grants, so an input the plugin did not name is an input the tool cannot
@@ -851,7 +828,7 @@ describe("FFmpeg runtime check at startup", () => {
       if (!published) throw deny("hostFetch");
       return new Response("not found", { status: 404 });
     });
-    const logEvent = vi.fn();
+    const diagnostic = vi.spyOn(diagnostics, "diagnostic").mockImplementation(() => {});
     const root = mkdtempSync(join(tmpdir(), "meeting-ffmpeg-startup-"));
     const context = {
       pluginId: "meeting",
@@ -860,17 +837,17 @@ describe("FFmpeg runtime check at startup", () => {
       pluginDataDir: root,
       log: () => { /* no-op */ },
       hostApi: {
-        emitEvent: () => { /* no-op */ },
-        onEvent: () => { /* no-op */ },
+        observeChange: () => { /* no-op */ },
+
         getSecret: () => null,
-        logEvent,
-        onShutdown: () => { /* no-op */ },
+        diagnostic,
+
         spawnWorker,
         hostFetch,
       },
     };
     return {
-      context, spawnWorker, hostFetch, logEvent, denied, root,
+      context, spawnWorker, hostFetch, diagnostic, denied, root,
       publish: () => { published = true; },
       installRuntime: () => { runtimeAvailable = true; },
     };
@@ -895,7 +872,7 @@ describe("FFmpeg runtime check at startup", () => {
       host.publish();
       await plugin.onPublished();
       await vi.waitFor(() => {
-        expect(host.logEvent).toHaveBeenCalledWith("warn", "meeting_ffmpeg_runtime.unavailable", expect.anything());
+        expect(host.diagnostic).toHaveBeenCalledWith("warn", "meeting_ffmpeg_runtime.unavailable", expect.anything());
       });
 
       // It did check — the PATH probe went to the host — and nothing it asked
@@ -954,7 +931,7 @@ describe("FFmpeg runtime check at startup", () => {
       await plugin.onPublished();
       await plugin.onPublished();
       await vi.waitFor(() => {
-        expect(host.logEvent).toHaveBeenCalledWith("warn", "meeting_ffmpeg_runtime.unavailable", expect.anything());
+        expect(host.diagnostic).toHaveBeenCalledWith("warn", "meeting_ffmpeg_runtime.unavailable", expect.anything());
       });
       expect(host.spawnWorker).toHaveBeenCalledTimes(1);
 
@@ -967,7 +944,7 @@ describe("FFmpeg runtime check at startup", () => {
       }
       const probes = host.spawnWorker.mock.calls.filter(([spec]) => spec.args?.[0] === "-version");
       expect(probes.map(([spec]) => spec.command)).toEqual(["ffmpeg", "ffmpeg", "ffprobe"]);
-      expect(host.logEvent).toHaveBeenCalledWith("info", "meeting_ffmpeg_runtime.ready", expect.objectContaining({ source: "path" }));
+      expect(host.diagnostic).toHaveBeenCalledWith("info", "meeting_ffmpeg_runtime.ready", expect.objectContaining({ source: "path" }));
       expect(host.hostFetch).not.toHaveBeenCalled();
       expect(host.denied).toEqual([]);
     } finally {

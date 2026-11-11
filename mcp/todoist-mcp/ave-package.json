@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "todoist-mcp",
-  "version": "2026.10.27",
+  "version": "2026.11.6",
   "minAppVersion": "0.14.0",
   "displayName": "Todoist MCP",
   "description": "Reads Todoist tasks, projects, labels, filters and comments with a default tool allowlist. Creating, editing, completing and deleting objects requires an explicit write opt-in. Supply the Todoist API token through Ave's secret prompt. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",

@@ -1,3 +1,5 @@
+import * as diagnostics from "../src/diagnostic.js";
+import { ChangeStream } from "../src/changeStream.js";
 /**
  * STT key resolution unit tests — apiKeySource SOT + SDK v5.13 resolveApiKey contract.
  *
@@ -19,14 +21,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import createPlugin from "../src/hostPlugin.js";
-import type { HostFetchInit, PluginHostApi, PluginWorkerExitInfo, PluginWorkerSpec, ResolveApiKeyResult, SpawnedPluginWorker } from "@ave/plugin-contract";
+import type { HostFetchInit, PluginHostApi, PluginWorkerSpec, ResolveApiKeyResult, SpawnedPluginWorker } from "@ave/plugin-contract";
 
 type HostApi = {
-  emitEvent: (type: string, data?: unknown) => void;
-  onEvent: (type: string, handler: (data: unknown) => void) => void;
+  observeChange: (type: string, data?: unknown) => void;
+
   getSecret: (key: string) => string | null | Promise<string | null>;
-  logEvent?: (level: "error" | "info" | "warn", message: string, data?: unknown) => void;
-  onShutdown?: (h: () => void | Promise<void>) => void;
+  diagnostic?: (level: "error" | "info" | "warn", message: string, data?: unknown) => void;
+
   config?: {
     get: (key: string) => unknown;
     onChange?: <T = unknown>(key: string, callback: (value: T | undefined) => void) => () => void;
@@ -40,7 +42,7 @@ type HostApi = {
 function makeContext(opts: {
   config?: Record<string, unknown>;
   resolveApiKey?: HostApi["resolveApiKey"];
-  emitEvent?: (type: string, data?: unknown) => void;
+  observeChange?: (type: string, data?: unknown) => void;
   secrets?: Record<string, string>;
   /**
    * Model the host resolving the keychain asynchronously. The plugin must read
@@ -52,23 +54,24 @@ function makeContext(opts: {
   logSink?: (msg: string) => void;
   spawnWorker?: PluginHostApi["spawnWorker"];
 }) {
-  let shutdownHandler: (() => void | Promise<void>) | undefined;
   const root = mkdtempSync(join(tmpdir(), "ave-meeting-resolveApiKey-"));
   mkdirSync(join(root, "sessions"), { recursive: true });
-  const logEvent = vi.fn<(level: "error" | "info" | "warn", message: string, data?: unknown) => void>();
-  const logEventFn: (level: "error" | "info" | "warn", message: string, data?: unknown) => void =
-    (level, message, data) => logEvent(level, message, data);
-  const emitEvent = opts.emitEvent ?? (() => {});
+  const diagnostic = vi.fn<(level: "error" | "info" | "warn", message: string, data?: unknown) => void>();
+  vi.spyOn(diagnostics, "diagnostic").mockImplementation(diagnostic);
+  const diagnosticFn: (level: "error" | "info" | "warn", message: string, data?: unknown) => void =
+    (level, message, data) => diagnostic(level, message, data);
+  const observeChange = opts.observeChange ?? (() => {});
+  vi.spyOn(ChangeStream.prototype, "publish").mockImplementation(observeChange);
 
   const hostApi: HostApi = {
-    emitEvent,
-    onEvent: () => {},
+    observeChange,
+
     getSecret: (key) =>
       opts.asyncSecrets
         ? Promise.resolve(opts.secrets?.[key] ?? null)
         : (opts.secrets?.[key] ?? null),
-    logEvent: logEventFn,
-    onShutdown: (handler) => { shutdownHandler = handler; },
+    diagnostic: diagnosticFn,
+
     config: {
       get: (key: string) => opts.config?.[key],
       onChange: () => () => {},
@@ -86,8 +89,8 @@ function makeContext(opts: {
 
   return {
     root,
-    logEvent,
-    shutdown: async () => { await shutdownHandler?.(); },
+    diagnostic,
+    shutdown: async () => { const handler = process.stdin.listeners("end").at(-1); if (handler) await handler(); },
     context: {
       pluginId: "meeting",
       pluginRoot: root,
@@ -162,7 +165,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
       });
       const spawnWorker = vi.fn(async (spec: PluginWorkerSpec): Promise<SpawnedPluginWorker> => {
         const stdout: Array<(chunk: string) => void> = [];
-        const exit: Array<(info: PluginWorkerExitInfo) => void> = [];
+        const exit: Array<(info: { code: number | null; signal: NodeJS.Signals | null; reason: "exited" }) => void> = [];
         const worker: SpawnedPluginWorker = {
           control: "output-only-v1", pid: 12345,
           stop: async () => {},
@@ -294,7 +297,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
       } as Response;
     });
 
-    const { context, logEvent } = makeContext({
+    const { context, diagnostic } = makeContext({
       config: { apiKeySource: "plugin" },
       asyncSecrets: true,
       secrets: { "plugin.meeting.sttApiKey": "async-plugin-stt-key" },
@@ -317,10 +320,10 @@ describe("STT key resolution — resolveApiKey contract", () => {
 
     // The boot-time diagnostic reads the same secret; an unawaited Promise
     // would report the key as absent even though the session start found it.
-    const diagnostic = logEvent.mock.calls.find(
+    const detail = diagnostic.mock.calls.find(
       ([, message]) => message === "meeting_stt_provider_selection",
     )?.[2] as { pluginSttKeyPresent?: boolean } | undefined;
-    expect(diagnostic?.pluginSttKeyPresent).toBe(true);
+    expect(detail?.pluginSttKeyPresent).toBe(true);
   });
 
   it("apiKeySource=plugin rejects endpoint URLs saved as sttApiKey before upload", async () => {
@@ -331,7 +334,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
     const emitted: Array<{ type: string; data?: unknown }> = [];
     const { context } = makeContext({
       config: { apiKeySource: "plugin" },
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
       secrets: {
         "plugin.meeting.sttApiKey": "https://example.openai.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions",
       },
@@ -443,7 +446,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
     const { context } = makeContext({
       config: { apiKeySource: "plugin" },
       resolveApiKey,
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
     });
     const plugin = await createPlugin(context);
 
@@ -473,7 +476,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
     const { context } = makeContext({
       config: { apiKeySource: "plugin", sttBaseUrl: "http://localhost/v1" },
       secrets: { "plugin.meeting.sttApiKey": "plugin-key" },
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
     });
     const plugin = await createPlugin(context);
 
@@ -507,7 +510,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
 
     const { context } = makeContext({
       resolveApiKey,
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
     });
 
     const plugin = await createPlugin(context);
@@ -540,7 +543,7 @@ describe("STT key resolution — resolveApiKey contract", () => {
     // No resolveApiKey on hostApi at all (legacy v5.4 host).
     const { context } = makeContext({
       resolveApiKey: undefined,
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
     });
     const plugin = await createPlugin(context);
 
@@ -708,14 +711,14 @@ describe("STT key resolution — resolveApiKey contract", () => {
   }, 20_000);
 
   it("sttDiagnostic exposes only redacted fields (no key material or paths)", async () => {
-    const { context, logEvent } = makeContext({
+    const { context, diagnostic } = makeContext({
       config: { apiKeySource: "plugin" },
       resolveApiKey: undefined,
       secrets: { "plugin.meeting.sttApiKey": "secret-key-xyz" },
     });
     await createPlugin(context);
 
-    const diagCalls = logEvent.mock.calls.filter(
+    const diagCalls = diagnostic.mock.calls.filter(
       (call) => call[1] === "meeting_stt_provider_selection",
     );
     expect(diagCalls.length).toBeGreaterThan(0);
@@ -795,7 +798,7 @@ describe("host vendor inherit (#955)", () => {
   // for summary calls against OpenAI public is a user-consent violation.
   it("selects Mock summary when callLlm is absent — does NOT reuse plugin STT key for summary", async () => {
     const logs: string[] = [];
-    const { context } = makeContext({
+    const { context, diagnostic } = makeContext({
       config: { apiKeySource: "plugin" },
       secrets: { "plugin.meeting.sttApiKey": "plugin-stt-only" },
       // callLlm intentionally NOT provided.
@@ -803,18 +806,13 @@ describe("host vendor inherit (#955)", () => {
     });
     await createPlugin(context);
 
-    const summaryLog = logs.find((l) => l.includes("[meeting] summary via"));
-    expect(summaryLog).toBeDefined();
-    // Must be Mock — the legacy "summary via OpenAI (legacy direct SDK)"
-    // path is removed.
-    expect(summaryLog).toContain("Mock");
-    expect(summaryLog).not.toContain("OpenAI");
+    expect(diagnostic).toHaveBeenCalledWith("warn", "meeting_summary_degraded", expect.anything());
   });
 
   it("uses HostLlmSummaryProvider when callLlm is exposed (regardless of plugin STT key)", async () => {
     const logs: string[] = [];
     const callLlm = vi.fn(async () => "ok");
-    const { context } = makeContext({
+    const { context, diagnostic } = makeContext({
       config: { apiKeySource: "plugin" },
       secrets: { "plugin.meeting.sttApiKey": "plugin-stt-only" },
       callLlm,
@@ -822,9 +820,7 @@ describe("host vendor inherit (#955)", () => {
     });
     await createPlugin(context);
 
-    const summaryLog = logs.find((l) => l.includes("[meeting] summary via"));
-    expect(summaryLog).toBeDefined();
-    expect(summaryLog).toContain("host callLlm");
+    expect(diagnostic.mock.calls.some(call => call[1] === "meeting_summary_degraded")).toBe(false);
   });
 
   // ralph round-1 follow-up — M1: Mock summary fallback was a silent UX
@@ -835,9 +831,9 @@ describe("host vendor inherit (#955)", () => {
   //      placeholder summary without realising real LLM access is missing.
   it("emits meeting.summary.degraded when callLlm is missing (M1 — round-1)", async () => {
     const emitted: Array<{ type: string; data?: unknown }> = [];
-    const { context, logEvent } = makeContext({
+    const { context, diagnostic } = makeContext({
       // callLlm intentionally omitted — triggers Mock summary path.
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
     });
     await createPlugin(context);
 
@@ -851,14 +847,14 @@ describe("host vendor inherit (#955)", () => {
     expect(typeof data?.at).toBe("string");
     expect(data?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // ralph round-2 (architect Minor): title/body fields back the
-    // plugin.json notificationEvents → host OS notification surface.
+    // the summary-degraded alert payload is ready for the host notification path.
     expect(typeof data?.title).toBe("string");
     expect(data?.title?.length).toBeGreaterThan(0);
     expect(typeof data?.body).toBe("string");
     expect(data?.body?.length).toBeGreaterThan(0);
 
-    // logEvent records the degradation at warn severity for host log sinks.
-    const warnCalls = logEvent.mock.calls.filter(
+    // diagnostic records the degradation at warn severity for host log sinks.
+    const warnCalls = diagnostic.mock.calls.filter(
       (call) => call[0] === "warn" && call[1] === "meeting_summary_degraded",
     );
     expect(warnCalls.length).toBe(1);
@@ -872,7 +868,7 @@ describe("host vendor inherit (#955)", () => {
     const callLlm = vi.fn(async () => "ok");
     const { context } = makeContext({
       callLlm,
-      emitEvent: (type, data) => emitted.push({ type, data }),
+      observeChange: (type, data) => emitted.push({ type, data }),
     });
     await createPlugin(context);
 

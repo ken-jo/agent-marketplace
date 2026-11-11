@@ -7,13 +7,13 @@ one object per line and at most ``FRAME_BYTES_MAX`` bytes before the newline
 ``schemas/worker-stdio-control/1/worker-control.schema.json``). Logs go to
 stderr; a stray line on stdout ends the worker as a ``control-violation``.
 
-* The host's first frame is the request ``$/ave/hello`` (id 0). The worker
+* The host's first frame is the request ``$/ai.agent-connector.ave/hello`` (id 0). The worker
   answers it before it writes anything else.
 * Either side may then send requests and notifications. Method names match
   ``METHOD_RE``; the ``$/`` names belong to the host.
-* ``$/ave/cancel {id}`` withdraws a request in either direction. The
+* ``$/ai.agent-connector.ave/cancel {id}`` withdraws a request in either direction. The
   receiver still answers it, and it keeps its slot until then.
-* ``$/ave/shutdown`` and stdin EOF both mean "exit now". EOF is the one
+* ``$/ai.agent-connector.ave/shutdown`` and stdin EOF both mean "exit now". EOF is the one
   signal that outlives a host crash, so it is always honoured.
 * At most ``REQUESTS_IN_FLIGHT_MAX`` requests may be outstanding in each
   direction. The host stops a worker that sends a 65th, so the worker waits
@@ -50,9 +50,9 @@ FRAME_BYTES_MAX = 16 * 1024 * 1024
 REQUESTS_IN_FLIGHT_MAX = 64
 METHOD_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,127}$")
 
-HELLO_METHOD = "$/ave/hello"
-CANCEL_METHOD = "$/ave/cancel"
-SHUTDOWN_METHOD = "$/ave/shutdown"
+HELLO_METHOD = "$/ai.agent-connector.ave/hello"
+CANCEL_METHOD = "$/ai.agent-connector.ave/cancel"
+SHUTDOWN_METHOD = "$/ai.agent-connector.ave/shutdown"
 
 # JSON-RPC 2.0 error codes, plus -32800 for a cancelled request (the code the
 # frame schema names for it).
@@ -287,7 +287,7 @@ class StdioPeer:
         one deadline for the whole call: waiting for a free request slot and
         waiting for the answer both spend it. ``None`` waits as long as the
         channel lives. A request already sent when the deadline passes is
-        withdrawn with ``$/ave/cancel``.
+        withdrawn with ``$/ai.agent-connector.ave/cancel``.
         """
         if threading.get_ident() == self._loop_thread:
             raise RuntimeError("request_blocking would block the event loop; call it from a worker thread")

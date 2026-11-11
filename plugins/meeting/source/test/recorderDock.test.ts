@@ -1,3 +1,4 @@
+import { ChangeStream } from "../src/changeStream.js";
 /**
  * The recorder's slot in the host's floating dock.
  *
@@ -64,6 +65,7 @@ function makeContext(dock: ReturnType<typeof makeFakeDock>, extra: Record<string
   const root = mkdtempSync(join(tmpdir(), "ave-meeting-test-dock-"));
   mkdirSync(join(root, "sessions"), { recursive: true });
   const events: Array<{ type: string; data: unknown }> = [];
+  vi.spyOn(ChangeStream.prototype, "publish").mockImplementation((type, data) => { events.push({ type, data }); });
   return {
     events,
     context: {
@@ -73,11 +75,7 @@ function makeContext(dock: ReturnType<typeof makeFakeDock>, extra: Record<string
       pluginDataDir: root,
       log: (_msg: string) => { /* no-op */ },
       hostApi: {
-        emitEvent: (type: string, data?: unknown) => { events.push({ type, data }); },
-        onEvent: (_type: string, _handler: EventHandler) => () => { /* no-op */ },
         getSecret: (_key: string): string | null => null,
-        logEvent: vi.fn(),
-        onShutdown: (_h: () => void | Promise<void>) => { /* no-op */ },
         attachFloatingPanel: dock.attachFloatingPanel,
         startAudioCapture: makeFakeCapture(),
         ...extra,
@@ -137,13 +135,8 @@ describe("meeting_start attaches a dock slot", () => {
       pluginRoot: root,
       hostRoot: root,
       pluginDataDir: root,
-      log: () => { /* no-op */ },
       hostApi: {
-        emitEvent: () => { /* no-op */ },
-        onEvent: () => () => { /* no-op */ },
         getSecret: (): string | null => null,
-        logEvent: vi.fn(),
-        onShutdown: () => { /* no-op */ },
       },
     });
 
@@ -164,7 +157,7 @@ describe("the recorder's tools act on the attached slot, not on their arguments"
     await plugin.handlers.meeting_start({ sessionId: "dock-a", context: { title: "주간 회의" } });
 
     expect(await plugin.handlers.meeting_recorder_state())
-      .toEqual({ sessionId: "dock-a", context: { title: "주간 회의" } });
+      .toEqual({ sessionId: "dock-a", context: { title: "주간 회의" }, recording: false, paused: false });
   });
 
   it("refuses every recorder tool while no slot is attached", async () => {
@@ -176,13 +169,12 @@ describe("the recorder's tools act on the attached slot, not on their arguments"
     const plugin = await createPlugin(context);
 
     expect(await plugin.handlers.meeting_recorder_levels()).toEqual({ peaks: [] });
-    expect(await plugin.handlers.meeting_recorder_microphones()).toEqual({ devices: [] });
+    expect(await plugin.handlers.meeting_recorder_microphones()).toEqual({ ok: false, error: "microphone-list-unavailable", reason: "no-recorder" });
     expect(await plugin.handlers.meeting_recorder_set_paused({ paused: true }))
       .toEqual({ ok: false, error: "unauthorized" });
     expect(await plugin.handlers.meeting_recorder_restart_capture({}))
       .toEqual({ ok: false, error: "unauthorized" });
-    expect(await plugin.handlers.meeting_recorder_resize({ height: 300 }))
-      .toEqual({ ok: false, error: "unauthorized" });
+
   });
 
   it("pauses the attached session even when told a different one", async () => {
@@ -198,23 +190,7 @@ describe("the recorder's tools act on the attached slot, not on their arguments"
     })).toEqual({ ok: true, paused: true });
   });
 
-  it("returns the height the dock applied, not the one requested", async () => {
-    const { context } = makeContext(dock);
-    const plugin = await createPlugin(context);
-    await plugin.handlers.meeting_start({ sessionId: "dock-a" });
 
-    expect(await plugin.handlers.meeting_recorder_resize({ height: 900 }))
-      .toEqual({ ok: true, height: 300 });
-  });
-
-  it("refuses a non-finite height rather than defaulting", async () => {
-    const { context } = makeContext(dock);
-    const plugin = await createPlugin(context);
-    await plugin.handlers.meeting_start({ sessionId: "dock-a" });
-
-    expect(await plugin.handlers.meeting_recorder_resize({ height: "tall" }))
-      .toEqual({ ok: false, error: "invalid-height" });
-  });
 });
 
 describe("detach reason decides whether the recording was orphaned", () => {

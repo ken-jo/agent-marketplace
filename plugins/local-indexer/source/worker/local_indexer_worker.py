@@ -34,7 +34,7 @@ and returns its result. An ``asyncio.Lock`` serialises the writes because
 sqlite and lance are not re-entrant, and a cancelled write still holds the
 lock until its thread has finished.
 
-The worker exits on stdin EOF and on ``$/ave/shutdown``, after closing its
+The worker exits on stdin EOF and on ``$/ai.agent-connector.ave/shutdown``, after closing its
 stores. It answers the host's hello before loading the indexing stack, so the
 hello never waits on a cold import.
 """
@@ -1032,7 +1032,7 @@ async def serve(
     state_factory: Callable[[argparse.Namespace, Dict[str, str], Optional[Any]], AppState] = build_state,
     close_timeout_s: float = 10.0,
 ) -> int:
-    """Run one worker incarnation until stdin EOF or ``$/ave/shutdown``.
+    """Run one worker incarnation until stdin EOF or ``$/ai.agent-connector.ave/shutdown``.
 
     Returns the process exit code. Requests that arrive while the stores are
     still opening wait for them; if opening fails the worker exits non-zero

@@ -8,9 +8,10 @@
     "plugin.json"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/build-ui.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "validate:manifest": "node scripts/validate-manifest.mjs"
   },
   "devDependencies": {
     "@ave/plugin-build": "file:../../../tools/plugin-build",
@@ -18,6 +19,11 @@
     "@types/node": "^26.1.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.4"
   }
 }

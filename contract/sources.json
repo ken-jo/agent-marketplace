@@ -1,20 +1,16 @@
 {
-  "comment": "Development pin: Ave commit 9ced780b4bdb8f48519b2a9e5b14a574e901a49f, copied from a checkout. Publication refuses a commit pin; release prep re-syncs from a release tag with `node tools/vendor.mjs sync --ref <tag>`. Never edit a copy.",
   "repository": "ken-jo/ave",
-  "ref": "9ced780b4bdb8f48519b2a9e5b14a574e901a49f",
-  "bundle": null,
+  "ref": "671a25a54abc2b2105563d13d4ade63267bc71fe",
+  "commit": "671a25a54abc2b2105563d13d4ade63267bc71fe",
   "files": {
     "public-contract.ts": {
-      "from": "src/plugins/public-contract.ts",
-      "sha256": "b1073122d71a8630f49926e2a8a86c4cfea966a5abe0c1809b7c52f48a4103ec"
+      "from": "src/plugins/public-contract.ts"
     },
     "plugin-manifest.schema.json": {
-      "from": "schemas/plugin-manifest.schema.json",
-      "sha256": "7740d558adb1c190555934be22afdf15bdf29de172e2deebad5159552182d8a1"
+      "from": "schemas/plugin-manifest.schema.json"
     },
     "protocol.schema.json": {
-      "from": "schemas/plugin-host-protocol/5/protocol.schema.json",
-      "sha256": "72b6e23a70a6bac4b0e39b6dea4777b690567e0d62dec4b98a8c5a8efcf75e86"
+      "from": "schemas/plugin-host-protocol/5/protocol.schema.json"
     }
   }
 }

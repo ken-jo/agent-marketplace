@@ -30,9 +30,10 @@ import {
   cloneBundledGuideSession,
   isGuideSessionId,
 } from "./demo/guideSession.js";
+import { ChangeStream } from "./changeStream.js";
+import { diagnostic } from "./diagnostic.js";
 import { randomUUID } from "node:crypto";
 import type { AlertInput, ApiKeyLease, HostFetchInit, PluginHostApi } from "@ave/plugin-contract";
-import { CalendarAutomation, CalendarClaims, type CalendarClaimStorage } from "./calendarAutomation.js";
 import { raiseWithDiagnostics } from "./alerts/alert-result.js";
 import { summaryReadyAlert } from "./alerts/meeting-summary-detector.js";
 import { dirname, join } from "node:path";
@@ -97,18 +98,8 @@ type HostPluginContext = {
   pluginRoot: string;
   hostRoot: string;
   pluginDataDir: string;
-  config?: Record<string, unknown>;
-  log: (message: string, meta?: unknown) => void;
   hostApi: {
-    emitEvent(type: string, data?: unknown): void;
-    onEvent(type: string, handler: (data: unknown) => void): void | (() => void);
     raiseAlert?: PluginHostApi["raiseAlert"];
-    /**
-     * Sandboxed storage under `pluginDataDir`; holds the calendar automation
-     * claims. Every host this plugin supports publishes it; calendar automation
-     * refuses to start without it (see `CalendarClaims`).
-     */
-    storage?: CalendarClaimStorage;
     /**
      * Host keychain read. The result must always be awaited: the host resolves
      * the value off the main thread, so a caller that reads it directly sees a
@@ -183,8 +174,6 @@ type HostPluginContext = {
      * fallback — `sttFetch` fails closed (throws) when the host omits it.
      */
     hostFetch?(input: string | URL, init?: HostFetchInit): Promise<Response>;
-    logEvent?(level: "info" | "warn" | "error", message: string, data?: unknown): void;
-    onShutdown?(handler: () => void | Promise<void>): void;
   };
 };
 
@@ -1212,11 +1201,17 @@ type MeetingChunk = {
 };
 
 export default async function createPlugin(context: HostPluginContext) {
-  const { hostApi, log } = context;
+  const { hostApi } = context;
+  const changes = new ChangeStream();
+  let lastError: { sequence: number; value: unknown } | null = null;
+  let errorSequence = 0;
+  const invalidate = (kind: string, payload?: unknown) => {
+    if (kind === "meeting.error") lastError = { sequence: ++errorSequence, value: payload };
+    changes.publish(kind, payload);
+  };
   const raiseAlert = hostApi.raiseAlert
-    ? (input: AlertInput) => raiseWithDiagnostics(hostApi.raiseAlert!.bind(hostApi), input, (diagnostic) => {
-      if (hostApi.logEvent) hostApi.logEvent("warn", "meeting.alert.rejected", diagnostic);
-      else log(`[meeting] alert ${diagnostic.kind} rejected: ${diagnostic.status}${diagnostic.field ? ` (${diagnostic.field})` : ""}`);
+    ? (input: AlertInput) => raiseWithDiagnostics(hostApi.raiseAlert!.bind(hostApi), input, (rejected) => {
+      diagnostic("warn", "meeting.alert.rejected", { status: rejected.status });
     })
     : undefined;
   const raiseSummaryAlert = (payload: unknown): void => {
@@ -1224,11 +1219,11 @@ export default async function createPlugin(context: HostPluginContext) {
     const alert = summaryReadyAlert(payload);
     if (!alert) return;
     void raiseAlert(alert).catch((error) => {
-      hostApi.logEvent?.("warn", "meeting.summary.alert_failed", { error: error instanceof Error ? error.name : "unknown" });
+      diagnostic("warn", "meeting.summary.alert_failed", { error: error instanceof Error ? error.name : "unknown" });
     });
   };
   const emitSummary = (payload: unknown): void => {
-    hostApi.emitEvent("meeting.summary.created", payload);
+    invalidate("meeting.summary.created", payload);
     raiseSummaryAlert(payload);
   };
   ffmpegManagedPlatformDir = managedFfmpegPlatformDir(context.pluginDataDir);
@@ -1254,18 +1249,16 @@ export default async function createPlugin(context: HostPluginContext) {
       // `child_process`, and the host is what declares the grants each of
       // those runs gets.
       spawnWorker: requireSpawnWorker(),
-      log,
-      logEvent: hostApi.logEvent ? hostApi.logEvent.bind(hostApi) : undefined,
+      diagnostic,
     }).catch((err) => {
       const message = (err as Error).message;
-      log(`[meeting] FFmpeg runtime unavailable: ${message}`);
-      hostApi.logEvent?.("warn", "meeting_ffmpeg_runtime.unavailable", {
+      diagnostic("warn", "meeting_ffmpeg_runtime.unavailable", {
         platform: FFMPEG_VENDOR_PLATFORM,
         error: message,
       });
       throw err;
     });
-    void ffmpegRuntimeReady.catch(() => { /* reported through hostApi.logEvent */ });
+    void ffmpegRuntimeReady.catch(() => { /* reported to stderr */ });
   };
   const requireFfmpegRuntime = async () => {
     // A tool can be called after publication but before `onPublished` ran.
@@ -1284,7 +1277,7 @@ export default async function createPlugin(context: HostPluginContext) {
   if (process.env.VITEST === "true") {
     // Settled, so neither `onPublished` nor a first use schedules a check.
     ffmpegRuntimeReady = Promise.resolve();
-    hostApi.logEvent?.("info", "meeting_ffmpeg_runtime.skipped", {
+    diagnostic("info", "meeting_ffmpeg_runtime.skipped", {
       reason: "vitest",
       platform: FFMPEG_VENDOR_PLATFORM,
     });
@@ -1362,7 +1355,7 @@ export default async function createPlugin(context: HostPluginContext) {
       sttBaseUrl = normalizeKnownSttEndpoint(validated.url, sttModel);
     } else {
       sttBaseUrlInvalidReason = validated.error;
-      hostApi.logEvent?.("warn", "sttBaseUrl rejected", {
+      diagnostic("warn", "meeting_stt_base_url_rejected", {
         error: validated.error,
         preview: sanitizePreview(rawSttBaseUrl),
       });
@@ -1445,7 +1438,7 @@ export default async function createPlugin(context: HostPluginContext) {
   // instructions. Surface this once at plugin load so the mismatch
   // doesn't silently produce wrong-length summaries.
   if (customSummaryFinalPrompt.trim().length > 0) {
-    hostApi.logEvent?.("warn", "customSummaryFinalPrompt overrides built-in tier guidance — short/medium/long settings will NOT affect output length unless the custom prompt itself encodes length instructions.", {
+    diagnostic("warn", "meeting_custom_summary_prompt_overrides_tier", {
       tierConfigured: summaryLengthTier,
       customPromptBytes: new TextEncoder().encode(customSummaryFinalPrompt).length,
     });
@@ -1457,14 +1450,14 @@ export default async function createPlugin(context: HostPluginContext) {
   // without adding a LLM-visible prompt-write handler to tools[].
   hostApi.config?.onChange?.("customSummaryFinalPrompt", (value) => {
     customSummaryFinalPrompt = sanitizeCustomPrompt(value);
-    hostApi.logEvent?.("info", "meeting_custom_summary_final_prompt_updated", {
+    diagnostic("info", "meeting_custom_summary_final_prompt_updated", {
       promptSet: customSummaryFinalPrompt.trim().length > 0,
       customPromptBytes: new TextEncoder().encode(customSummaryFinalPrompt).length,
     });
   });
   hostApi.config?.onChange?.("customSummaryIntermediatePrompt", (value) => {
     customSummaryIntermediatePrompt = sanitizeCustomPrompt(value);
-    hostApi.logEvent?.("info", "meeting_custom_summary_intermediate_prompt_updated", {
+    diagnostic("info", "meeting_custom_summary_intermediate_prompt_updated", {
       promptSet: customSummaryIntermediatePrompt.trim().length > 0,
       customPromptBytes: new TextEncoder().encode(customSummaryIntermediatePrompt).length,
     });
@@ -1501,15 +1494,12 @@ export default async function createPlugin(context: HostPluginContext) {
           leftBehind.push(file);
         }
       }
-      log(`[meeting] migrated ${legacyFiles.length} session file(s) from ${legacyDir} to ${sessionsDir}`);
+      diagnostic("info", "meeting_sessions_migrated");
       if (leftBehind.length > 0) {
-        log(
-          `[meeting] WARNING: copied but could not delete ${leftBehind.length} file(s) under ${legacyDir}`
-            + ` — they are duplicates of the migrated sessions and can be removed by hand: ${leftBehind.join(", ")}`,
-        );
+        diagnostic("warn", "meeting_session_migration_cleanup_failed");
       }
     } else {
-      log(`[meeting] WARNING: legacy session dir ${legacyDir} still exists but new dir is non-empty — skipping migration`);
+      diagnostic("warn", "meeting_session_migration_skipped");
     }
   }
 
@@ -1752,7 +1742,7 @@ export default async function createPlugin(context: HostPluginContext) {
   // recordings) — preps are upcoming-meeting metadata.
   const prepStore = new PrepStore(
     context.pluginDataDir,
-    hostApi.logEvent ? hostApi.logEvent.bind(hostApi) : undefined,
+    diagnostic,
   );
   const categoryStore = new CategoryStore(context.pluginDataDir);
 
@@ -1773,7 +1763,7 @@ export default async function createPlugin(context: HostPluginContext) {
   const summaryProvider = hostCallLlmAvailable
     ? new HostLlmSummaryProvider({
         callLlm: hostApi.callLlm!.bind(hostApi),
-        logEvent: hostApi.logEvent ? hostApi.logEvent.bind(hostApi) : undefined,
+        diagnostic: diagnostic,
         defaultLengthTier: summaryLengthTier,
         customFinalSystem: getFinalPrompt,
         customIntermediateSystem: getIntermediatePrompt,
@@ -1781,32 +1771,25 @@ export default async function createPlugin(context: HostPluginContext) {
     : new MockSummaryProvider();
 
   if (hostCallLlmAvailable) {
-    log("[meeting] summary via host callLlm");
+    diagnostic("info", "meeting_summary_provider_host");
   } else {
     // ralph round-1 (architect + critic Major): Mock summary fallback was a
     // silent UX degradation — users finished a meeting and received a mock
     // (placeholder) summary without realising real LLM access was missing.
     // Surface this via a warn-level log AND a structured event so the host UI
     // / proactive engine can flag the degraded state.
-    log(
-      "[meeting] summary via Mock — WARNING: host callLlm not exposed; real summaries unavailable until host LLM is configured",
-    );
-    hostApi.logEvent?.("warn", "meeting_summary_degraded", {
+    diagnostic("warn", "meeting_summary_provider_unavailable");
+    diagnostic("warn", "meeting_summary_degraded", {
       reason: "host-callLlm-unavailable",
     });
-    // ralph round-2 (architect Minor + NIT): optional chain on emitEvent
-    // back-compat with older hosts that omit the method, plus a
-    // human-readable title/body so the host's OS notification surface
-    // (driven by plugin.json notificationEvents) actually renders a
-    // meaningful banner instead of relying on raw {reason, at}.
-    hostApi.emitEvent?.("meeting.summary.degraded", {
+    invalidate("meeting.summary.degraded", {
       title: "회의 요약 — placeholder",
       body: "호스트 LLM 미노출로 실제 요약 생성 불가. host upgrade 또는 설정 확인 필요.",
       reason: "host-callLlm-unavailable",
       at: new Date().toISOString(),
     });
     void raiseAlert?.({ kind: "summary-degraded", key: "host-callLlm-unavailable" }).catch((error) => {
-      hostApi.logEvent?.("warn", "meeting.summary.degraded_alert_failed", { error: error instanceof Error ? error.name : "unknown" });
+      diagnostic("warn", "meeting.summary.degraded_alert_failed", { error: error instanceof Error ? error.name : "unknown" });
     });
   }
 
@@ -1819,8 +1802,7 @@ export default async function createPlugin(context: HostPluginContext) {
     sttBaseUrlConfigured: Boolean(sttBaseUrl),
     sttModel,
   };
-  hostApi.logEvent?.("info", "meeting_stt_provider_selection", sttDiagnostic);
-  log(`[meeting] STT diagnostic: ${JSON.stringify(sttDiagnostic)}`);
+  diagnostic("info", "meeting_stt_provider_selection", sttDiagnostic);
 
   // Per-session STT provider factory.
   // apiKeySource is the SOT:
@@ -1845,7 +1827,7 @@ export default async function createPlugin(context: HostPluginContext) {
     { sessionId, signal }: { sessionId: string; signal: AbortSignal },
   ): Promise<import("./providers.js").SttProvider> {
     if (sttBaseUrlInvalidReason) {
-      hostApi.emitEvent("meeting.error", {
+      invalidate("meeting.error", {
         sessionId,
         reason: `stt-base-url-invalid:${sttBaseUrlInvalidReason}`,
       });
@@ -1857,7 +1839,7 @@ export default async function createPlugin(context: HostPluginContext) {
       if (baseUrl) {
         try { endpointHost = new URL(baseUrl).hostname; } catch { endpointHost = "invalid-url"; }
       }
-      hostApi.logEvent?.("info", "meeting_stt_provider_resolved", {
+      diagnostic("info", "meeting_stt_provider_resolved", {
         sessionId,
         source,
         endpointHost: endpointHost ?? "default",
@@ -1878,18 +1860,18 @@ export default async function createPlugin(context: HostPluginContext) {
     if (sttKeySource === "plugin") {
       const currentPluginSttApiKey = await readPluginSttApiKey();
       if (!currentPluginSttApiKey) {
-        hostApi.emitEvent("meeting.error", {
+        invalidate("meeting.error", {
           sessionId,
           reason: "stt-key-unavailable:plugin-stt-key-missing",
         });
         throw new Error("Cannot start meeting: STT key unavailable (plugin sttApiKey is not configured)");
       }
       if (looksLikeEndpointUrlSecret(currentPluginSttApiKey)) {
-        hostApi.emitEvent("meeting.error", {
+        invalidate("meeting.error", {
           sessionId,
           reason: "stt-key-unavailable:plugin-stt-key-is-url",
         });
-        hostApi.logEvent?.("warn", "plugin sttApiKey rejected because it looks like an endpoint URL", {
+        diagnostic("warn", "meeting_stt_api_key_url_rejected", {
           sessionId,
           sttKeySource,
         });
@@ -1901,7 +1883,7 @@ export default async function createPlugin(context: HostPluginContext) {
     const resolver = hostApi.resolveApiKey;
 
     if (typeof resolver !== "function") {
-      hostApi.emitEvent("meeting.error", {
+      invalidate("meeting.error", {
         sessionId,
         reason: "stt-key-unavailable:no-host-resolveApiKey",
       });
@@ -1911,7 +1893,7 @@ export default async function createPlugin(context: HostPluginContext) {
     // vendor is omitted — host maps to user's active LLM provider (#955).
     const handle = await resolver({ purpose: "stt", exposure: "lease", signal });
     if (!handle.ok) {
-      hostApi.emitEvent("meeting.error", {
+      invalidate("meeting.error", {
         sessionId,
         reason: `stt-key-unavailable:${handle.reason}`,
       });
@@ -1960,7 +1942,7 @@ export default async function createPlugin(context: HostPluginContext) {
       if (validated.ok) {
         effectiveBaseUrl = normalizeKnownSttEndpoint(validated.url, sttModel);
       } else {
-        hostApi.logEvent?.("warn", "meeting_stt_handle_base_url_rejected", {
+        diagnostic("warn", "meeting_stt_handle_base_url_rejected", {
           error: validated.error,
           preview: sanitizePreview(handle.baseUrl),
         });
@@ -1991,7 +1973,6 @@ export default async function createPlugin(context: HostPluginContext) {
     defaultLengthTier: summaryLengthTier,
     sttRetryAttempts: 3,
     summaryRetryAttempts: 2,
-    log,
     onSessionUpdate: (session) => {
       sessionStore.save({
         sessionId: session.sessionId,
@@ -2022,13 +2003,11 @@ export default async function createPlugin(context: HostPluginContext) {
   const unfinished = sessionStore.listUnfinished();
   const toRecover = unfinished.slice(0, ORPHAN_RECOVERY_LIMIT);
   if (unfinished.length > toRecover.length) {
-    log(
-      `crash-recovery cap: ${unfinished.length - toRecover.length} older orphan(s) skipped (limit=${ORPHAN_RECOVERY_LIMIT})`,
-    );
+    diagnostic("warn", "meeting_session_recovery_limit");
   }
   for (const session of toRecover) {
     pipeline.restoreSession(session);
-    log(`recovered session: ${session.sessionId} (${session.transcript.length} segments)`);
+    diagnostic("info", "meeting_session_recovered");
   }
 
   const recorder = new ElectronMeetingRecorder(pipeline);
@@ -2195,7 +2174,7 @@ export default async function createPlugin(context: HostPluginContext) {
       lastIngestError.delete(sessionId);
     } catch (err) {
       lastIngestError.set(sessionId, (err as Error).message);
-      hostApi.logEvent?.("warn", "meeting-capture.ingest_failed", {
+      diagnostic("warn", "meeting_capture.ingest_failed", {
         sessionId,
         error: (err as Error).message,
       });
@@ -2253,12 +2232,12 @@ export default async function createPlugin(context: HostPluginContext) {
       // A capture that ended on its own means the recording is now silent and
       // nothing else would say so. Reported rather than swallowed: a meeting
       // that quietly stops recording halfway is the worst outcome here.
-      hostApi.logEvent?.("warn", "meeting-capture.ended_unexpectedly", {
+      diagnostic("warn", "meeting_capture.ended_unexpectedly", {
         sessionId,
         reason: end.reason,
         detail: end.detail,
       });
-      hostApi.emitEvent("meeting.error", {
+      invalidate("meeting.error", {
         sessionId,
         error: `audio capture ended: ${end.reason}${end.detail ? ` (${end.detail})` : ""}`,
       });
@@ -2280,7 +2259,7 @@ export default async function createPlugin(context: HostPluginContext) {
     try {
       await entry.capture.stop();
     } catch (err) {
-      hostApi.logEvent?.("warn", "meeting-capture.stop_failed", {
+      diagnostic("warn", "meeting_capture.stop_failed", {
         sessionId,
         error: (err as Error).message,
       });
@@ -2332,8 +2311,9 @@ export default async function createPlugin(context: HostPluginContext) {
     // panel is still registered — leaving this set would have it read a
     // deliberate detach as an orphaned recording and cancel the session.
     recorderPanel = null;
+    invalidate("recorder");
     void panel.handle.detach().catch((err: unknown) => {
-      hostApi.logEvent?.("warn", "meeting.recorder_panel.detach_failed", {
+      diagnostic("warn", "meeting.recorder_panel.detach_failed", {
         sessionId,
         error: (err as Error).message,
       });
@@ -2386,7 +2366,7 @@ export default async function createPlugin(context: HostPluginContext) {
             updatedAt: new Date().toISOString(),
           });
         } catch (err) {
-          hostApi.logEvent?.("warn", "meeting.orphan_preserve_failed", {
+          diagnostic("warn", "meeting.orphan_preserve_failed", {
             sessionId, error: (err as Error).message,
           });
         }
@@ -2398,13 +2378,13 @@ export default async function createPlugin(context: HostPluginContext) {
       lastIngestError.delete(sessionId);
       sessionLengthTier.delete(sessionId);
       pushChunkLimiter.forget(sessionId);
-      hostApi.emitEvent("meeting.ended", {
+      invalidate("meeting.ended", {
         sessionId,
         cancelled: true,
         reason,
         preservedSegments: (base?.transcript?.length ?? 0),
       });
-      hostApi.logEvent?.("info", "meeting.orphan_preserved", {
+      diagnostic("info", "meeting.orphan_preserved", {
         sessionId,
         reason,
         segments: base?.transcript?.length ?? 0,
@@ -2421,8 +2401,8 @@ export default async function createPlugin(context: HostPluginContext) {
     lastIngestError.delete(sessionId);
     sessionLengthTier.delete(sessionId);
     pushChunkLimiter.forget(sessionId);
-    hostApi.emitEvent("meeting.ended", { sessionId, cancelled: true, reason });
-    hostApi.logEvent?.("warn", "meeting.orphan_cancelled", { sessionId, reason });
+    invalidate("meeting.ended", { sessionId, cancelled: true, reason });
+    diagnostic("warn", "meeting.orphan_cancelled", { sessionId, reason });
   }
 
 
@@ -2434,7 +2414,7 @@ export default async function createPlugin(context: HostPluginContext) {
     if (opts.abort) {
       try { state.abortController?.abort(); } catch { /* best-effort */ }
       try { pipeline.abortSession(state.sessionId); } catch { /* best-effort */ }
-      hostApi.logEvent?.("warn", "meeting_stage_upload.cancelled", {
+      diagnostic("warn", "meeting_stage_upload.cancelled", {
         sessionId: state.sessionId,
         uploadId,
         reason: opts.reason ?? "cleanup",
@@ -2457,7 +2437,7 @@ export default async function createPlugin(context: HostPluginContext) {
     const protectedDirs = new Set([...stagedUploads.values()].map((state) => state.dir));
     const removedDirs = cleanupStaleStagedUploadDirs(stagedUploadsDir, now, protectedDirs);
     if (removedDirs > 0) {
-      hostApi.logEvent?.("info", "meeting_stage_upload.tmp_sweep", { removedDirs });
+      diagnostic("info", "meeting_stage_upload.tmp_sweep", { removedDirs });
     }
   }
 
@@ -2475,8 +2455,8 @@ export default async function createPlugin(context: HostPluginContext) {
 
       recorder.start(state.sessionId, state.context);
       activeSessions.add(state.sessionId);
-      hostApi.emitEvent("meeting.started", { sessionId: state.sessionId, mode: "upload" });
-      hostApi.logEvent?.("info", "meeting_stage_upload.finish.start", {
+      invalidate("meeting.started", { sessionId: state.sessionId, mode: "upload" });
+      diagnostic("info", "meeting_stage_upload.finish.start", {
         sessionId: state.sessionId,
         uploadId: state.uploadId,
         bytes: state.receivedBytes,
@@ -2493,7 +2473,7 @@ export default async function createPlugin(context: HostPluginContext) {
       if (durationSec > STAGED_UPLOAD_MAX_DURATION_SEC) {
         throw new Error(`재생 길이가 4시간을 초과합니다 (${Math.round(durationSec)}s)`);
       }
-      hostApi.logEvent?.("info", "meeting_stage_upload.probed", {
+      diagnostic("info", "meeting_stage_upload.probed", {
         sessionId: state.sessionId,
         uploadId: state.uploadId,
         durationSec: Math.round(durationSec),
@@ -2550,7 +2530,7 @@ export default async function createPlugin(context: HostPluginContext) {
       throwIfStagedUploadAborted(state);
       activeSessions.delete(state.sessionId);
       pushChunkLimiter.forget(state.sessionId);
-      hostApi.emitEvent("meeting.ended", { sessionId: state.sessionId });
+      invalidate("meeting.ended", { sessionId: state.sessionId });
 
       const final = finalBySession.get(state.sessionId);
       if (!final) throw new Error(`final summary not found: ${state.sessionId}`);
@@ -2564,7 +2544,7 @@ export default async function createPlugin(context: HostPluginContext) {
       const transcript = pipeline.getTranscript(state.sessionId);
       try { pipeline.resetSession(state.sessionId); } catch { /* best-effort */ }
 
-      hostApi.logEvent?.("info", "meeting_stage_upload.finish.done", {
+      diagnostic("info", "meeting_stage_upload.finish.done", {
         sessionId: state.sessionId,
         uploadId: state.uploadId,
         segments: segmentFiles.length,
@@ -2601,11 +2581,11 @@ export default async function createPlugin(context: HostPluginContext) {
         // Best-effort cleanup only; preserve the original failure.
       }
 
-      hostApi.emitEvent("meeting.error", {
+      invalidate("meeting.error", {
         sessionId: state.sessionId,
         error: (err as Error).message,
       });
-      hostApi.emitEvent("meeting.ended", {
+      invalidate("meeting.ended", {
         sessionId: state.sessionId,
         cancelled: true,
       });
@@ -2628,9 +2608,9 @@ export default async function createPlugin(context: HostPluginContext) {
       if (finalizeActive) {
         try {
           await recorder.stop(sessionId);
-          hostApi.logEvent?.("info", "meeting.shutdown.session_stopped", { sessionId });
+          diagnostic("info", "meeting.shutdown.session_stopped", { sessionId });
         } catch (err) {
-          hostApi.logEvent?.("error", "meeting.shutdown.stop_failed", {
+          diagnostic("error", "meeting.shutdown.stop_failed", {
             sessionId,
             error: (err as Error).message,
           });
@@ -2727,8 +2707,8 @@ export default async function createPlugin(context: HostPluginContext) {
       try {
         recorder.start(sid, ctx.context ?? recorderPanel?.context);
         activeSessions.add(sid);
-        hostApi.emitEvent("meeting.started", { sessionId: sid, mode: "floating" });
-        hostApi.logEvent?.("info", "meeting_recorder_begin_capture", { sessionId: sid });
+        invalidate("meeting.started", { sessionId: sid, mode: "floating" });
+        diagnostic("info", "meeting_recorder_begin_capture", { sessionId: sid });
       } catch (err) {
         return { ok: false, mode: "mic" as const, fallbackReason: (err as Error).message };
       }
@@ -2754,7 +2734,7 @@ export default async function createPlugin(context: HostPluginContext) {
   const recorderState = async () => {
     const panel = recorderPanel;
     if (!panel) return null;
-    return { sessionId: panel.sessionId, context: panel.context };
+    return { sessionId: panel.sessionId, context: panel.context, recording: activeSessions.has(panel.sessionId), paused: pausedSessions.has(panel.sessionId) };
   };
 
   /**
@@ -2782,16 +2762,14 @@ export default async function createPlugin(context: HostPluginContext) {
    * device list, and the card asks for it.
    */
   const recorderMicrophones = async () => {
-    if (!requireRecorderSession()) return { devices: [] };
+    if (!requireRecorderSession()) return { ok: false as const, error: "microphone-list-unavailable", reason: "no-recorder" };
     const list = hostApi.listAudioInputDevices;
-    if (!list) return { devices: [] };
+    if (!list) return { ok: false as const, error: "microphone-list-unavailable", reason: "host-api-unavailable" };
     try {
-      return { devices: await list.call(hostApi) };
-    } catch (err) {
-      hostApi.logEvent?.("warn", "meeting_recorder_microphones failed", {
-        error: (err as Error).message,
-      });
-      return { devices: [] };
+      return { ok: true as const, devices: await list.call(hostApi) };
+    } catch {
+      diagnostic("warn", "meeting_recorder_microphones_unavailable");
+      return { ok: false as const, error: "microphone-list-unavailable", reason: "enumeration-failed" };
     }
   };
 
@@ -2801,6 +2779,7 @@ export default async function createPlugin(context: HostPluginContext) {
     const paused = (payload as { paused?: unknown } | undefined)?.paused === true;
     if (paused) pausedSessions.add(sid);
     else pausedSessions.delete(sid);
+    invalidate("recorder");
     return { ok: true, paused };
   };
 
@@ -2835,28 +2814,6 @@ export default async function createPlugin(context: HostPluginContext) {
   };
 
   /**
-   * The card measured its content and would like more room.
-   *
-   * It ASKS. Everything this used to compute itself — the clamp, the width,
-   * where on the screen the window sits so growth does not push it off the
-   * bottom edge — belongs to the dock now, and the number that comes back is
-   * what the host applied, not what was requested.
-   */
-  const recorderResize = async (payload?: unknown) => {
-    const panel = recorderPanel;
-    if (!panel) return { ok: false, error: "unauthorized" };
-    const body = (payload && typeof payload === "object" ? payload : {}) as { height?: unknown };
-    const raw = typeof body.height === "number" ? body.height : NaN;
-    if (!Number.isFinite(raw)) return { ok: false, error: "invalid-height" };
-    try {
-      const height = await panel.handle.resize(Math.round(raw));
-      return { ok: true, height };
-    } catch (err) {
-      return { ok: false, error: (err as Error).message };
-    }
-  };
-
-  /**
    * Close the card.
    *
    * `cancelOnClosed` is gone: this IS the deliberate path, and the reason the
@@ -2869,7 +2826,7 @@ export default async function createPlugin(context: HostPluginContext) {
     return { ok: true };
   };
 
-  log(`[meeting] STT mode: batch (REST, model=${sttModel})`);
+  diagnostic("info", "meeting_stt_batch_mode");
 
   // ─── 이벤트 → Ave 통합 (hostApi) ────────────────
 
@@ -2883,7 +2840,7 @@ export default async function createPlugin(context: HostPluginContext) {
       newSegment: import("./types.js").TranscriptSegment | null;
       isFinal: boolean;
     };
-    hostApi.emitEvent("meeting.transcript.updated", {
+    invalidate("meeting.transcript.updated", {
       meetingId: sessionId,
       newSegmentIndex,
       newSegment,
@@ -2936,8 +2893,8 @@ export default async function createPlugin(context: HostPluginContext) {
   });
 
   recorder.on("error", ({ sessionId, error }) => {
-    log(`meeting error: ${sessionId}`, error);
-    hostApi.emitEvent("meeting.error", { sessionId, error: (error as Error).message });
+    diagnostic("error", "meeting_pipeline_error");
+    invalidate("meeting.error", { sessionId, error: (error as Error).message });
   });
 
   const safePrepLogString = (value: unknown) =>
@@ -3548,7 +3505,7 @@ export default async function createPlugin(context: HostPluginContext) {
     options: {
       source: PrepRegistrationSource;
       focusInUi: boolean;
-      logEventName: string;
+      diagnosticName: string;
     },
   ): { id: string; stored: MeetingContext } => {
     const prepared = hydratePrepContext(context);
@@ -3556,16 +3513,16 @@ export default async function createPlugin(context: HostPluginContext) {
     const stored = prepStore.get(id) ?? { ...prepared, id };
     if (options.focusInUi) {
       lastPrep = stored;
-      hostApi.emitEvent("meeting.prep.opened", { context: stored });
+      invalidate("meeting.prep.opened", { context: stored });
     }
-    hostApi.emitEvent("meeting.prep.registered", {
+    invalidate("meeting.prep.registered", {
       id,
       count: 1,
       source: options.source,
       focusInUi: options.focusInUi,
       context: stored,
     });
-    hostApi.logEvent?.("info", options.logEventName, {
+    diagnostic("info", options.diagnosticName, {
       id: safePrepLogString(id),
       title: safePrepLogString(stored.title),
       source: options.source,
@@ -3581,18 +3538,18 @@ export default async function createPlugin(context: HostPluginContext) {
     preps: MeetingContext[],
     options: {
       source: PrepRegistrationSource;
-      logEventName: string;
+      diagnosticName: string;
     },
   ): { ids: string[] } => {
     const hydrated = preps.map(hydratePrepContext);
     const ids = prepStore.bulkUpsert(hydrated);
-    hostApi.emitEvent("meeting.prep.registered", {
+    invalidate("meeting.prep.registered", {
       ids,
       count: ids.length,
       source: options.source,
       focusInUi: false,
     });
-    hostApi.logEvent?.("info", options.logEventName, {
+    diagnostic("info", options.diagnosticName, {
       count: ids.length,
       source: options.source,
     });
@@ -3612,8 +3569,8 @@ export default async function createPlugin(context: HostPluginContext) {
     const startTier = pickLengthTier(body.lengthTier) ?? pickLengthTier(body.context?.lengthTier);
     if (startTier) sessionLengthTier.set(body.sessionId, startTier);
 
-    hostApi.emitEvent("meeting.started", { sessionId: body.sessionId, mode: "batch" });
-    hostApi.logEvent?.("info", "batch_processing_audio", { sessionId: body.sessionId, mode: "batch", lengthTier: startTier });
+    invalidate("meeting.started", { sessionId: body.sessionId, mode: "batch" });
+    diagnostic("info", "batch_processing_audio", { sessionId: body.sessionId, mode: "batch", lengthTier: startTier });
     return { sessionId: body.sessionId, started: true, mode: "batch", sampleRate: 16000 };
   };
 
@@ -3622,7 +3579,8 @@ export default async function createPlugin(context: HostPluginContext) {
    * independent pixels. A REQUEST — the dock clamps against the work area and
    * against what is already attached, and `handle.height` is what was applied.
    */
-  const RECORDER_PANEL_HEIGHT = 240;
+  // Include room for MCP Apps framing so the recorder controls remain visible.
+  const RECORDER_PANEL_HEIGHT = 360;
 
   /**
    * Put the recorder card in the host's floating dock.
@@ -3636,7 +3594,7 @@ export default async function createPlugin(context: HostPluginContext) {
    * window; a plugin that gets a slot inside the host's dock, with host chrome
    * always around its pixels, cannot.
    */
-  const attachRecorderPanel = async (payload?: unknown, logEventName = "meeting_start") => {
+  const attachRecorderPanel = async (payload?: unknown, diagnosticName = "meeting_start") => {
     const body = (payload ?? {}) as {
       sessionId?: string;
       context?: MeetingContext & { lengthTier?: unknown };
@@ -3679,6 +3637,7 @@ export default async function createPlugin(context: HostPluginContext) {
       height: RECORDER_PANEL_HEIGHT,
     });
     recorderPanel = { sessionId, context: body.context, handle };
+    invalidate("recorder");
 
     /**
      * Why the reason is read rather than a flag consulted.
@@ -3704,76 +3663,32 @@ export default async function createPlugin(context: HostPluginContext) {
       cancelOrphanedSession(sessionId, reason);
     });
 
-    hostApi.logEvent?.("info", logEventName, { sessionId, height: handle.height });
+    diagnostic("info", diagnosticName, { sessionId, height: handle.height });
     return { ok: true, reused: false };
   };
 
-  const asEventRecord = (value: unknown): Record<string, unknown> | null =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null;
-
-  // Calendar rows reach the prep store one way: resolved and enriched (agenda
-  // from the body, Webex URL) before the registration gates.
-  const registerCalendarRows = (events: unknown[], logPrefix: string): void => {
-    try {
-      const meetings = resolveScheduledMeetingContexts({ events });
-      if (meetings.length === 0) return;
-      if (categoryRegistrationGate(meetings) || agendaRequirementGate(meetings) || webexUrlRequirementGate(meetings)) {
-        hostApi.logEvent?.("warn", `${logPrefix}.rejected`, { count: meetings.length });
-        return;
-      }
-      const { ids } = registerPrepContexts(meetings, {
-        source: "calendar-sync",
-        logEventName: `${logPrefix}.requested`,
-      });
-      hostApi.logEvent?.("info", `${logPrefix}.accepted`, { count: ids.length });
-    } catch (error) {
-      hostApi.logEvent?.("warn", `${logPrefix}.failed`, {
-        error: error instanceof Error ? error.name : "unknown",
-      });
-    }
-  };
-
-  const calendarAutomationEnabled = (getConfig?.("calendarAutomationEnabled") ?? context.config?.calendarAutomationEnabled) === true;
-  // Claims survive a plugin restart, so a meeting inside its prep window does
-  // not open its prep (or start its recording) a second time.
-  const calendarClaims = calendarAutomationEnabled
-    ? new CalendarClaims(hostApi.storage, (operation, error) => {
-      hostApi.logEvent?.("warn", `meeting.calendar.claims.${operation}_failed`, {
-        error: error instanceof Error ? error.name : "unknown",
-      });
-    })
-    : null;
-  const calendarAutomation = calendarClaims && new CalendarAutomation({
-    registerRows: (rows) => registerCalendarRows(rows, "meeting.calendar.sync"),
-    openPrep: (meeting) => {
-      if (categoryRegistrationGate([meeting])) return;
-      registerPrepContext(meeting, { source: "calendar-sync", focusInUi: true, logEventName: "meeting.calendar.prep" });
-    },
-    startRecording: async (sessionId, meeting) => {
-      await attachRecorderPanel({ sessionId, context: meeting }, "meeting.calendar.recording");
-    },
-  }, calendarClaims);
-  if (calendarClaims && calendarAutomation) {
-    await calendarClaims.restore();
-    hostApi.onEvent("calendar.events.loaded", (payload) => {
-      calendarAutomation.load(asEventRecord(payload)?.events);
-    });
-    hostApi.onEvent("calendar.event.added", (payload) => {
-      calendarAutomation.add(asEventRecord(payload)?.event);
-    });
-    hostApi.onEvent("calendar.event.upcoming", (payload) => {
-      calendarAutomation.upcoming(asEventRecord(payload)?.event);
-    });
-    hostApi.onEvent("calendar.event.starting", (payload) => {
-      calendarAutomation.starting(asEventRecord(payload)?.event);
-    });
-    hostApi.emitEvent("meeting.calendar.snapshot.requested", {});
-  }
-
   const plugin = {
+    readUiResource(uri: string) {
+      const file = uri === "ui://meeting/control" ? "meeting-control" : uri === "ui://meeting/recorder" ? "recorder-card" : null;
+      if (!file) throw new Error("Unknown meeting UI resource");
+      return readFileSync(join(context.pluginRoot, "dist/ui", file + ".html"), "utf8");
+    },
     handlers: {
+      meeting_wait_changes: (input: unknown) => changes.wait(input),
+      meeting_view_state: async () => ({
+        recorder: await recorderState(),
+        activeSessions: [...activeSessions],
+        lastError,
+        config: Object.fromEntries(["customSummaryFinalPrompt", "customSummaryIntermediatePrompt", "summaryLengthTier", "transcriptBubbleMaxChars"].map(key => [key, hostApi.config?.get(key)])),
+      }),
+      meeting_set_prompt: async (input?: unknown) => {
+        const body = input as { key?: string; value?: unknown };
+        if (!body || !["customSummaryFinalPrompt", "customSummaryIntermediatePrompt"].includes(body.key ?? "") || typeof body.value !== "string") throw new Error("Invalid prompt setting");
+        if (!hostApi.config?.set) throw new Error("Config writes unavailable");
+        await hostApi.config.set(body.key!, sanitizeCustomPrompt(body.value));
+        invalidate("settings");
+        return { ok: true };
+      },
       meeting_start: (payload?: unknown) => attachRecorderPanel(payload, "meeting_start"),
 
       // ── The recorder card's own methods ──────────────────────────────
@@ -3786,7 +3701,6 @@ export default async function createPlugin(context: HostPluginContext) {
       meeting_recorder_microphones: recorderMicrophones,
       meeting_recorder_restart_capture: recorderRestartCapture,
       meeting_recorder_set_paused: recorderSetPaused,
-      meeting_recorder_resize: recorderResize,
       meeting_recorder_close: recorderClose,
 
       batch_processing_audio: startBatchSession,
@@ -3802,7 +3716,7 @@ export default async function createPlugin(context: HostPluginContext) {
 
         // DoS hardening — rate limit + per-chunk size cap.
         if (!pushChunkLimiter.tryAcquire(body.sessionId)) {
-          hostApi.logEvent?.("warn", "meeting_push_chunk.rate_limited", {
+          diagnostic("warn", "meeting_push_chunk.rate_limited", {
             sessionId: body.sessionId,
             windowMs: PUSH_CHUNK_LIMITS.windowMs,
             maxCalls: PUSH_CHUNK_LIMITS.maxCalls,
@@ -3811,7 +3725,7 @@ export default async function createPlugin(context: HostPluginContext) {
         }
         const sampleCount = body.chunk.pcm16leMono?.length ?? 0;
         if (sampleCount * 2 > PUSH_CHUNK_LIMITS.maxBytes) {
-          hostApi.logEvent?.("warn", "meeting_push_chunk.size_exceeded", {
+          diagnostic("warn", "meeting_push_chunk.size_exceeded", {
             sessionId: body.sessionId,
             bytes: sampleCount * 2,
             maxBytes: PUSH_CHUNK_LIMITS.maxBytes,
@@ -3904,8 +3818,8 @@ export default async function createPlugin(context: HostPluginContext) {
           floatingPeakRings.delete(body.sessionId);
         lastIngestError.delete(body.sessionId);
           pushChunkLimiter.forget(body.sessionId);
-          hostApi.emitEvent("meeting.ended", { sessionId: body.sessionId });
-          hostApi.logEvent?.("info", "meeting_stop", { sessionId: body.sessionId, lengthTier: tier });
+          invalidate("meeting.ended", { sessionId: body.sessionId });
+          diagnostic("info", "meeting_stop", { sessionId: body.sessionId, lengthTier: tier });
 
           const final = finalBySession.get(body.sessionId);
           if (!final) throw new Error(`final summary not found: ${body.sessionId}`);
@@ -4019,7 +3933,8 @@ export default async function createPlugin(context: HostPluginContext) {
       meeting_register_category: async (payload?: unknown) => {
         const body = (payload ?? {}) as { category?: unknown };
         const category = categoryStore.register(body.category);
-        hostApi.logEvent?.("info", "meeting_register_category", { category });
+        invalidate("categories");
+        diagnostic("info", "meeting_register_category", { category });
         return {
           ok: true,
           category,
@@ -4105,7 +4020,7 @@ export default async function createPlugin(context: HostPluginContext) {
           status: "receiving",
         });
 
-        hostApi.logEvent?.("info", "meeting_stage_upload.begin", {
+        diagnostic("info", "meeting_stage_upload.begin", {
           sessionId: body.sessionId,
           uploadId,
           bytes: file.size,
@@ -4206,7 +4121,7 @@ export default async function createPlugin(context: HostPluginContext) {
         // 100MB string would allocate a 75MB Buffer just to reject it.
         // Gate on the encoded length first.
         if (!isBase64WithinCap(file.bytesBase64, UPLOAD_MAX_BYTES)) {
-          hostApi.logEvent?.("warn", "meeting_upload_file.size_exceeded_pre_decode", {
+          diagnostic("warn", "meeting_upload_file.size_exceeded_pre_decode", {
             sessionId: body.sessionId,
             base64Length: file.bytesBase64.length,
             maxBytes: UPLOAD_MAX_BYTES,
@@ -4224,7 +4139,7 @@ export default async function createPlugin(context: HostPluginContext) {
         file.bytesBase64 = "";
         body.file = undefined;
         if (bytes.length > UPLOAD_MAX_BYTES) {
-          hostApi.logEvent?.("warn", "meeting_upload_file.size_exceeded", {
+          diagnostic("warn", "meeting_upload_file.size_exceeded", {
             sessionId: body.sessionId,
             bytes: bytes.length,
             maxBytes: UPLOAD_MAX_BYTES,
@@ -4267,8 +4182,8 @@ export default async function createPlugin(context: HostPluginContext) {
         // consumers (notification, task ingestion) work uniformly.
         recorder.start(body.sessionId, body.context);
         activeSessions.add(body.sessionId);
-        hostApi.emitEvent("meeting.started", { sessionId: body.sessionId, mode: "upload" });
-        hostApi.logEvent?.("info", "meeting_upload_file.start", {
+        invalidate("meeting.started", { sessionId: body.sessionId, mode: "upload" });
+        diagnostic("info", "meeting_upload_file.start", {
           sessionId: body.sessionId,
           bytes: bytes.length,
           fileName,
@@ -4284,7 +4199,7 @@ export default async function createPlugin(context: HostPluginContext) {
           await releaseSessionStt(body.sessionId);
           activeSessions.delete(body.sessionId);
           pushChunkLimiter.forget(body.sessionId);
-          hostApi.emitEvent("meeting.ended", { sessionId: body.sessionId });
+          invalidate("meeting.ended", { sessionId: body.sessionId });
 
           const final = finalBySession.get(body.sessionId);
           if (!final) throw new Error(`final summary not found: ${body.sessionId}`);
@@ -4334,11 +4249,11 @@ export default async function createPlugin(context: HostPluginContext) {
             // Best-effort cleanup only; preserve the original failure.
           }
 
-          hostApi.emitEvent("meeting.error", {
+          invalidate("meeting.error", {
             sessionId: body.sessionId,
             error: (err as Error).message,
           });
-          hostApi.emitEvent("meeting.ended", {
+          invalidate("meeting.ended", {
             sessionId: body.sessionId,
             cancelled: true,
           });
@@ -4360,7 +4275,7 @@ export default async function createPlugin(context: HostPluginContext) {
         const { id } = registerPrepContext(body.context, {
           source: "other",
           focusInUi: true,
-          logEventName: "meeting_open_prep",
+          diagnosticName: "meeting_open_prep",
         });
         return { ok: true, id };
       },
@@ -4395,7 +4310,7 @@ export default async function createPlugin(context: HostPluginContext) {
         const { id } = registerPrepContext(context, {
           source,
           focusInUi,
-          logEventName: "meeting_register_scheduled_meeting",
+          diagnosticName: "meeting_register_scheduled_meeting",
         });
         return { ok: true, id, source, focusInUi };
       },
@@ -4431,7 +4346,7 @@ export default async function createPlugin(context: HostPluginContext) {
         const { id } = registerPrepContext(context, {
           source: "manual",
           focusInUi,
-          logEventName: "meeting_register_manual_meeting",
+          diagnosticName: "meeting_register_manual_meeting",
         });
         return { ok: true, id, source: "manual" as const, focusInUi };
       },
@@ -4465,7 +4380,7 @@ export default async function createPlugin(context: HostPluginContext) {
         const source = normalisePrepRegistrationSource(body.source);
         const { ids } = registerPrepContexts(meetings, {
           source,
-          logEventName: "meeting_register_scheduled_meetings",
+          diagnosticName: "meeting_register_scheduled_meetings",
         });
         return { ok: true, ids, count: ids.length, source };
       },
@@ -4490,7 +4405,7 @@ export default async function createPlugin(context: HostPluginContext) {
         if (webexGate) return webexGate;
         const { ids } = registerPrepContexts(preps, {
           source: "calendar-sync",
-          logEventName: "meeting_bulk_upsert_preps",
+          diagnosticName: "meeting_bulk_upsert_preps",
         });
         return { ok: true, ids, count: ids.length };
       },
@@ -4512,6 +4427,7 @@ export default async function createPlugin(context: HostPluginContext) {
         const deleted = prepStore.delete(body.id);
         // Invalidate in-memory lastPrep so meeting_get_prep doesn't return a stale reference.
         if (lastPrep?.id === body.id) lastPrep = null;
+        invalidate("preps");
         return { deleted };
       },
 
@@ -4537,14 +4453,14 @@ export default async function createPlugin(context: HostPluginContext) {
         const body = (payload ?? {}) as { url?: string };
         const result = validateOpenUrl(body.url);
         if (!result.ok) {
-          hostApi.logEvent?.("warn", "meeting_open_url.rejected", {
+          diagnostic("warn", "meeting_open_url.rejected", {
             reason: result.error,
             ...(result.protocol ? { protocol: result.protocol } : {}),
           });
           throw new Error(result.error);
         }
         await requireOpenExternalUrl()(result.url.toString());
-        hostApi.logEvent?.("info", "meeting_open_url", { host: result.url.host });
+        diagnostic("info", "meeting_open_url", { host: result.url.host });
         return { ok: true };
       },
 
@@ -4567,7 +4483,7 @@ export default async function createPlugin(context: HostPluginContext) {
           pipeline.resetSession(body.sessionId);
           sessionStore.delete(body.sessionId);
         } catch (err) {
-          hostApi.logEvent?.("warn", "meeting_cancel.cleanup_failed", {
+          diagnostic("warn", "meeting_cancel.cleanup_failed", {
             sessionId: body.sessionId,
             error: (err as Error).message,
           });
@@ -4579,8 +4495,8 @@ export default async function createPlugin(context: HostPluginContext) {
         lastIngestError.delete(body.sessionId);
         sessionLengthTier.delete(body.sessionId);
         pushChunkLimiter.forget(body.sessionId);
-        hostApi.emitEvent("meeting.ended", { sessionId: body.sessionId, cancelled: true });
-        hostApi.logEvent?.("info", "meeting_cancel", { sessionId: body.sessionId });
+        invalidate("meeting.ended", { sessionId: body.sessionId, cancelled: true });
+        diagnostic("info", "meeting_cancel", { sessionId: body.sessionId });
         return { ok: true };
       },
 
@@ -4639,7 +4555,7 @@ export default async function createPlugin(context: HostPluginContext) {
           ...next,
           edited: true,
         });
-        hostApi.logEvent?.("info", "meeting_update_summary", {
+        diagnostic("info", "meeting_update_summary", {
           sessionId: body.sessionId,
           fieldsTouched: [
             typeof body.title === "string" ? "title" : null,
@@ -4658,7 +4574,7 @@ export default async function createPlugin(context: HostPluginContext) {
         };
         assertSessionId(body.sessionId);
         const result = updateSessionCategory(body.sessionId, body.category);
-        hostApi.logEvent?.("info", "meeting_update_session_category", result);
+        diagnostic("info", "meeting_update_session_category", result);
         return result;
       },
 
@@ -4670,7 +4586,7 @@ export default async function createPlugin(context: HostPluginContext) {
         assertSessionId(body.sessionId);
         assertSessionId(body.targetSessionId);
         const result = updateLinkedSessions(body.sessionId, body.targetSessionId, true);
-        hostApi.logEvent?.("info", "meeting_link_sessions", {
+        diagnostic("info", "meeting_link_sessions", {
           sessionId: body.sessionId,
           targetSessionId: body.targetSessionId,
         });
@@ -4685,7 +4601,7 @@ export default async function createPlugin(context: HostPluginContext) {
         assertSessionId(body.sessionId);
         assertSessionId(body.targetSessionId);
         const result = updateLinkedSessions(body.sessionId, body.targetSessionId, false);
-        hostApi.logEvent?.("info", "meeting_unlink_sessions", {
+        diagnostic("info", "meeting_unlink_sessions", {
           sessionId: body.sessionId,
           targetSessionId: body.targetSessionId,
         });
@@ -4744,7 +4660,7 @@ export default async function createPlugin(context: HostPluginContext) {
           ...newSummary,
           regenerated: true,
         });
-        hostApi.logEvent?.("info", "meeting_regenerate_summary", {
+        diagnostic("info", "meeting_regenerate_summary", {
           sessionId: body.sessionId, lengthTier: tier,
         });
         return newSummary;
@@ -4760,18 +4676,15 @@ export default async function createPlugin(context: HostPluginContext) {
     },
 
     stop: async () => {
-      calendarAutomation?.stop();
-      await calendarClaims?.flush();
+      changes.close();
+      process.stdin.off("end", shutdown);
+      process.off("SIGTERM", shutdown);
       await cleanupRuntime("plugin_stop", false);
     },
   };
 
-  // onShutdown — drain STT buffer + stop any active recording.
-  // Floating recorder windows hold the only audio capture path now, so
-  // closing them tears down the AudioContext + media streams in renderer.
-  hostApi.onShutdown?.(async () => {
-    await cleanupRuntime("host_shutdown", true);
-  });
-
+  const shutdown = async () => { changes.close(); await cleanupRuntime("stdin_eof", true); };
+  process.stdin.once("end", shutdown);
+  process.once("SIGTERM", shutdown);
   return plugin;
 }

@@ -100,6 +100,9 @@ var init_alerts = __esm(() => {
 var en4;
 var init_app = __esm(() => {
   en4 = {
+    "app.replaceAppDraftTitle": "{appName} suggested a draft",
+    "app.replaceAppDraft": "Replace draft",
+    "app.dismissAppDraft": "Dismiss",
     "app.routineFailedTitle": "[Failed] Routine",
     "app.conversationCeilingReached": "The window is already holding {count} conversations and none of the others can be set aside — every one that could be is generating a reply. Stop one or wait for it to finish.",
     "app.conversationSetAside": "A conversation was closed to make room. It is saved, so reopening it picks up where it left off; anything typed but unsent is not kept.",
@@ -170,9 +173,8 @@ var init_app = __esm(() => {
 var en5;
 var init_appearanceTab = __esm(() => {
   en5 = {
-    "appearanceTab.pageTitle": "Theme",
-    "appearanceTab.pageDescription": "Configure screen colors, fonts, and how external URLs are displayed",
-    "appearanceTab.bundleCardAriaLabel": "Theme: {name}",
+    "appearanceTab.pageTitle": "Appearance",
+    "appearanceTab.pageDescription": "Choose interface and terminal colors and fonts",
     "appearanceTab.fontSizeSmall": "Small",
     "appearanceTab.fontSizeNormal": "Normal",
     "appearanceTab.fontSizeLarge": "Large",
@@ -186,15 +188,8 @@ var init_appearanceTab = __esm(() => {
     "appearanceTab.fontFamilyCustomPlaceholder": 'e.g. "Spoqa Han Sans Neo", system-ui, sans-serif',
     "appearanceTab.fontFamilyCustomAriaLabel": "Custom font stack",
     "appearanceTab.fontFamilyCustomHint": "Font names separated by commas. Enter saves, Escape cancels.",
-    "appearanceTab.themeSectionTitle": "Color Theme",
-    "appearanceTab.themeSectionDescription": "Selecting a theme changes the chat background, accent colors, and code blocks together. Changes apply immediately without restarting.",
-    "appearanceTab.moreThemesInMarketplace": "More themes in Marketplace",
     "appearanceTab.moreLanguagesInMarketplace": "More languages in Marketplace",
     "appearanceTab.marketplaceInstalledBadge": "Marketplace",
-    "appearanceTab.themeRadioGroupLabel": "Theme selection",
-    "appearanceTab.followSystemLabel": "Follow system theme",
-    "appearanceTab.followSystemDescription": "Automatically switches between this theme and its light or dark counterpart to match the OS light/dark mode.",
-    "appearanceTab.followSystemAriaLabel": "Follow OS system color scheme",
     "appearanceTab.fontSectionTitle": "Font",
     "appearanceTab.fontSectionDescription": "Applied across the host shell, chat, and settings windows. System default uses the OS sans-serif and Korean font fallback chain. Extension windows use their own fonts independently of this setting.",
     "appearanceTab.fontSizePreview": "Size preview:",
@@ -217,7 +212,7 @@ var init_approvalAttribution = __esm(() => {
     "approvalAttribution.unattributed": "No conversation (host request)",
     "approvalAttribution.headlessSession": "Conversation not open in any tile",
     "approvalAttribution.hostRequest": "Host request",
-    "approvalAttribution.pluginRequest": "Extension request · {plugin}",
+    "approvalAttribution.pluginRequest": "Extension panel request · {plugin}",
     "approvalAttribution.paneConversation": "Request from the conversation behind this surface: {title}",
     "approvalAttribution.returnToConversation": "Return to conversation"
   };
@@ -1168,13 +1163,7 @@ var init_be_pluginRuntime = __esm(() => {
 var en44;
 var init_be_pluginUiHost = __esm(() => {
   en44 = {
-    "be_pluginUiHost.webviewLoadFailed": "Extension webview failed to load.",
-    "be_pluginUiHost.webviewRegisterFailed": "Extension webview registration failed: {error}",
     "be_pluginUiHost.pluginViewNotFound": "Extension view not found.",
-    "be_pluginUiHost.legacyIframeNotSupported": "Legacy iframe UI format is not supported. Use an entry-based module UI.",
-    "be_pluginUiHost.uiModuleEntryNotFound": "UI module entry not found.",
-    "be_pluginUiHost.webviewAssetUrlNotFound": "Extension webview asset URL not found in aveApi (preload not injected or dist missing).",
-    "be_pluginUiHost.loading": "Loading...",
     "be_pluginUiHost.pluginUiTitle": "Extension UI",
     "be_pluginUiHost.pluginUiLoadingDesc": "Loading extension view."
   };
@@ -2407,6 +2396,7 @@ var en96;
 var init_dockedApprovalCard = __esm(() => {
   en96 = {
     "dockedApprovalCard.headline": "'{toolName}' is trying to read outside the allowed directories",
+    "dockedApprovalCard.headlineWrite": "'{toolName}' is trying to write outside the allowed directories",
     "dockedApprovalCard.targetParent": "{path}  (the whole parent folder)",
     "dockedApprovalCard.denySummary": "Access will be denied"
   };
@@ -2590,6 +2580,7 @@ var init_formatIpcError = __esm(() => {
     "formatIpcError.removalPreviewFailed": "Couldn't check what removing this project would affect, so it wasn't removed.",
     "formatIpcError.userKeyboardRequired": "This permission change can only be performed from active user input.",
     "formatIpcError.unauthorized": "You are not authorized.",
+    "formatIpcError.eventTargetForbidden": "An extension can send updates only to its own panel.",
     "formatIpcError.chatGroupLimitReached": "No more chat tiles can be opened.",
     "formatIpcError.chatGroupsUnavailable": "Chat tiles are not available in this window.",
     "formatIpcError.chatGroupRequired": "This request did not say which chat tile it was for.",
@@ -2831,7 +2822,7 @@ var init_formatIpcError = __esm(() => {
     "formatIpcError.allowSelectionFailed": "That sentence couldn't be resolved. Pick one of the buttons on the approval card.",
     "formatIpcError.unknownError": "Unknown error",
     "formatIpcError.errorSuffix": " has occurred.",
-    "formatIpcError.installedContentUnavailable": "Installed themes, languages and fonts could not be loaded.",
+    "formatIpcError.installedContentUnavailable": "Installed languages and fonts could not be loaded.",
     "formatIpcError.languageNotInstalled": "That language is not installed.",
     "formatIpcError.providerPresetRefreshFailed": "The provider change was saved but could not be applied yet. Restart the app to apply it.",
     "formatIpcError.workApprovalsSourceUnavailable": "Items that need your review could not be loaded."
@@ -2908,7 +2899,6 @@ var init_gitMarketplace = __esm(() => {
     "gitMarketplace.kind.mcp": "MCP",
     "gitMarketplace.kind.skill": "Skills",
     "gitMarketplace.kind.agent": "Agents",
-    "gitMarketplace.kind.theme": "Themes",
     "gitMarketplace.kind.font": "Fonts",
     "gitMarketplace.kind.language": "Languages",
     "gitMarketplace.kind.provider": "Providers",
@@ -3803,7 +3793,6 @@ var init_marketplaceTab = __esm(() => {
     "marketplaceTab.trustProviderCredentials": "Uses provider credentials",
     "marketplaceTab.trustProviderNetwork": "Sends model requests to provider",
     "marketplaceTab.trustNoCode": "No code",
-    "marketplaceTab.trustThemeTokens": "Theme tokens only",
     "marketplaceTab.trustLanguageCatalog": "UI text catalog only",
     "marketplaceTab.trustMessagingCredentials": "Uses credentials you enter",
     "marketplaceTab.trustMessagingNetwork": "Sends messages to an external service"
@@ -3993,9 +3982,65 @@ var init_memorySearchPanel = __esm(() => {
     "memorySearchPanel.notesTab": "Memories",
     "memorySearchPanel.sessionsTab": "Chat history",
     "memorySearchPanel.searching": "Searching…",
-    "memorySearchPanel.noNotesEmpty": "No saved memories",
+    "memorySearchPanel.noNotesEmpty": "No saved memories yet. Tell Ave what to remember in a conversation or use /remember. Ave also saves what it learns and leaves a notice you can undo.",
     "memorySearchPanel.noResults": "No results",
-    "memorySearchPanel.noSessionsEmpty": "No saved sessions"
+    "memorySearchPanel.noSessionsEmpty": "No saved sessions",
+    "memorySearchPanel.overview": "Overview",
+    "memorySearchPanel.useLog": "Use log",
+    "memorySearchPanel.history": "Change history",
+    "memorySearchPanel.origin": "Learned in",
+    "memorySearchPanel.noOrigin": "No source conversation was recorded.",
+    "memorySearchPanel.originUnavailable": "The source conversation is unavailable or was deleted.",
+    "memorySearchPanel.noMessagePosition": "/remember · No message position",
+    "memorySearchPanel.savedFromMessage": "Saved from this message",
+    "memorySearchPanel.viewConversation": "View conversation",
+    "memorySearchPanel.sameOrigin": "Other memories from this conversation",
+    "memorySearchPanel.liveQuote": "The quote is read live from the conversation. Only its location is stored.",
+    "memorySearchPanel.recentUse": "Recent use",
+    "memorySearchPanel.noUse": "No recorded use",
+    "memorySearchPanel.useAll": "All",
+    "memorySearchPanel.useInjected": "Injected",
+    "memorySearchPanel.useSearched": "Searched",
+    "memorySearchPanel.useRead": "Read",
+    "memorySearchPanel.useFilter": "Filter use log",
+    "memorySearchPanel.useIncomplete": "Some use records may be missing or older records have been removed.",
+    "memorySearchPanel.historyIncomplete": "Some changes were not recorded. This history may be incomplete.",
+    "memorySearchPanel.noHistory": "No recorded changes",
+    "memorySearchPanel.created": "Saved",
+    "memorySearchPanel.updated": "Updated",
+    "memorySearchPanel.changeConversation": "Conversation requesting this change",
+    "memorySearchPanel.historyTruncated": "Records before {date} were removed to retain recent history.",
+    "memorySearchPanel.detailFailed": "Could not load memory details. Select the memory again to retry.",
+    "memorySearchPanel.detailLabel": "Selected memory: {title}",
+    "memorySearchPanel.backToList": "Back to memories",
+    "memorySearchPanel.clearOriginFilter": "Show all conversations",
+    "memorySearchPanel.global": "Global",
+    "memorySearchPanel.learnedIn": "Learned in: {title}",
+    "memorySearchPanel.useCount": "{count} uses",
+    "memorySearchPanel.kind.preference": "Preference",
+    "memorySearchPanel.kind.constraint": "Constraint",
+    "memorySearchPanel.kind.fact": "Fact",
+    "memorySearchPanel.kind.goal": "Goal",
+    "memorySearchPanel.kind.reference": "Reference",
+    "memorySearchPanel.kind.note": "Note",
+    "memorySearchPanel.sort.recent": "Recently used",
+    "memorySearchPanel.sort.kind": "By kind",
+    "memorySearchPanel.sort.origin": "By conversation",
+    "memorySearchPanel.idleDays": "Unused for {days} days",
+    "memorySearchPanel.summaryFailed": "Could not load memory summaries. Reopen the panel to retry.",
+    "memorySearchPanel.scopes": "Memory scopes",
+    "memorySearchPanel.currentProject": "Current project",
+    "memorySearchPanel.projectScopeDescription": "Only in conversations in this project",
+    "memorySearchPanel.globalScopeDescription": "Applies in every project",
+    "memorySearchPanel.defaultProject": "Default project",
+    "memorySearchPanel.defaultScopeDescription": "Only in the default project",
+    "memorySearchPanel.notAppliedHere": "Does not apply here",
+    "memorySearchPanel.recentDescription": "· Last 7 days · Saved immediately",
+    "memorySearchPanel.startConversation": "Tell Ave in a new conversation",
+    "memorySearchPanel.startConversationFailed": "Could not open a new conversation right now.",
+    "memorySearchPanel.globalMemories": "Global memories",
+    "memorySearchPanel.globalMemoryExplanation": "Global memories also apply in this project. Default-project memories apply only in the default project.",
+    "memorySearchPanel.manageGlobal": "Manage global memories"
   };
 });
 
@@ -5233,7 +5278,7 @@ var init_settingsContent = __esm(() => {
     "settingsContent.sidebarAriaLabel": "Settings categories",
     "settingsContent.tabGeneral": "General",
     "settingsContent.tabLlm": "Model",
-    "settingsContent.tabAppearance": "Theme",
+    "settingsContent.tabAppearance": "Appearance",
     "settingsContent.tabChat": "Chat",
     "settingsContent.tabWeb": "Web / Browsing",
     "settingsContent.tabPermissions": "Permissions",
@@ -6167,7 +6212,7 @@ var init_toolApprovalDialog = __esm(() => {
     "toolApprovalDialog.networkRuleUnavailable": "This address cannot be named by a host rule. Deny it once instead.",
     "toolApprovalDialog.networkScopeNotOffered": "This connection is not offered for that lifetime.",
     "toolApprovalDialog.networkLocalScopeNotOffered": "A local or unverified destination cannot be allowed for good.",
-    "toolApprovalDialog.pathGrantOnlyFolder": "A folder is allowed once or for good.",
+    "toolApprovalDialog.pathGrantOnlyFolder": "A folder is allowed once, for this session, or for good.",
     "toolApprovalDialog.hostTerminalTarget": "Types `{command}` into your own terminal {terminal} ({shell}) and runs it there, in {cwd}. You can take over at any time.",
     "toolApprovalDialog.hostTerminalWarning": "This is your real shell, with your permissions and no sandbox. The command's output returns to the model and may contain secrets from your machine.",
     "toolApprovalDialog.hostTerminalAfterExternalContent": "External content was read earlier in this turn. Check that this command follows your request before approving it for this time only.",
@@ -6457,9 +6502,7 @@ var init_useStatusBarInstall = __esm(() => {
     "useStatusBarInstall.installSuccess": "{target} installed successfully",
     "useStatusBarInstall.installFailure": "{target} installation failed: {error}",
     "useStatusBarInstall.uninstallSuccess": "{target} removed successfully",
-    "useStatusBarInstall.uninstallFailure": "{target} removal failed: {error}",
-    "useStatusBarInstall.labelAgent": "agent",
-    "useStatusBarInstall.labelSkill": "skill"
+    "useStatusBarInstall.uninstallFailure": "{target} removal failed: {error}"
   };
 });
 
@@ -6951,7 +6994,7 @@ var require_code = __commonJS((exports) => {
     else if (arg instanceof Name)
       code.push(arg);
     else
-      code.push(interpolate(arg));
+      code.push(interpolate2(arg));
   }
   exports.addCodeArg = addCodeArg;
   function optimize(expr) {
@@ -6990,7 +7033,7 @@ var require_code = __commonJS((exports) => {
     return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
   }
   exports.strConcat = strConcat;
-  function interpolate(x) {
+  function interpolate2(x) {
     return typeof x == "number" || typeof x == "boolean" || x === null ? x : safeStringify(Array.isArray(x) ? x.join(",") : x);
   }
   function stringify(x) {
@@ -8332,7 +8375,7 @@ var require_dataType = __commonJS((exports) => {
   exports.coerceAndCheckDataType = coerceAndCheckDataType;
   var COERCIBLE = new Set(["string", "number", "integer", "boolean", "null"]);
   function coerceToTypes(types, coerceTypes) {
-    return coerceTypes ? types.filter((t) => COERCIBLE.has(t) || coerceTypes === "array" && t === "array") : [];
+    return coerceTypes ? types.filter((t2) => COERCIBLE.has(t2) || coerceTypes === "array" && t2 === "array") : [];
   }
   function coerceData(it, types, coerceTo) {
     const { gen, data, opts } = it;
@@ -8342,9 +8385,9 @@ var require_dataType = __commonJS((exports) => {
       gen.if((0, codegen_1._)`${dataType} == 'object' && Array.isArray(${data}) && ${data}.length == 1`, () => gen.assign(data, (0, codegen_1._)`${data}[0]`).assign(dataType, (0, codegen_1._)`typeof ${data}`).if(checkDataTypes(types, data, opts.strictNumbers), () => gen.assign(coerced, data)));
     }
     gen.if((0, codegen_1._)`${coerced} !== undefined`);
-    for (const t of coerceTo) {
-      if (COERCIBLE.has(t) || t === "array" && opts.coerceTypes === "array") {
-        coerceSpecificType(t);
+    for (const t2 of coerceTo) {
+      if (COERCIBLE.has(t2) || t2 === "array" && opts.coerceTypes === "array") {
+        coerceSpecificType(t2);
       }
     }
     gen.else();
@@ -8354,8 +8397,8 @@ var require_dataType = __commonJS((exports) => {
       gen.assign(data, coerced);
       assignParentData(it, coerced);
     });
-    function coerceSpecificType(t) {
-      switch (t) {
+    function coerceSpecificType(t2) {
+      switch (t2) {
         case "string":
           gen.elseIf((0, codegen_1._)`${dataType} == "number" || ${dataType} == "boolean"`).assign(coerced, (0, codegen_1._)`"" + ${data}`).elseIf((0, codegen_1._)`${data} === null`).assign(coerced, (0, codegen_1._)`""`);
           return;
@@ -8427,8 +8470,8 @@ var require_dataType = __commonJS((exports) => {
     }
     if (types.number)
       delete types.integer;
-    for (const t in types)
-      cond = (0, codegen_1.and)(cond, checkDataType(t, data, strictNums, correct));
+    for (const t2 in types)
+      cond = (0, codegen_1.and)(cond, checkDataType(t2, data, strictNums, correct));
     return cond;
   }
   exports.checkDataTypes = checkDataTypes;
@@ -9326,9 +9369,9 @@ var require_validate = __commonJS((exports) => {
       it.dataTypes = types;
       return;
     }
-    types.forEach((t) => {
-      if (!includesType(it.dataTypes, t)) {
-        strictTypesError(it, `type "${t}" not allowed by context "${it.dataTypes.join(",")}"`);
+    types.forEach((t2) => {
+      if (!includesType(it.dataTypes, t2)) {
+        strictTypesError(it, `type "${t2}" not allowed by context "${it.dataTypes.join(",")}"`);
       }
     });
     narrowSchemaTypes(it, types);
@@ -9344,7 +9387,7 @@ var require_validate = __commonJS((exports) => {
       const rule = rules[keyword];
       if (typeof rule == "object" && (0, applicability_1.shouldUseRule)(it.schema, rule)) {
         const { type } = rule.definition;
-        if (type.length && !type.some((t) => hasApplicableType(ts, t))) {
+        if (type.length && !type.some((t2) => hasApplicableType(ts, t2))) {
           strictTypesError(it, `missing type "${type.join(",")}" for keyword "${keyword}"`);
         }
       }
@@ -9353,15 +9396,15 @@ var require_validate = __commonJS((exports) => {
   function hasApplicableType(schTs, kwdT) {
     return schTs.includes(kwdT) || kwdT === "number" && schTs.includes("integer");
   }
-  function includesType(ts, t) {
-    return ts.includes(t) || t === "integer" && ts.includes("number");
+  function includesType(ts, t2) {
+    return ts.includes(t2) || t2 === "integer" && ts.includes("number");
   }
   function narrowSchemaTypes(it, withTypes) {
     const ts = [];
-    for (const t of it.dataTypes) {
-      if (includesType(withTypes, t))
-        ts.push(t);
-      else if (withTypes.includes("integer") && t === "number")
+    for (const t2 of it.dataTypes) {
+      if (includesType(withTypes, t2))
+        ts.push(t2);
+      else if (withTypes.includes("integer") && t2 === "number")
         ts.push("integer");
     }
     it.dataTypes = ts;
@@ -10992,7 +11035,7 @@ var require_core = __commonJS((exports) => {
         type: (0, dataType_1.getJSONTypes)(def.type),
         schemaType: (0, dataType_1.getJSONTypes)(def.schemaType)
       };
-      (0, util_1.eachItem)(keyword, definition.type.length === 0 ? (k) => addRule.call(this, k, definition) : (k) => definition.type.forEach((t) => addRule.call(this, k, definition, t)));
+      (0, util_1.eachItem)(keyword, definition.type.length === 0 ? (k) => addRule.call(this, k, definition) : (k) => definition.type.forEach((t2) => addRule.call(this, k, definition, t2)));
       return this;
     }
     getKeyword(keyword) {
@@ -11156,13 +11199,13 @@ var require_core = __commonJS((exports) => {
     return metaOpts;
   }
   var noLogs = { log() {}, warn() {}, error() {} };
-  function getLogger(logger) {
-    if (logger === false)
+  function getLogger(logger2) {
+    if (logger2 === false)
       return noLogs;
-    if (logger === undefined)
+    if (logger2 === undefined)
       return console;
-    if (logger.log && logger.warn && logger.error)
-      return logger;
+    if (logger2.log && logger2.warn && logger2.error)
+      return logger2;
     throw new Error("logger must implement log, warn and error methods");
   }
   var KEYWORD_NAME = /^[a-z_$][a-z0-9_$:-]*$/i;
@@ -11186,7 +11229,7 @@ var require_core = __commonJS((exports) => {
     if (dataType && post)
       throw new Error('keyword with "post" flag cannot have "type"');
     const { RULES } = this;
-    let ruleGroup = post ? RULES.post : RULES.rules.find(({ type: t }) => t === dataType);
+    let ruleGroup = post ? RULES.post : RULES.rules.find(({ type: t2 }) => t2 === dataType);
     if (!ruleGroup) {
       ruleGroup = { type: dataType, rules: [] };
       RULES.rules.push(ruleGroup);
@@ -11695,7 +11738,7 @@ var require_uniqueItems = __commonJS((exports) => {
         gen.if((0, codegen_1._)`${i} > 1`, () => (canOptimize() ? loopN : loopN2)(i, j));
       }
       function canOptimize() {
-        return itemTypes.length > 0 && !itemTypes.some((t) => t === "object" || t === "array");
+        return itemTypes.length > 0 && !itemTypes.some((t2) => t2 === "object" || t2 === "array");
       }
       function loopN(i, j) {
         const item = gen.name("item");
@@ -16591,7 +16634,7 @@ var require_merge = __commonJS((exports) => {
 
 // node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
-  var log2 = require_log();
+  var log3 = require_log();
   var merge = require_merge();
   var stringify = require_stringify();
   var identity = require_identity();
@@ -16640,7 +16683,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
         let jsonStr = JSON.stringify(strKey);
         if (jsonStr.length > 40)
           jsonStr = jsonStr.substring(0, 36) + '..."';
-        log2.warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
+        log3.warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
         ctx.mapKeyWarned = true;
       }
       return strKey;
@@ -16677,8 +16720,8 @@ var require_Pair = __commonJS((exports) => {
       return new Pair(key, value);
     }
     toJSON(_, ctx) {
-      const pair2 = ctx?.mapAsMap ? new Map : {};
-      return addPairToJSMap.addPairToJSMap(ctx, pair2, this);
+      const pair = ctx?.mapAsMap ? new Map : {};
+      return addPairToJSMap.addPairToJSMap(ctx, pair, this);
     }
     toString(ctx, onComment, onChompKeep) {
       return ctx?.doc ? stringifyPair.stringifyPair(this, ctx, onComment, onChompKeep) : JSON.stringify(this);
@@ -16892,14 +16935,14 @@ var require_YAMLMap = __commonJS((exports) => {
       }
       return map;
     }
-    add(pair2, overwrite) {
+    add(pair, overwrite) {
       let _pair;
-      if (identity.isPair(pair2))
-        _pair = pair2;
-      else if (!pair2 || typeof pair2 !== "object" || !("key" in pair2)) {
-        _pair = new Pair.Pair(pair2, pair2?.value);
+      if (identity.isPair(pair))
+        _pair = pair;
+      else if (!pair || typeof pair !== "object" || !("key" in pair)) {
+        _pair = new Pair.Pair(pair, pair?.value);
       } else
-        _pair = new Pair.Pair(pair2.key, pair2.value);
+        _pair = new Pair.Pair(pair.key, pair.value);
       const prev = findPair(this.items, _pair.key);
       const sortEntries = this.schema?.sortMapEntries;
       if (prev) {
@@ -17418,16 +17461,16 @@ var require_pairs = __commonJS((exports) => {
         else if (identity.isMap(item)) {
           if (item.items.length > 1)
             onError("Each pair must have its own sequence indicator");
-          const pair2 = item.items[0] || new Pair.Pair(new Scalar.Scalar(null));
+          const pair = item.items[0] || new Pair.Pair(new Scalar.Scalar(null));
           if (item.commentBefore)
-            pair2.key.commentBefore = pair2.key.commentBefore ? `${item.commentBefore}
-${pair2.key.commentBefore}` : item.commentBefore;
+            pair.key.commentBefore = pair.key.commentBefore ? `${item.commentBefore}
+${pair.key.commentBefore}` : item.commentBefore;
           if (item.comment) {
-            const cn = pair2.value ?? pair2.key;
+            const cn = pair.value ?? pair.key;
             cn.comment = cn.comment ? `${item.comment}
 ${cn.comment}` : item.comment;
           }
-          item = pair2;
+          item = pair;
         }
         seq.items[i] = identity.isPair(item) ? item : new Pair.Pair(item);
       }
@@ -17502,13 +17545,13 @@ var require_omap = __commonJS((exports) => {
       const map = new Map;
       if (ctx?.onCreate)
         ctx.onCreate(map);
-      for (const pair2 of this.items) {
+      for (const pair of this.items) {
         let key, value;
-        if (identity.isPair(pair2)) {
-          key = toJS.toJS(pair2.key, "", ctx);
-          value = toJS.toJS(pair2.value, key, ctx);
+        if (identity.isPair(pair)) {
+          key = toJS.toJS(pair.key, "", ctx);
+          value = toJS.toJS(pair.value, key, ctx);
         } else {
-          key = toJS.toJS(pair2, "", ctx);
+          key = toJS.toJS(pair, "", ctx);
         }
         if (map.has(key))
           throw new Error("Ordered maps must not include duplicate keys");
@@ -17713,20 +17756,20 @@ var require_set = __commonJS((exports) => {
       this.tag = YAMLSet.tag;
     }
     add(key) {
-      let pair2;
+      let pair;
       if (identity.isPair(key))
-        pair2 = key;
+        pair = key;
       else if (key && typeof key === "object" && "key" in key && "value" in key && key.value === null)
-        pair2 = new Pair.Pair(key.key, null);
+        pair = new Pair.Pair(key.key, null);
       else
-        pair2 = new Pair.Pair(key, null);
-      const prev = YAMLMap.findPair(this.items, pair2.key);
+        pair = new Pair.Pair(key, null);
+      const prev = YAMLMap.findPair(this.items, pair.key);
       if (!prev)
-        this.items.push(pair2);
+        this.items.push(pair);
     }
     get(key, keepPair) {
-      const pair2 = YAMLMap.findPair(this.items, key);
-      return !keepPair && identity.isPair(pair2) ? identity.isScalar(pair2.key) ? pair2.key.value : pair2.key : pair2;
+      const pair = YAMLMap.findPair(this.items, key);
+      return !keepPair && identity.isPair(pair) ? identity.isScalar(pair.key) ? pair.key.value : pair.key : pair;
     }
     set(key, value) {
       if (typeof value !== "boolean")
@@ -18601,7 +18644,7 @@ var require_util_map_includes = __commonJS((exports) => {
     if (uniqueKeys === false)
       return false;
     const isEqual = typeof uniqueKeys === "function" ? uniqueKeys : (a, b) => a === b || identity.isScalar(a) && identity.isScalar(b) && a.value === b.value;
-    return items.some((pair2) => isEqual(pair2.key, search));
+    return items.some((pair) => isEqual(pair.key, search));
   }
   exports.mapIncludes = mapIncludes;
 });
@@ -18685,10 +18728,10 @@ var require_resolve_block_map = __commonJS((exports) => {
         if (ctx.schema.compat)
           utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
         offset = valueNode.range[2];
-        const pair2 = new Pair.Pair(keyNode, valueNode);
+        const pair = new Pair.Pair(keyNode, valueNode);
         if (ctx.options.keepSourceTokens)
-          pair2.srcToken = collItem;
-        map.items.push(pair2);
+          pair.srcToken = collItem;
+        map.items.push(pair);
       } else {
         if (implicitKey)
           onError(keyNode.range, "MISSING_CHAR", "Implicit map keys need to be followed by map values");
@@ -18699,10 +18742,10 @@ var require_resolve_block_map = __commonJS((exports) => {
           else
             keyNode.comment = valueProps.comment;
         }
-        const pair2 = new Pair.Pair(keyNode);
+        const pair = new Pair.Pair(keyNode);
         if (ctx.options.keepSourceTokens)
-          pair2.srcToken = collItem;
-        map.items.push(pair2);
+          pair.srcToken = collItem;
+        map.items.push(pair);
       }
     }
     if (commentEnd && commentEnd < offset)
@@ -18943,18 +18986,18 @@ var require_resolve_flow_collection = __commonJS((exports) => {
           else
             keyNode.comment = valueProps.comment;
         }
-        const pair2 = new Pair.Pair(keyNode, valueNode);
+        const pair = new Pair.Pair(keyNode, valueNode);
         if (ctx.options.keepSourceTokens)
-          pair2.srcToken = collItem;
+          pair.srcToken = collItem;
         if (isMap) {
           const map = coll;
           if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
             onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-          map.items.push(pair2);
+          map.items.push(pair);
         } else {
           const map = new YAMLMap.YAMLMap(ctx.schema);
           map.flow = true;
-          map.items.push(pair2);
+          map.items.push(pair);
           const endRange = (valueNode ?? keyNode).range;
           map.range = [keyNode.range[0], endRange[1], endRange[2]];
           coll.items.push(map);
@@ -21796,7 +21839,7 @@ var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
   var errors = require_errors2();
-  var log2 = require_log();
+  var log3 = require_log();
   var identity = require_identity();
   var lineCounter = require_line_counter();
   var parser = require_parser();
@@ -21848,7 +21891,7 @@ var require_public_api = __commonJS((exports) => {
     const doc = parseDocument(src, options);
     if (!doc)
       return null;
-    doc.warnings.forEach((warning) => log2.warn(doc.options.logLevel, warning));
+    doc.warnings.forEach((warning) => log3.warn(doc.options.logLevel, warning));
     if (doc.errors.length > 0) {
       if (doc.options.logLevel !== "silent")
         throw doc.errors[0];
@@ -22849,7 +22892,7 @@ var require_utils2 = __commonJS((exports, module) => {
   module.exports = Utils;
   Utils.prototype.makeDir = function(folder) {
     const self = this;
-    function mkdirSync3(fpath) {
+    function mkdirSync2(fpath) {
       let resolvedPath = fpath.split(self.sep)[0];
       fpath.split(self.sep).forEach(function(name) {
         if (!name || name.substr(-1, 1) === ":")
@@ -22869,7 +22912,7 @@ var require_utils2 = __commonJS((exports, module) => {
           throw Errors.FILE_IN_THE_WAY(`"${resolvedPath}"`);
       });
     }
-    mkdirSync3(folder);
+    mkdirSync2(folder);
   };
   Utils.prototype.writeFileTo = function(path, content, overwrite, attr) {
     const self = this;
@@ -24326,7 +24369,7 @@ var require_zipFile = __commonJS((exports, module) => {
     }
     function sortEntries() {
       if (entryList.length > 1 && !noSort) {
-        entryList = entryList.map((entry) => ({ entry, key: entry.entryName.toLowerCase() })).sort((a, b2) => a.key.localeCompare(b2.key)).map((pair2) => pair2.entry);
+        entryList = entryList.map((entry) => ({ entry, key: entry.entryName.toLowerCase() })).sort((a, b2) => a.key.localeCompare(b2.key)).map((pair) => pair.entry);
       }
     }
     return {
@@ -25136,6 +25179,23 @@ var require_adm_zip = __commonJS((exports, module) => {
 
 // src/i18n/messages/en.ts
 var en = {
+  "approvalAttribution.extensionSessionRequest": "Extension request · {extension}",
+  "appearanceTab.fontSaveFailed": "The font setting could not be loaded or saved.",
+  "appearanceTab.schemeTitle": "Color scheme",
+  "appearanceTab.schemeDescription": "One scheme sets the interface and terminal colors. System mode keeps a selection for each appearance.",
+  "appearanceTab.mode": "Appearance mode",
+  "appearanceTab.mode.system": "System",
+  "appearanceTab.mode.dark": "Dark",
+  "appearanceTab.mode.light": "Light",
+  "appearanceTab.scheme.dark": "Dark scheme",
+  "appearanceTab.scheme.light": "Light scheme",
+  "appearanceTab.terminalTitle": "Terminal font",
+  "appearanceTab.terminalFamily": "Font family",
+  "appearanceTab.terminalSize": "Size (px)",
+  "appearanceTab.terminalLineHeight": "Line height",
+  "settingsContent.search": "Search settings",
+  "settingsContent.searchEmpty": "No matching settings",
+  "settingsContent.searchCount": "{count} settings found",
   "sidebarPreview.localFile": "Local file",
   "sidebarPreview.running": "Agent responding",
   "ptyTerminal.hostChipApproval": "Host · conversation permissions",
@@ -25155,6 +25215,7 @@ var en = {
   "approvalAction.editFile": "Edit {target} file",
   "approvalAction.readFile": "Read {target} file",
   "approvalAction.outsideDirectory": "Read {target} outside scope",
+  "approvalAction.outsideDirectoryWrite": "Write {target} outside scope",
   "approvalAction.read": "Read data",
   "approvalAction.write": "Change data",
   "approvalAction.network": "Transfer network data",
@@ -25534,13 +25595,11 @@ Restore each entry from the shown quarantine path to its original path after ins
   "pluginConfigTab.protocolUpdateRepository": "Update required: get a compatible release from {source}",
   "pluginConfigTab.protocolUpdateUnavailable": "Update required: contact the extension publisher for a compatible release.",
   "pluginConfigTab.protocolUpdateButton": "Update to {version}",
-  "pluginConfigTab.doctorMigrateButton": "Migrate with AI",
   "pluginConfigTab.installFromFolder": "Install from folder…",
   "pluginConfigTab.installUnreviewedDev": "Install unreviewed (dev)",
   "pluginConfigTab.runtimeArmLabel": "Runs as",
   "pluginConfigTab.runtimeArmLine": "{arm} · {confinement}",
   "pluginConfigTab.armChild": "Separate process",
-  "pluginConfigTab.armInProcess": "Inside the app process",
   "pluginConfigTab.confinementMacosSandbox": "macOS sandbox",
   "pluginConfigTab.confinementLinuxBubblewrap": "Linux sandbox (bubblewrap)",
   "pluginConfigTab.confinementWindowsSrt": "Windows sandbox",
@@ -26055,7 +26114,6 @@ var PACKAGE_KINDS = [
   "mcp",
   "skill",
   "agent",
-  "theme",
   "font",
   "language",
   "provider",
@@ -26066,6 +26124,1005 @@ function isPackageName(value) {
   return typeof value === "string" && value.length >= 3 && value.length <= 64 && PACKAGE_NAME_RE.test(value);
 }
 var NULL_OBJECT_ID = "0".repeat(40);
+
+// src/shared/strict-json.ts
+var NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
+var WHITESPACE = /[ \t\n\r]*/y;
+function parseStrictJsonText(text, options) {
+  const { fail } = options;
+  const maxNodes = options.maxNodes ?? Number.POSITIVE_INFINITY;
+  const maxMembers = options.maxObjectMembers ?? Number.POSITIVE_INFINITY;
+  const maxItems = options.maxArrayItems ?? Number.POSITIVE_INFINITY;
+  let pos = 0;
+  let nodes = 0;
+  const skip = () => {
+    WHITESPACE.lastIndex = pos;
+    WHITESPACE.exec(text);
+    pos = WHITESPACE.lastIndex;
+  };
+  const readString = () => {
+    const start = pos;
+    pos += 1;
+    while (pos < text.length) {
+      const ch = text.charCodeAt(pos);
+      if (ch === 34) {
+        pos += 1;
+        try {
+          return JSON.parse(text.slice(start, pos));
+        } catch {
+          return fail("invalid string", start);
+        }
+      }
+      if (ch === 92)
+        pos += 2;
+      else if (ch < 32)
+        return fail("control character in string", pos);
+      else
+        pos += 1;
+    }
+    return fail("unterminated string", start);
+  };
+  const readValue = (depth) => {
+    if (depth > options.maxDepth)
+      fail("nesting too deep", pos);
+    skip();
+    nodes += 1;
+    if (nodes > maxNodes)
+      fail("too many values", pos);
+    const ch = text[pos];
+    if (ch === "{") {
+      pos += 1;
+      const out = options.nullPrototypeObjects ? Object.create(null) : {};
+      const seen = new Set;
+      skip();
+      if (text[pos] === "}") {
+        pos += 1;
+        return out;
+      }
+      for (;; ) {
+        skip();
+        if (text[pos] !== '"')
+          fail("expected a key", pos);
+        const keyAt = pos;
+        const key = readString();
+        if (options.forbiddenKeys.has(key))
+          fail(`the key ${key} is not allowed`, keyAt);
+        if (seen.has(key))
+          fail(`duplicate key ${JSON.stringify(key)}`, keyAt);
+        seen.add(key);
+        if (seen.size > maxMembers)
+          fail("too many object members", keyAt);
+        skip();
+        if (text[pos] !== ":")
+          fail("expected ':'", pos);
+        pos += 1;
+        out[key] = readValue(depth + 1);
+        skip();
+        if (text[pos] === ",") {
+          pos += 1;
+          continue;
+        }
+        if (text[pos] === "}") {
+          pos += 1;
+          return out;
+        }
+        fail("expected ',' or '}'", pos);
+      }
+    }
+    if (ch === "[") {
+      pos += 1;
+      const out = [];
+      skip();
+      if (text[pos] === "]") {
+        pos += 1;
+        return out;
+      }
+      for (;; ) {
+        if (out.length >= maxItems)
+          fail("too many array items", pos);
+        out.push(readValue(depth + 1));
+        skip();
+        if (text[pos] === ",") {
+          pos += 1;
+          continue;
+        }
+        if (text[pos] === "]") {
+          pos += 1;
+          return out;
+        }
+        fail("expected ',' or ']'", pos);
+      }
+    }
+    if (ch === '"')
+      return readString();
+    for (const [literal, value2] of [["true", true], ["false", false], ["null", null]]) {
+      if (text.startsWith(literal, pos)) {
+        pos += literal.length;
+        return value2;
+      }
+    }
+    NUMBER.lastIndex = pos;
+    const match = NUMBER.exec(text);
+    if (!match)
+      return fail("unexpected token", pos);
+    const numberAt = pos;
+    pos = NUMBER.lastIndex;
+    const parsed = Number(match[0]);
+    if (options.rejectNonFiniteNumbers && !Number.isFinite(parsed))
+      fail("number out of range", numberAt);
+    return parsed;
+  };
+  const value = readValue(0);
+  skip();
+  if (pos !== text.length)
+    fail("trailing content", pos);
+  return value;
+}
+var DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
+// src/marketplace/catalog/strict-json.ts
+class StrictJsonError extends Error {
+  offset;
+  constructor(message, offset) {
+    super(`${message} at offset ${offset}`);
+    this.offset = offset;
+    this.name = "StrictJsonError";
+  }
+}
+var MARKETPLACE_FORBIDDEN_KEYS = new Set(["__proto__"]);
+var throwLocated = (reason, offset) => {
+  throw new StrictJsonError(reason, offset);
+};
+function parseStrictJson(text) {
+  return parseStrictJsonText(text, {
+    maxDepth: 64,
+    forbiddenKeys: MARKETPLACE_FORBIDDEN_KEYS,
+    nullPrototypeObjects: false,
+    rejectNonFiniteNumbers: false,
+    fail: throwLocated
+  });
+}
+
+// marketplace-check:unused-host-logger
+var silent = () => {};
+var logger = { debug: silent, info: silent, warn: silent, error: silent, trace: silent, fatal: silent, child: () => logger };
+function createLogger() {
+  return logger;
+}
+// src/i18n/translate.ts
+function interpolate(template, vars) {
+  if (!vars)
+    return template;
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+    const value = vars[name];
+    return value === undefined ? match : String(value);
+  });
+}
+function translate(locale, key, vars) {
+  const active = messages[locale];
+  const fallback = messages.en;
+  const template = active?.[key] ?? fallback[key] ?? key;
+  return interpolate(template, vars);
+}
+
+// src/i18n/runtime.ts
+var activeLocale = DEFAULT_LOCALE;
+var listeners = new Set;
+function t(key, vars) {
+  return translate(activeLocale, key, vars);
+}
+// src/shared/is-record.ts
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isStringArray(value) {
+  if (!Array.isArray(value))
+    return false;
+  for (let i = 0;i < value.length; i++) {
+    if (typeof value[i] !== "string")
+      return false;
+  }
+  return true;
+}
+
+// src/shared/error-message.ts
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+// src/shared/dlp.ts
+var SSH_ACCOUNT = /^[A-Za-z0-9._~][A-Za-z0-9._~-]*$/u;
+function userinfoHidesCredential(userinfo, scheme) {
+  if (scheme !== undefined && overHttp(scheme))
+    return true;
+  try {
+    return !SSH_ACCOUNT.test(decodeURIComponent(userinfo));
+  } catch {
+    return true;
+  }
+}
+function overHttp(scheme) {
+  return scheme.toLowerCase().split("+").some((part) => part === "http" || part === "https");
+}
+var CREDENTIAL_WORDS = [
+  "token",
+  "secret",
+  "password",
+  "passwd",
+  "pwd",
+  "apikey",
+  "api_key",
+  "api-key",
+  "accesskey",
+  "access_key",
+  "access-key",
+  "privatekey",
+  "private_key",
+  "private-key",
+  "credential",
+  "bearer"
+];
+function isCredentialKey(key) {
+  const stripped = key.replace(/\[REDACTED:[A-Z_]+\]/gu, "");
+  if (stripped !== key && stripped.trim() === "")
+    return true;
+  const lower = stripped.toLowerCase();
+  const segments = lower.split(/[^a-z0-9]/u);
+  return CREDENTIAL_WORDS.some((word) => lower.includes(word)) || segments.includes("auth") || segments.includes("pat");
+}
+var JSON_ESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: `
+`, r: "\r", t: "\t" };
+function decodeQuotedKey(body, quote) {
+  let decoded = "";
+  for (let i = 0;i < body.length; i++) {
+    if (body[i] !== "\\") {
+      decoded += body[i];
+      continue;
+    }
+    const escape2 = body[++i];
+    if (escape2 === "u") {
+      const hex = body.slice(i + 1, i + 5);
+      if (!/^[0-9a-fA-F]{4}$/u.test(hex))
+        return null;
+      decoded += String.fromCharCode(Number.parseInt(hex, 16));
+      i += 4;
+    } else if (escape2 === quote) {
+      decoded += quote;
+    } else {
+      const char = escape2 === undefined ? undefined : JSON_ESCAPES[escape2];
+      if (char === undefined)
+        return null;
+      decoded += char;
+    }
+  }
+  return decoded;
+}
+function isKeyChar(code) {
+  return code >= 48 && code <= 57 || code >= 65 && code <= 90 || code >= 97 && code <= 122 || code === 95 || code === 46 || code === 45;
+}
+var isBlank = (char) => char === " " || char === "\t";
+var isWhitespace = (char) => char !== undefined && /\s/u.test(char);
+var AUTH_SCHEMES = new Set(["basic", "bearer", "digest", "negotiate", "token"]);
+var REDACTION_MARKER = /\[REDACTED:[A-Z_]+\]/y;
+var isJsonWhitespace = (char) => char === " " || char === "\t" || char === "\r" || char === `
+`;
+function closingQuoteOnLine(text, start, limit) {
+  const quote = text[start];
+  for (let i = start + 1;i < limit && text[i] !== `
+`; i++) {
+    if (text[i] === "\\" && text[i + 1] !== `
+`)
+      i++;
+    else if (text[i] === quote)
+      return i;
+  }
+  return -1;
+}
+function escapedStringScan(text, start, limit) {
+  let escape2 = false;
+  let i = start + 2;
+  while (i < limit && text[i] !== `
+`) {
+    const at = i;
+    if (text[i] === '"')
+      break;
+    let char = text[i];
+    if (char === "\\") {
+      if (i + 1 >= limit || text[i + 1] === `
+`)
+        break;
+      char = text[i + 1];
+      i += 2;
+    } else {
+      i += 1;
+    }
+    if (escape2)
+      escape2 = false;
+    else if (char === "\\")
+      escape2 = true;
+    else if (char === '"')
+      return { close: at, scanned: i };
+  }
+  return { close: -1, scanned: i };
+}
+function redactCredentialAssignments(text) {
+  let out = "";
+  let copied = 0;
+  let floor = 0;
+  let lineFirst = -1;
+  let backslashes = 0;
+  let escapedScanned = 0;
+  const redact = (valueStart, valueEnd2) => {
+    out += `${text.slice(copied, valueStart)}[REDACTED:TOKEN]`;
+    copied = valueEnd2;
+    floor = valueEnd2;
+    if (text.slice(valueStart, valueEnd2).includes(`
+`))
+      lineFirst = valueStart;
+    return valueEnd2 - 1;
+  };
+  const pending = [];
+  const limitAt = (at) => {
+    const key = pending[pending.length - 1];
+    return key !== undefined && at < key.close ? key.close : text.length;
+  };
+  const valueEnd = (start, toLineEnd, limit) => {
+    if (start >= limit)
+      return start;
+    if (text[start] === '"' || text[start] === "'") {
+      const close = closingQuoteOnLine(text, start, limit);
+      return close === -1 ? limit : close + 1;
+    }
+    if (text[start] === "\\" && text[start + 1] === '"') {
+      const { close } = escapedStringScan(text, start, limit);
+      return close === -1 ? limit : close + 2;
+    }
+    let end = start;
+    if (toLineEnd) {
+      while (end < limit && text[end] !== `
+` && text[end] !== "\r")
+        end++;
+      return end;
+    }
+    while (end < limit && !isWhitespace(text[end]))
+      end++;
+    if (AUTH_SCHEMES.has(text.slice(start, end).toLowerCase())) {
+      let word = end;
+      while (word < limit && isBlank(text[word]))
+        word++;
+      let wordEnd = word;
+      while (wordEnd < limit && !isWhitespace(text[wordEnd]))
+        wordEnd++;
+      if (wordEnd > word)
+        end = wordEnd;
+    }
+    return end;
+  };
+  const assignment = (separator, keyStart, key, quoted) => {
+    floor = separator + 1;
+    if (key !== null && !isCredentialKey(key))
+      return separator;
+    const limit = limitAt(separator);
+    let at = separator;
+    let resumeAt = separator;
+    for (let first = true;; first = false) {
+      let start = at + 1;
+      while (start < limit && (quoted || !first ? isJsonWhitespace(text[start]) : isBlank(text[start])))
+        start++;
+      REDACTION_MARKER.lastIndex = Math.min(skipSeparatorSpace(text, start), limit);
+      if (REDACTION_MARKER.test(text) && (REDACTION_MARKER.lastIndex >= limit || isWhitespace(text[REDACTION_MARKER.lastIndex])))
+        return resumeAt;
+      let stop = valueEnd(start, first && text[at] === "=" && keyStart === lineFirst, limit);
+      if (text.slice(at + 1, start).includes(`
+`)) {
+        let lineEnd = start;
+        while (lineEnd < limit && text[lineEnd] !== `
+`)
+          lineEnd++;
+        stop = Math.max(stop, lineEnd);
+      }
+      if (stop <= start)
+        return resumeAt;
+      resumeAt = redact(start, stop);
+      let next = stop;
+      while (next < limit && isJsonWhitespace(text[next]))
+        next++;
+      if (next >= limit || text[next] !== ":" && text[next] !== "=")
+        return resumeAt;
+      at = next;
+      floor = at + 1;
+    }
+  };
+  for (let i = 0;i < text.length; i++) {
+    const char = text[i];
+    const escaped = backslashes % 2 === 1;
+    backslashes = char === "\\" ? backslashes + 1 : 0;
+    const ahead = pending[pending.length - 1];
+    if (ahead !== undefined && ahead.separator < i)
+      throw new Error(`credential scan passed the separator of the key at ${ahead.keyStart}`);
+    if (ahead?.separator === i) {
+      pending.pop();
+      i = assignment(i, ahead.keyStart, ahead.key, true);
+      backslashes = 0;
+      continue;
+    }
+    if (char === `
+`) {
+      lineFirst = -1;
+      floor = i + 1;
+      continue;
+    }
+    if (lineFirst === -1 && !isBlank(char) && char !== "\r")
+      lineFirst = i;
+    if (ahead !== undefined && i === ahead.close)
+      continue;
+    if ((char === '"' || char === "'") && !escaped) {
+      const close = closingQuoteOnLine(text, i, limitAt(i));
+      if (close === -1)
+        continue;
+      let separator = close + 1;
+      while (isJsonWhitespace(text[separator]))
+        separator++;
+      if (text[separator] === ":" || text[separator] === "=")
+        pending.push({ close, separator, keyStart: i, key: decodeQuotedKey(text.slice(i + 1, close), char) });
+      continue;
+    }
+    if (char === "\\" && text[i + 1] === '"' && !escaped && i >= escapedScanned) {
+      const { close, scanned } = escapedStringScan(text, i, limitAt(i));
+      escapedScanned = close === -1 ? scanned : close;
+      if (close === -1)
+        continue;
+      let separator = close + 2;
+      while (isJsonWhitespace(text[separator]))
+        separator++;
+      if (text[separator] !== ":" && text[separator] !== "=")
+        continue;
+      const inner = decodeQuotedKey(text.slice(i + 2, close), '"');
+      pending.push({ close, separator, keyStart: i, key: inner === null ? null : decodeQuotedKey(inner, '"') ?? inner });
+      continue;
+    }
+    if (char === "-" && text[i + 1] === "-" && (i === 0 || isWhitespace(text[i - 1]))) {
+      const limit = limitAt(i);
+      const keyStart2 = i + 2;
+      let end = keyStart2;
+      while (end < limit && isKeyChar(text.charCodeAt(end)))
+        end++;
+      i = end - 1;
+      if (end > keyStart2 && isBlank(text[end]) && isCredentialKey(text.slice(keyStart2, end))) {
+        let start = end;
+        while (start < limit && isBlank(text[start]))
+          start++;
+        const stop = start < limit && text[start] !== "-" && !isWhitespace(text[start]) ? valueEnd(start, false, limit) : start;
+        if (stop > start)
+          i = redact(start, stop);
+      }
+      backslashes = 0;
+      continue;
+    }
+    if (char !== "=" && char !== ":")
+      continue;
+    let keyEnd = i;
+    while (keyEnd > floor && isBlank(text[keyEnd - 1]))
+      keyEnd--;
+    if (keyEnd > floor && (text[keyEnd - 1] === '"' || text[keyEnd - 1] === "'"))
+      keyEnd--;
+    let keyStart = keyEnd;
+    while (keyStart > floor && isKeyChar(text.charCodeAt(keyStart - 1)))
+      keyStart--;
+    if (keyStart === keyEnd) {
+      floor = i + 1;
+      continue;
+    }
+    i = assignment(i, keyStart, text.slice(keyStart, keyEnd), false);
+  }
+  return out + text.slice(copied);
+}
+function scrubDiagnosticSecretsStrict(text) {
+  return scrubCredentialShapes(redactCredentialAssignments(maskAuthorizationValues(text).replace(/(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*)(:\/\/)([^\s/?#]*)@/gi, (match, scheme, slashes, userinfo) => userinfoHidesCredential(userinfo, scheme) ? `${scheme}${slashes}[REDACTED:CREDENTIALS]@` : match).replace(/(^|[\s'"(<=,;])([^\s'"()<>/?#=,;]+)@(?=[A-Za-z0-9[])/gm, (match, before, userinfo) => userinfoHidesCredential(userinfo, undefined) ? `${before}[REDACTED:CREDENTIALS]@` : match)), "precise");
+}
+function scrubDiagnosticSecrets(text) {
+  try {
+    return scrubDiagnosticSecretsStrict(text);
+  } catch (error) {
+    console.warn(`[dlp] diagnostic scrubber failed closed (${typeof text === "string" ? `${text.length} chars` : typeof text}): ${errorMessage(error)}`);
+    return "[REDACTED:DIAGNOSTIC]";
+  }
+}
+function scrubSecretsForLLM(text) {
+  return scrubCredentialShapes(maskAuthorizationValues(text), "broad");
+}
+var FORMAT_ROWS = [
+  { issuer: "github", prefixes: ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"], pattern: /(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{36,}/g },
+  { issuer: "github", prefixes: ["ghs_"], pattern: /(?<![A-Za-z0-9])ghs_[A-Za-z0-9]+_eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g },
+  { issuer: "github", prefixes: ["github_pat_"], pattern: /(?<![A-Za-z0-9])github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59,}/g },
+  { issuer: "gitlab", prefixes: ["glpat-", "gldt-", "glrt-", "glptt-", "glcbt-", "glsoat-"], pattern: /(?<![A-Za-z0-9])gl(?:pat|dt|rt|ptt|cbt|soat)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*/g },
+  { issuer: "npm", prefixes: ["npm_"], pattern: /(?<![A-Za-z0-9])npm_[A-Za-z0-9]{36,}/g },
+  { issuer: "slack", prefixes: ["xoxa-", "xoxb-", "xoxp-", "xoxo-", "xoxs-", "xoxr-", "xoxe-"], pattern: /(?<![A-Za-z0-9])xox[abposre]-\d{6,}-[0-9A-Za-z-]{8,}/g },
+  { issuer: "slack", prefixes: ["xapp-"], pattern: /(?<![A-Za-z0-9])xapp-\d-[A-Z0-9]+-\d+-[A-Za-z0-9]+/g },
+  { issuer: "aws", prefixes: ["AKIA", "ASIA"], pattern: /(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16,}/g },
+  { issuer: "google", prefixes: ["AIza"], pattern: /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{35,}/g },
+  { issuer: "anthropic", prefixes: ["sk-ant-"], pattern: /(?<![A-Za-z0-9])sk-ant-(?:api|admin|sid|oat|ort)\d{2}-[A-Za-z0-9_-]{32,}/g },
+  { issuer: "openai", prefixes: ["sk-proj-", "sk-svcacct-", "sk-admin-"], pattern: /(?<![A-Za-z0-9])sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}/g },
+  { issuer: "openai", prefixes: ["sk-"], pattern: /(?<![A-Za-z0-9])sk-[A-Za-z0-9]{48,}/g },
+  { issuer: "openai", prefixes: ["sk-"], pattern: /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]*T3BlbkFJ[A-Za-z0-9_-]*/g },
+  { issuer: "stripe", prefixes: ["sk_live_", "sk_test_", "pk_live_", "pk_test_", "rk_live_", "rk_test_"], pattern: /(?<![A-Za-z0-9])(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{24,}/g },
+  { issuer: "jwt", prefixes: ["eyJ"], pattern: /(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g }
+];
+var CREDENTIAL_FORMATS = FORMAT_ROWS.map((row) => ({
+  ...row,
+  lead: new RegExp(row.prefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "y")
+}));
+var CREDENTIAL_FORMAT_PREFIXES = FORMAT_ROWS.map((row) => row.prefixes);
+var CREDENTIAL_ISSUERS = ["github", "gitlab", "npm", "slack", "aws", "google", "openai", "anthropic", "stripe", "jwt"];
+var CREDENTIAL_ISSUER_NAMES = {
+  github: "a GitHub token",
+  gitlab: "a GitLab token",
+  npm: "an npm token",
+  slack: "a Slack token",
+  aws: "an AWS access key",
+  google: "a Google API key",
+  openai: "an OpenAI API key",
+  anthropic: "an Anthropic API key",
+  stripe: "a Stripe key",
+  jwt: "a JSON Web Token"
+};
+function reservedPrefixIn(text) {
+  let found = null;
+  for (const format of CREDENTIAL_FORMATS) {
+    format.pattern.lastIndex = 0;
+    const match = format.pattern.exec(text);
+    format.pattern.lastIndex = 0;
+    if (!match)
+      continue;
+    format.lead.lastIndex = match.index;
+    const prefix = format.lead.exec(text)?.[0];
+    if (prefix === undefined)
+      throw new Error(`credential format of ${format.issuer} matched without its prefix`);
+    if (found === null || match.index < found.at) {
+      found = { at: match.index, prefix, issuer: format.issuer };
+    }
+  }
+  return found === null ? null : { prefix: found.prefix, issuer: found.issuer };
+}
+function holdsCredential(text) {
+  return scrubDiagnosticSecrets(text) !== text;
+}
+function authorizationValueEnd(text, start) {
+  let end = start;
+  for (;; ) {
+    while (end < text.length && text[end] !== `
+` && text[end] !== "\r")
+      end++;
+    let next = end;
+    if (text[next] === "\r")
+      next++;
+    if (text[next] === `
+`)
+      next++;
+    if (next === end || next >= text.length || !isBlank(text[next]))
+      return end;
+    end = next;
+  }
+}
+function escapedNamePattern(name) {
+  return [...name].map((char) => {
+    const codes = [...new Set([char.toLowerCase(), char.toUpperCase()])].map((form) => form.charCodeAt(0).toString(16).padStart(4, "0"));
+    return `(?:${char}|(?<!\\\\)\\\\+u(?:${codes.join("|")}))`;
+  }).join("");
+}
+function isSeparatorSpace(char) {
+  return /^\s$/u.test(char);
+}
+var LETTER_ESCAPES = { n: `
+`, r: "\r", t: "\t", f: "\f", v: "\v", b: "\b" };
+function skipSeparatorSpace(text, start) {
+  let at = start;
+  while (at < text.length) {
+    if (isSeparatorSpace(text[at])) {
+      at++;
+      continue;
+    }
+    if (text[at] !== "\\")
+      return at;
+    let letter = at;
+    while (text[letter] === "\\")
+      letter++;
+    const code = text[letter];
+    let decoded;
+    let next = letter + 1;
+    if (code === "u" && /^[0-9A-Fa-f]{4}$/u.test(text.slice(letter + 1, letter + 5))) {
+      decoded = String.fromCharCode(Number.parseInt(text.slice(letter + 1, letter + 5), 16));
+      next = letter + 5;
+    } else if (code !== undefined) {
+      decoded = LETTER_ESCAPES[code];
+    }
+    if (decoded === undefined || !isSeparatorSpace(decoded))
+      return at;
+    at = next;
+  }
+  return at;
+}
+var isAlphanumeric = (char) => /^[A-Za-z0-9]$/u.test(char);
+function keyCharAt(text, at) {
+  if (at >= text.length)
+    return;
+  if (text[at] !== "\\")
+    return { char: text[at], next: at + 1 };
+  let letter = at;
+  while (text[letter] === "\\")
+    letter++;
+  const hex = text.slice(letter + 1, letter + 5);
+  if (text[letter] === "u" && /^[0-9A-Fa-f]{4}$/u.test(hex))
+    return { char: String.fromCharCode(Number.parseInt(hex, 16)), next: letter + 5 };
+  return { char: "\\", next: letter };
+}
+var AUTHORIZATION_NAME = new RegExp(String.raw`(?<!\S)--(?:proxy-)?authorization[ \t]+` + String.raw`|(?:(?<![A-Za-z0-9])|(?<=\\[nrtbfv])|(?<=\\u[0-9A-Fa-f]{4}))` + escapedNamePattern("authorization"), "giu");
+var KEY_WINDOW = 256;
+function separatorAfterName(text, nameEnd) {
+  const first = keyCharAt(text, nameEnd);
+  if (first !== undefined && isAlphanumeric(first.char))
+    return;
+  let at = nameEnd;
+  let lineBreaks = 0;
+  for (let read = 0;read < KEY_WINDOW && at < text.length; read++) {
+    if (text[at] === `
+` || text[at] === "\r") {
+      if (++lineBreaks > 1)
+        return;
+      at = skipSeparatorSpace(text, at);
+      continue;
+    }
+    const next = keyCharAt(text, at);
+    if (next.char === ":" || next.char === "=")
+      return next.next;
+    at = next.next;
+  }
+  return;
+}
+function maskAuthorizationValues(text) {
+  let out = "";
+  let copied = 0;
+  AUTHORIZATION_NAME.lastIndex = 0;
+  for (let match = AUTHORIZATION_NAME.exec(text);match !== null; match = AUTHORIZATION_NAME.exec(text)) {
+    const nameEnd = match.index + match[0].length;
+    const flag = match[0].startsWith("--");
+    const separatorEnd = flag ? nameEnd : separatorAfterName(text, nameEnd);
+    if (separatorEnd === undefined)
+      continue;
+    const start = flag ? nameEnd : skipSeparatorSpace(text, separatorEnd);
+    const end = authorizationValueEnd(text, start);
+    if (end === start)
+      continue;
+    out += `${text.slice(copied, start)}[REDACTED:TOKEN]`;
+    copied = end;
+    AUTHORIZATION_NAME.lastIndex = end;
+  }
+  return out + text.slice(copied);
+}
+function scrubCredentialShapes(text, mode) {
+  let out = text.replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g, "[REDACTED:PRIVATE_KEY]").replace(/((?:x-api-key|x-auth-token)\s*:\s*)[A-Za-z0-9._\-~+/=]+/gi, "$1[REDACTED:TOKEN]").replace(/\bbearer\s+[A-Za-z0-9._\-~+/=]+/gi, "Bearer [REDACTED:TOKEN]").replace(/([?&](?:api[_-]?key|token|access[_-]?token|refresh[_-]?token))=([^&\s]+)/gi, "$1=[REDACTED:TOKEN]").replace(/(["'](?:api[_-]?key|token|access[_-]?token|refresh[_-]?token|x-api-key|x-auth-token|aws[_-]?secret[_-]?access[_-]?key)["']\s*:\s*["'])[^"']+(["'])/gi, "$1[REDACTED:TOKEN]$2").replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b/g, "[REDACTED:JWT]").replace(/\bAKIA[0-9A-Z]{16}([\s:=,]+)[A-Za-z0-9/+=]{40}(?=$|[^A-Za-z0-9/+=])/gi, "[REDACTED:TOKEN]$1[REDACTED:TOKEN]").replace(/\b(AWS_SECRET_ACCESS_KEY\s*[:=]\s*["']?)[A-Za-z0-9/+=]{40}(["']?)/gi, "$1[REDACTED:TOKEN]$2");
+  for (const format of CREDENTIAL_FORMATS)
+    out = out.replace(format.pattern, "[REDACTED:TOKEN]");
+  if (mode === "precise")
+    return out;
+  return out.replace(/\bgh[opsru]_[A-Za-z0-9_]{20,}\b/gi, "[REDACTED:TOKEN]").replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/gi, "[REDACTED:TOKEN]").replace(/\bxox[bp]-[A-Za-z0-9-]{10,}\b/gi, "[REDACTED:TOKEN]").replace(/\bxapp-[A-Za-z0-9-]{10,}\b/gi, "[REDACTED:TOKEN]").replace(/\bAKIA[0-9A-Z]{16}\b/gi, "[REDACTED:TOKEN]").replace(/\bAIza[0-9A-Za-z_-]{20,}\b/gi, "[REDACTED:TOKEN]").replace(/\b(?:sk|pk|rk|proj|test|live)-[A-Za-z0-9_-]{8,}\b/gi, "[REDACTED:TOKEN]");
+}
+function luhnValid(num) {
+  const digits = num.replace(/[^\d]/g, "");
+  if (digits.length < 13 || digits.length > 19)
+    return false;
+  let sum = 0;
+  let alt = false;
+  for (let i = digits.length - 1;i >= 0; i--) {
+    let n = Number(digits[i]);
+    if (alt) {
+      n *= 2;
+      if (n > 9)
+        n -= 9;
+    }
+    sum += n;
+    alt = !alt;
+  }
+  return sum % 10 === 0;
+}
+function internationalPhonePattern() {
+  const separator = String.raw`[ \t().-]{0,3}`;
+  const nationalNumber = (leadingDigits, remainingDigits) => `${leadingDigits.join(separator)}(?:${separator}\\d){${remainingDigits}}`;
+  const nationalForms = [
+    ["1", nationalNumber(["[2-9]", "\\d", "\\d", "[2-9]"], "6")],
+    ["44", nationalNumber(["[1-9]"], "9")],
+    ["82", `(?:${[
+      nationalNumber(["1", "0"], "8"),
+      `(?:1${separator}[16789]|2|[3-6]${separator}\\d)${separator}\\d{3,4}${separator}\\d{4}`
+    ].join("|")})`],
+    ["81", `(?:${[
+      nationalNumber(["[789]", "0"], "8"),
+      nationalNumber(["5", "0"], "8"),
+      nationalNumber([`(?!5${separator}0)[1-6]`], "8")
+    ].join("|")})`],
+    ...["33", "420", "351"].map((countryCode) => [countryCode, nationalNumber(["[1-9]"], "8")])
+  ];
+  const forms = nationalForms.map(([countryCode, national]) => `${countryCode}${separator}${national}`).join("|");
+  return new RegExp(String.raw`(?<![\p{L}\p{N}_+.-])\+(?:${forms})(?!\p{N}|[_+]|[.-][\p{L}\p{N}_]|[().-]{0,3}\d)`, "gu");
+}
+var PII_PATTERNS = [
+  {
+    kind: "SSN_KR",
+    nameKey: "be_dlp.patternResidentId",
+    pattern: /\b\d{6}-[1-4]\d{6}\b/g,
+    maskShape: (m) => m.replace(/\d/g, "*"),
+    redactToken: "[REDACTED:SSN]"
+  },
+  {
+    kind: "EMAIL",
+    nameKey: "be_dlp.patternEmail",
+    pattern: /[a-zA-Z0-9._%+-]+@([\w.-]+\.\w+)/g,
+    maskShape: (_m, domain) => `***@${domain}`,
+    redactToken: "[REDACTED:EMAIL]"
+  },
+  {
+    kind: "PHONE_INTL",
+    nameKey: "be_dlp.patternPhoneNumber",
+    pattern: internationalPhonePattern(),
+    valid: (m) => !(/^\+(?:\d{1,3}\.){3}\d{1,3}$/.test(m) && m.slice(1).split(".").every((octet) => Number(octet) <= 255)),
+    maskShape: (m) => m.replace(/\d/g, "*"),
+    redactToken: "[REDACTED:PHONE]"
+  },
+  {
+    kind: "PHONE_KR",
+    nameKey: "be_dlp.patternPhoneNumber",
+    pattern: /01[016789]-?\d{3,4}-?\d{4}/g,
+    maskShape: (m) => m.slice(0, 3) + m.slice(3).replace(/\d/g, "*"),
+    redactToken: "[REDACTED:PHONE]"
+  },
+  {
+    kind: "PHONE_US",
+    nameKey: "be_dlp.patternPhoneNumber",
+    pattern: /(?:\(\d{3}\)\s?|\b\d{3}[-.])\d{3}[-.\s]\d{4}\b/g,
+    maskShape: (m) => m.replace(/\d/g, "*"),
+    redactToken: "[REDACTED:PHONE]"
+  },
+  {
+    kind: "CREDIT_CARD",
+    nameKey: "be_dlp.patternCreditCard",
+    pattern: /\b(?:\d[ -]?){12,18}\d\b/g,
+    valid: luhnValid,
+    maskShape: (m) => {
+      const total = (m.match(/\d/g) ?? []).length;
+      let seen = 0;
+      return m.replace(/\d/g, (d) => ++seen > total - 4 ? d : "*");
+    },
+    redactToken: "[REDACTED:CC]"
+  }
+];
+function maskSensitiveData(text, options) {
+  const detections = [];
+  let masked = scrubSecretsForLLM(text);
+  if (masked !== text) {
+    detections.push(t("be_dlp.patternCredential"));
+  }
+  if (options?.pii === false)
+    return { masked, detections };
+  for (const spec of PII_PATTERNS) {
+    spec.pattern.lastIndex = 0;
+    const before = masked;
+    masked = masked.replace(spec.pattern, (match, ...rest) => {
+      if (spec.valid && !spec.valid(match))
+        return match;
+      const offsetIdx = rest.findIndex((a) => typeof a === "number");
+      const groups = offsetIdx === -1 ? [] : rest.slice(0, offsetIdx);
+      return spec.maskShape(match, ...groups);
+    });
+    if (masked !== before) {
+      const label = t(spec.nameKey);
+      if (!detections.includes(label))
+        detections.push(label);
+    }
+  }
+  return { masked, detections };
+}
+
+// src/marketplace/errors.ts
+var MARKETPLACE_ERROR_DETAIL_FIELDS = {
+  SOURCE_URL_REJECTED: {
+    "credentials-in-url": {},
+    "helper-transport": { scheme: "string" },
+    "scheme-unsupported": { scheme: "string" },
+    format: {},
+    "address-metadata": { host: "string", address: "string" },
+    "address-unroutable": { host: "string", address: "string" },
+    "catalog-this-computer": { source: "string", host: "string" },
+    "deep-link-path": {},
+    "relative-path": {},
+    "device-path": {},
+    "windows-path": {},
+    "network-file-url": {},
+    "unc-without-share": {},
+    "unc-credentials": {},
+    "outside-root": {},
+    "folder-options": {},
+    "folder-pick-unknown": {}
+  },
+  SOURCE_ID_INVALID: {
+    "reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
+    "holds-credential": {},
+    "stored-id-holds-credential": {}
+  },
+  SOURCE_INDEX_INVALID: {
+    "name-reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
+    "version-reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
+    "component-reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
+    "name-holds-credential": {},
+    "version-holds-credential": {},
+    "component-holds-credential": {}
+  },
+  SOURCE_POLICY_BLOCKED: {
+    "blocked-by-pattern": { target: "string", pattern: "string", policyPath: "string" },
+    "not-in-allow-list": { target: "string", policyPath: "string" },
+    "https-required": { target: "string", policyPath: "string" },
+    "private-network-blocked": { target: "string", address: "string", policyPath: "string" },
+    "local-sources-blocked": { target: "string", policyPath: "string" },
+    "direct-install-blocked": { target: "string", policyPath: "string" },
+    "policy-invalid": { error: "string" }
+  },
+  SOURCE_CONFIRMATION_REQUIRED: {
+    unencrypted: { host: "string" },
+    "token-unencrypted": { host: "string" },
+    "internal-network": { host: "string", address: "string" },
+    "this-computer": { host: "string", address: "string" },
+    "internal-downloads": { source: "string", host: "string" },
+    "network-folder": { server: "string", path: "string" },
+    "unencrypted-updates": { source: "string" }
+  },
+  SOURCE_AUTH_REQUIRED: {
+    token: { host: "string" },
+    "token-no-access": { host: "string" },
+    "token-unencrypted": { host: "string" },
+    ssh: { host: "string" }
+  },
+  SOURCE_SSH_HOST_UNKNOWN: {
+    unknown: { host: "string", port: "number" },
+    changed: { host: "string", port: "number" }
+  },
+  SOURCE_REF_NOT_FOUND: {
+    missing: { ref: "string", repository: "string", available: "string[]" }
+  },
+  SOURCE_UNREACHABLE: {
+    offline: {},
+    dns: { host: "string" },
+    refused: { host: "string" },
+    timeout: { host: "string" },
+    "http-status": { host: "string", status: "number" },
+    tls: { host: "string" },
+    proxy: { host: "string", proxy: "string" },
+    "not-found": { host: "string" },
+    "not-found-ssh": { host: "string" }
+  },
+  SOURCE_LOCAL_DATA_DAMAGED: {
+    "state-missing": { sourceId: "string" },
+    "state-invalid": { sourceId: "string" },
+    "state-unreadable": { sourceId: "string" },
+    "snapshot-invalid": { sourceId: "string" },
+    "snapshot-unreadable": { sourceId: "string" },
+    "repository-damaged": { sourceId: "string" },
+    "repair-failed": { sourceId: "string" },
+    "repair-failed-unpinned": { sourceId: "string" },
+    "repair-write-failed": { sourceId: "string" }
+  },
+  SOURCE_LIST_UNREADABLE: {
+    unreadable: { fsCode: "string" },
+    invalid: {}
+  },
+  SOURCE_ID_TAKEN: {
+    "repository-already-added": { url: "string", existingId: "string" },
+    "folder-already-added": { path: "string", existingId: "string" },
+    "folder-inside-source": { path: "string", existingId: "string", existingPath: "string" },
+    "folder-contains-source": { path: "string", existingId: "string", existingPath: "string" }
+  },
+  SOURCE_LOCAL_UNREADABLE: {
+    "not-found": { path: "string" },
+    permission: { path: "string", message: "string" },
+    io: { path: "string", message: "string" },
+    moved: { path: "string", target: "string" },
+    "not-a-directory": { path: "string" },
+    "ambiguous-case": { path: "string" },
+    "changed-during-read": { path: "string" },
+    "classifier-unavailable": { path: "string" }
+  },
+  CONTENT_RULE_VIOLATION: {
+    "link-outside-folder": { path: "string", target: "string" },
+    "link-to-network": { path: "string", target: "string" },
+    "link-to-skipped": { path: "string", target: "string" },
+    "special-file": { path: "string" },
+    "case-collision": { path: "string" },
+    limit: { path: "string", limit: "string" }
+  },
+  NO_INSTALLABLE_ARTIFACT: {
+    "folder-has-no-build": { name: "string" }
+  },
+  PLAN_EXPIRED: {
+    "policy-changed": {},
+    "package-changed": {}
+  },
+  PACKAGE_INCOMPATIBLE: {
+    min_app_version: { name: "string", version: "string" },
+    platform: { name: "string", platform: "string" },
+    host_protocol: { name: "string" }
+  }
+};
+var MARKETPLACE_ERROR_REASONS = Object.entries(MARKETPLACE_ERROR_DETAIL_FIELDS).flatMap(([code, reasons]) => Object.keys(reasons).map((reason) => [code, reason]));
+function fieldMatches(value, kind) {
+  if (kind === "string")
+    return typeof value === "string";
+  if (kind === "number")
+    return typeof value === "number" && Number.isFinite(value);
+  if (kind === "credential-issuer")
+    return typeof value === "string" && CREDENTIAL_ISSUERS.includes(value);
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+function parseMarketplaceErrorDetail(code, value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return;
+  if (!Object.hasOwn(MARKETPLACE_ERROR_DETAIL_FIELDS, code))
+    return;
+  const reasons = MARKETPLACE_ERROR_DETAIL_FIELDS[code];
+  const record = value;
+  if (typeof record.reason !== "string" || !Object.hasOwn(reasons, record.reason))
+    return;
+  const fields = reasons[record.reason];
+  const keys = Object.keys(record).filter((key) => key !== "reason");
+  if (keys.length !== Object.keys(fields).length)
+    return;
+  for (const key of keys) {
+    if (!Object.hasOwn(fields, key) || !fieldMatches(record[key], fields[key]))
+      return;
+  }
+  return { ...record };
+}
+function scrubMarketplaceStrings(value) {
+  if (typeof value === "string")
+    return scrubDiagnosticSecrets(value);
+  if (Array.isArray(value))
+    return value.map((item) => scrubMarketplaceStrings(item));
+  if (typeof value === "object" && value !== null && [Object.prototype, null].includes(Object.getPrototypeOf(value))) {
+    const scrubbed = {};
+    for (const [key, item] of Object.entries(value)) {
+      const masked = scrubDiagnosticSecrets(key);
+      let name = masked;
+      for (let n = 2;Object.hasOwn(scrubbed, name); n += 1)
+        name = `${masked} (${n})`;
+      Object.defineProperty(scrubbed, name, { value: scrubMarketplaceStrings(item), enumerable: true, writable: true, configurable: true });
+    }
+    return scrubbed;
+  }
+  return value;
+}
+class MarketplaceError extends Error {
+  code;
+  detail;
+  constructor(code, message, options) {
+    super(message, options && "cause" in options ? { cause: options.cause } : undefined);
+    this.code = code;
+    this.name = "MarketplaceError";
+    if (options?.detail !== undefined && parseMarketplaceErrorDetail(code, options.detail) === undefined) {
+      throw new TypeError(`${JSON.stringify(options.detail)} is not a detail of ${code}`);
+    }
+    this.detail = options?.detail;
+  }
+}
+
+// src/marketplace/log.ts
+function createMarketplaceLogger(module) {
+  const log = createLogger(module);
+  const scrubbed = (level) => (objectOrMessage, message) => {
+    const first = scrubMarketplaceStrings(objectOrMessage);
+    if (message === undefined)
+      log[level](first);
+    else
+      log[level](first, scrubMarketplaceStrings(message));
+  };
+  return { debug: scrubbed("debug"), info: scrubbed("info"), warn: scrubbed("warn"), error: scrubbed("error") };
+}
 // schemas/plugin-manifest.schema.json
 var plugin_manifest_schema_default = {
   $schema: "http://json-schema.org/draft-07/schema#",
@@ -26218,7 +27275,8 @@ var plugin_manifest_schema_default = {
                   "id",
                   "slot",
                   "kind",
-                  "title"
+                  "title",
+                  "resourceUri"
                 ],
                 properties: {
                   id: {
@@ -26232,9 +27290,7 @@ var plugin_manifest_schema_default = {
                   },
                   kind: {
                     enum: [
-                      "embedded-module",
-                      "embedded-page",
-                      "info-card"
+                      "mcp-app"
                     ]
                   },
                   displayName: {
@@ -26249,17 +27305,13 @@ var plugin_manifest_schema_default = {
                   locales: {
                     $ref: "#/definitions/pluginUiExtensionLocales"
                   },
-                  defaults: {
-                    type: "object"
-                  },
-                  entry: {
-                    type: "string"
-                  },
-                  exportName: {
-                    type: "string"
-                  },
-                  page: {
-                    type: "string"
+                  resourceUri: {
+                    type: "string",
+                    pattern: "^ui://",
+                    maxLength: 512,
+                    not: {
+                      pattern: "[\\r\\n]"
+                    }
                   }
                 }
               },
@@ -26267,7 +27319,7 @@ var plugin_manifest_schema_default = {
             },
             uiResources: {
               type: "array",
-              description: "MCP App ui:// resources this plugin serves (distinct from `ui[]`, which declares host-mounted React sidebar panels). DECLARED POLICY, SERVED CONTENT: each entry declares a `ui://<pluginId>/<path>` uri plus that resource's OWN _meta.ui security policy (csp/permissions); the card HTML itself is served by the plugin at read time (`RuntimePlugin.readUiResource(uri)`), exactly as an external MCP server answers resources/read with bytes — the host never reads a plugin-declared disk path. When a tool result carries `_meta.ui.resourceUri` matching one of these uris, the loopback host asks the plugin for the HTML and renders it through the same sandbox-proxy + main-computed CSP path as an external MCP server's ui:// resource. Security (enforced fail-closed at serve time): the uri authority MUST equal the plugin id (own-namespace-only), the uri MUST be declared here (declared-only — this is what binds served content to a reviewed policy), and main COMPUTES the CSP header AND the frame's Permissions-Policy `allow` attribute from csp/permissions — the plugin never supplies a policy header string or an allow-list. csp/permissions stay in the manifest (not on the hook's return) so they are statically reviewable and covered by manifestSha256. See mcpUiResourcePermissions for the accepted permission set (host-honorable, proven end-to-end).",
+              description: "MCP App ui:// resources this plugin serves as interactive cards and resources placed in host panels by `ui[]`. DECLARED POLICY, SERVED CONTENT: each entry declares a `ui://<pluginId>/<path>` uri plus that resource's OWN _meta.ui security policy (csp/permissions); the card HTML itself is served by the plugin at read time (`RuntimePlugin.readUiResource(uri)`), exactly as an external MCP server answers resources/read with bytes — the host never reads a plugin-declared disk path. When a tool result carries `_meta.ui.resourceUri` matching one of these uris, the loopback host asks the plugin for the HTML and renders it through the same sandbox-proxy + main-computed CSP path as an external MCP server's ui:// resource. Security (enforced fail-closed at serve time): the uri authority MUST equal the plugin id (own-namespace-only), the uri MUST be declared here (declared-only — this is what binds served content to a reviewed policy), and main COMPUTES the CSP header AND the frame's Permissions-Policy `allow` attribute from csp/permissions — the plugin never supplies a policy header string or an allow-list. csp/permissions stay in the manifest (not on the hook's return) so they are statically reviewable and covered by manifestSha256. See mcpUiResourcePermissions for the accepted permission set (host-honorable, proven end-to-end).",
               maxItems: 64,
               items: {
                 type: "object",
@@ -26336,7 +27388,7 @@ var plugin_manifest_schema_default = {
             },
             capabilities: {
               type: "array",
-              description: "Free-form capability declarations (format-validated, NOT a closed enum). The host ENFORCES only two at runtime — 'external-auth-consumer' and 'host:overlay' (see src/plugins/capabilities.ts KNOWN_CAPABILITY_IDS). Every other string is a harmless self-declaration (strings on already-installed manifests that the host no longer reads). Kept free-form — rather than an enum — so an installed manifest declaring a removed capability still validates and loads instead of being rejected at schema validation. Emit authorization for event-source namespaces (email/calendar/meeting/index) is inferred from emittedEvents, not from a capability here. The pattern is format hygiene only (blocks uppercase/whitespace/garbage), not a vocabulary.",
+              description: "Free-form capability declarations (format-validated, NOT a closed enum). The host ENFORCES only two at runtime — 'external-auth-consumer' and 'host:overlay' (see src/plugins/capabilities.ts KNOWN_CAPABILITY_IDS). Every other string is a harmless self-declaration (strings on already-installed manifests that the host no longer reads). Kept free-form — rather than an enum — so an installed manifest declaring a removed capability still validates and loads instead of being rejected at schema validation. The pattern is format hygiene only (blocks uppercase/whitespace/garbage), not a vocabulary.",
               items: {
                 type: "string",
                 pattern: "^[a-z][a-z0-9:-]*$",
@@ -26426,72 +27478,6 @@ var plugin_manifest_schema_default = {
                   },
                   description: "Opt-in session-cookie vault: names the sub-namespace of this plugin's own auth partition (persist:plugin-auth:<pluginId>:<sub>) whose harvested session cookies the host attaches to every hostApi.hostFetch request, scoped per URL and re-scoped per redirect hop. For portals with no SSO/OAuth — where the session cookie IS the credential — this keeps the value on the host: the plugin never receives it (pair with openAuthWindow({ retainCookies: true })). A plugin that declares this must not send its own Cookie header; the host rejects such a request. Only the <sub> segment is named here, so a plugin cannot address another plugin's partition."
                 }
-              }
-            },
-            eventSubscriptions: {
-              type: "array",
-              items: {
-                oneOf: [
-                  {
-                    type: "string"
-                  },
-                  {
-                    type: "object",
-                    required: [
-                      "type"
-                    ],
-                    additionalProperties: false,
-                    properties: {
-                      type: {
-                        type: "string",
-                        minLength: 1
-                      },
-                      hint: {
-                        type: "object",
-                        required: [
-                          "category",
-                          "priority",
-                          "title"
-                        ],
-                        additionalProperties: false,
-                        properties: {
-                          category: {
-                            type: "string",
-                            enum: [
-                              "task",
-                              "note",
-                              "session",
-                              "meeting",
-                              "email",
-                              "calendar",
-                              "system"
-                            ]
-                          },
-                          priority: {
-                            type: "string",
-                            enum: [
-                              "high",
-                              "medium",
-                              "low"
-                            ]
-                          },
-                          title: {
-                            type: "string",
-                            minLength: 1
-                          }
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            emittedEvents: {
-              type: "array",
-              description: "Event types this plugin emits.",
-              items: {
-                type: "string",
-                minLength: 1
               }
             },
             hostSecrets: {
@@ -26607,50 +27593,6 @@ var plugin_manifest_schema_default = {
                         }
                       }
                     ]
-                  }
-                }
-              }
-            },
-            workProposals: {
-              type: "object",
-              description: "Recommended-work channel declaration. Declaration IS authorization (no capability string): a plugin may post a proposal only in a kind declared here, and may hold at most ONE OPEN PROPOSAL PER DECLARED KIND — the declared list doubles as the nag ceiling. Absent or empty = the plugin may post nothing. A malformed block grants nothing rather than the entries that happened to parse.",
-              additionalProperties: false,
-              required: [
-                "kinds"
-              ],
-              properties: {
-                reasoning: {
-                  type: "string",
-                  description: "Human-readable justification surfaced to the user.",
-                  maxLength: 400
-                },
-                kinds: {
-                  type: "array",
-                  minItems: 1,
-                  maxItems: 4,
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: [
-                      "id",
-                      "label"
-                    ],
-                    properties: {
-                      id: {
-                        type: "string",
-                        description: "Slot id, unique within the plugin. Namespaced by the host as <pluginId>:<kind>.",
-                        pattern: "^[a-z][a-z0-9-]{0,31}$",
-                        not: {
-                          pattern: "[\\r\\n]"
-                        }
-                      },
-                      label: {
-                        type: "string",
-                        description: "User-facing name of the slot, shown in the install disclosure and on the card.",
-                        minLength: 1,
-                        maxLength: 60
-                      }
-                    }
                   }
                 }
               }
@@ -26829,31 +27771,9 @@ var plugin_manifest_schema_default = {
                       pluginId: {
                         type: "string",
                         minLength: 1
-                      },
-                      events: {
-                        type: "array",
-                        items: {
-                          type: "string",
-                          minLength: 1
-                        },
-                        uniqueItems: true
                       }
                     }
                   }
-                },
-                agentApprovalScopes: {
-                  type: "array",
-                  description: "§8 P0 security — approval action scopes this plugin is permitted to issue and respond to via hostApi.agentApproval. Omitted or empty array means no approval scopes allowed (host enforces empty-list semantics). Known values: 'agent_file_share', 'agent_task_delegate', 'agent_external_api_call'.",
-                  default: [],
-                  items: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^[a-z][a-z0-9_]*$",
-                    not: {
-                      pattern: "[\\r\\n]"
-                    }
-                  },
-                  uniqueItems: true
                 }
               }
             },
@@ -27306,12 +28226,9 @@ var plugin_manifest_schema_default = {
                 routineTemplates: false,
                 capabilities: false,
                 networkAccess: false,
-                eventSubscriptions: false,
-                emittedEvents: false,
                 hostSecrets: false,
                 startupTimeoutMs: false,
                 auth: false,
-                workProposals: false,
                 alerts: false,
                 configInherits: false,
                 dependencies: false,
@@ -27790,7 +28707,7 @@ var plugin_manifest_schema_default = {
                 }
               }
             },
-            "ave/pathFields": {
+            "ai.agent-connector.ave/pathFields": {
               type: "array",
               uniqueItems: true,
               items: {
@@ -27802,8 +28719,17 @@ var plugin_manifest_schema_default = {
                 }
               }
             },
-            "ave/operationPolicy": {
+            "ai.agent-connector.ave/operationPolicy": {
               $ref: "#/definitions/pluginToolOperationPolicy"
+            }
+          }
+        },
+        annotations: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            readOnlyHint: {
+              type: "boolean"
             }
           }
         }
@@ -27849,7 +28775,7 @@ var plugin_manifest_schema_default = {
       }
     },
     mcpUiResourcePermissions: {
-      $comment: "MCP Apps spec `McpUiResourcePermissions`, restricted to what this host can DEMONSTRABLY honor. Main derives the inner iframe's Permissions-Policy `allow` attribute AND the Electron session grant from this; the plugin never supplies either. An ABSENT key is denied. The inner frame carries `allow-same-origin` (spec origin requirement, apps.mdx:474-475), so it inherits the per-server proxy origin and a delegated feature can be honored. SOT for the accepted set: src/shared/mcp-app-permissions.ts MCP_APP_PERMISSION_FEATURES, proven end-to-end in test/e2e/ui/mcp-app-permissions.spec.ts. The spec's `clipboardWrite` is deliberately NOT accepted — measured, a script-initiated clipboard write is denied even when delegated — so declaring it FAILS validation loudly rather than silently doing nothing.",
+      $comment: "MCP Apps resource permissions honored by the isolated app frame. Main derives iframe delegation and session grants from this declaration. Missing features are denied; clipboard writing requires a user action and clipboard reading is unsupported. The supported set is src/shared/mcp-app-permissions.ts, verified by test/e2e/ui/mcp-app-permissions.spec.ts.",
       type: "object",
       additionalProperties: false,
       properties: {
@@ -27866,6 +28792,11 @@ var plugin_manifest_schema_default = {
         geolocation: {
           type: "object",
           description: "Request the Geolocation API for this card's frame. Absent means denied.",
+          additionalProperties: false
+        },
+        clipboardWrite: {
+          type: "object",
+          description: "Request clipboard writing for this app frame after a user action. Clipboard reading remains denied.",
           additionalProperties: false
         }
       }
@@ -28754,24 +29685,6 @@ var package_schema_default = {
           if: {
             properties: {
               kind: {
-                const: "theme"
-              }
-            },
-            type: "object"
-          },
-          then: {
-            properties: {
-              payload: {
-                $ref: "#/definitions/themePayload"
-              }
-            },
-            type: "object"
-          }
-        },
-        {
-          if: {
-            properties: {
-              kind: {
                 const: "font"
               }
             },
@@ -28849,7 +29762,6 @@ var package_schema_default = {
         "mcp",
         "skill",
         "agent",
-        "theme",
         "font",
         "language",
         "provider",
@@ -29233,18 +30145,6 @@ var package_schema_default = {
       properties: {
         entry: {
           const: "AGENTS.md"
-        }
-      }
-    },
-    themePayload: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "entry"
-      ],
-      properties: {
-        entry: {
-          const: "theme.json"
         }
       }
     },
@@ -29905,15 +30805,6 @@ var RESERVED_HEADERS = new Set([
 // src/plugins/config-schema.ts
 var AjvModule = __toESM(require_ajv(), 1);
 var AddFormatsModule = __toESM(require_dist(), 1);
-
-// marketplace-check:unused-host-logger
-var silent = () => {};
-var logger = { debug: silent, info: silent, warn: silent, error: silent, trace: silent, fatal: silent, child: () => logger };
-function createLogger() {
-  return logger;
-}
-
-// src/plugins/config-schema.ts
 var log = createLogger("plugin-config-schema");
 function resolveAjv() {
   const mod = AjvModule;
@@ -29924,640 +30815,8 @@ function resolveAddFormats() {
   return mod.default ?? AddFormatsModule;
 }
 
-// src/shared/is-record.ts
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isStringArray(value) {
-  if (!Array.isArray(value))
-    return false;
-  for (let i = 0;i < value.length; i++) {
-    if (typeof value[i] !== "string")
-      return false;
-  }
-  return true;
-}
-
 // src/shared/alerts-types.ts
 var ALERT_RESERVED_PACKAGE_ID = "host";
-// src/i18n/translate.ts
-function interpolate(template, vars) {
-  if (!vars)
-    return template;
-  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
-    const value = vars[name];
-    return value === undefined ? match : String(value);
-  });
-}
-function translate(locale, key, vars) {
-  const active = messages[locale];
-  const fallback = messages.en;
-  const template = active?.[key] ?? fallback[key] ?? key;
-  return interpolate(template, vars);
-}
-
-// src/i18n/runtime.ts
-var activeLocale = DEFAULT_LOCALE;
-var listeners = new Set;
-function t(key, vars) {
-  return translate(activeLocale, key, vars);
-}
-// src/shared/error-message.ts
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-// src/shared/dlp.ts
-var SSH_ACCOUNT = /^[A-Za-z0-9._~][A-Za-z0-9._~-]*$/u;
-function userinfoHidesCredential(userinfo, scheme) {
-  if (scheme !== undefined && overHttp(scheme))
-    return true;
-  try {
-    return !SSH_ACCOUNT.test(decodeURIComponent(userinfo));
-  } catch {
-    return true;
-  }
-}
-function overHttp(scheme) {
-  return scheme.toLowerCase().split("+").some((part) => part === "http" || part === "https");
-}
-var CREDENTIAL_WORDS = [
-  "token",
-  "secret",
-  "password",
-  "passwd",
-  "pwd",
-  "apikey",
-  "api_key",
-  "api-key",
-  "accesskey",
-  "access_key",
-  "access-key",
-  "privatekey",
-  "private_key",
-  "private-key",
-  "credential",
-  "bearer"
-];
-function isCredentialKey(key) {
-  const stripped = key.replace(/\[REDACTED:[A-Z_]+\]/gu, "");
-  if (stripped !== key && stripped.trim() === "")
-    return true;
-  const lower = stripped.toLowerCase();
-  const segments = lower.split(/[^a-z0-9]/u);
-  return CREDENTIAL_WORDS.some((word) => lower.includes(word)) || segments.includes("auth") || segments.includes("pat");
-}
-var JSON_ESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: `
-`, r: "\r", t: "\t" };
-function decodeQuotedKey(body, quote) {
-  let decoded = "";
-  for (let i = 0;i < body.length; i++) {
-    if (body[i] !== "\\") {
-      decoded += body[i];
-      continue;
-    }
-    const escape2 = body[++i];
-    if (escape2 === "u") {
-      const hex = body.slice(i + 1, i + 5);
-      if (!/^[0-9a-fA-F]{4}$/u.test(hex))
-        return null;
-      decoded += String.fromCharCode(Number.parseInt(hex, 16));
-      i += 4;
-    } else if (escape2 === quote) {
-      decoded += quote;
-    } else {
-      const char = escape2 === undefined ? undefined : JSON_ESCAPES[escape2];
-      if (char === undefined)
-        return null;
-      decoded += char;
-    }
-  }
-  return decoded;
-}
-function isKeyChar(code) {
-  return code >= 48 && code <= 57 || code >= 65 && code <= 90 || code >= 97 && code <= 122 || code === 95 || code === 46 || code === 45;
-}
-var isBlank = (char) => char === " " || char === "\t";
-var isWhitespace = (char) => char !== undefined && /\s/u.test(char);
-var AUTH_SCHEMES = new Set(["basic", "bearer", "digest", "negotiate", "token"]);
-var REDACTION_MARKER = /\[REDACTED:[A-Z_]+\]/y;
-var isJsonWhitespace = (char) => char === " " || char === "\t" || char === "\r" || char === `
-`;
-function closingQuoteOnLine(text, start, limit) {
-  const quote = text[start];
-  for (let i = start + 1;i < limit && text[i] !== `
-`; i++) {
-    if (text[i] === "\\" && text[i + 1] !== `
-`)
-      i++;
-    else if (text[i] === quote)
-      return i;
-  }
-  return -1;
-}
-function escapedStringScan(text, start, limit) {
-  let escape2 = false;
-  let i = start + 2;
-  while (i < limit && text[i] !== `
-`) {
-    const at = i;
-    if (text[i] === '"')
-      break;
-    let char = text[i];
-    if (char === "\\") {
-      if (i + 1 >= limit || text[i + 1] === `
-`)
-        break;
-      char = text[i + 1];
-      i += 2;
-    } else {
-      i += 1;
-    }
-    if (escape2)
-      escape2 = false;
-    else if (char === "\\")
-      escape2 = true;
-    else if (char === '"')
-      return { close: at, scanned: i };
-  }
-  return { close: -1, scanned: i };
-}
-function redactCredentialAssignments(text) {
-  let out = "";
-  let copied = 0;
-  let floor = 0;
-  let lineFirst = -1;
-  let backslashes = 0;
-  let escapedScanned = 0;
-  const redact = (valueStart, valueEnd2) => {
-    out += `${text.slice(copied, valueStart)}[REDACTED:TOKEN]`;
-    copied = valueEnd2;
-    floor = valueEnd2;
-    if (text.slice(valueStart, valueEnd2).includes(`
-`))
-      lineFirst = valueStart;
-    return valueEnd2 - 1;
-  };
-  const pending = [];
-  const limitAt = (at) => {
-    const key = pending[pending.length - 1];
-    return key !== undefined && at < key.close ? key.close : text.length;
-  };
-  const valueEnd = (start, toLineEnd, limit) => {
-    if (start >= limit)
-      return start;
-    if (text[start] === '"' || text[start] === "'") {
-      const close = closingQuoteOnLine(text, start, limit);
-      return close === -1 ? limit : close + 1;
-    }
-    if (text[start] === "\\" && text[start + 1] === '"') {
-      const { close } = escapedStringScan(text, start, limit);
-      return close === -1 ? limit : close + 2;
-    }
-    let end = start;
-    if (toLineEnd) {
-      while (end < limit && text[end] !== `
-` && text[end] !== "\r")
-        end++;
-      return end;
-    }
-    while (end < limit && !isWhitespace(text[end]))
-      end++;
-    if (AUTH_SCHEMES.has(text.slice(start, end).toLowerCase())) {
-      let word = end;
-      while (word < limit && isBlank(text[word]))
-        word++;
-      let wordEnd = word;
-      while (wordEnd < limit && !isWhitespace(text[wordEnd]))
-        wordEnd++;
-      if (wordEnd > word)
-        end = wordEnd;
-    }
-    return end;
-  };
-  const assignment = (separator, keyStart, key, quoted) => {
-    floor = separator + 1;
-    if (key !== null && !isCredentialKey(key))
-      return separator;
-    const limit = limitAt(separator);
-    let at = separator;
-    let resumeAt = separator;
-    for (let first = true;; first = false) {
-      let start = at + 1;
-      while (start < limit && (quoted || !first ? isJsonWhitespace(text[start]) : isBlank(text[start])))
-        start++;
-      REDACTION_MARKER.lastIndex = Math.min(skipSeparatorSpace(text, start), limit);
-      if (REDACTION_MARKER.test(text) && (REDACTION_MARKER.lastIndex >= limit || isWhitespace(text[REDACTION_MARKER.lastIndex])))
-        return resumeAt;
-      let stop = valueEnd(start, first && text[at] === "=" && keyStart === lineFirst, limit);
-      if (text.slice(at + 1, start).includes(`
-`)) {
-        let lineEnd = start;
-        while (lineEnd < limit && text[lineEnd] !== `
-`)
-          lineEnd++;
-        stop = Math.max(stop, lineEnd);
-      }
-      if (stop <= start)
-        return resumeAt;
-      resumeAt = redact(start, stop);
-      let next = stop;
-      while (next < limit && isJsonWhitespace(text[next]))
-        next++;
-      if (next >= limit || text[next] !== ":" && text[next] !== "=")
-        return resumeAt;
-      at = next;
-      floor = at + 1;
-    }
-  };
-  for (let i = 0;i < text.length; i++) {
-    const char = text[i];
-    const escaped = backslashes % 2 === 1;
-    backslashes = char === "\\" ? backslashes + 1 : 0;
-    const ahead = pending[pending.length - 1];
-    if (ahead !== undefined && ahead.separator < i)
-      throw new Error(`credential scan passed the separator of the key at ${ahead.keyStart}`);
-    if (ahead?.separator === i) {
-      pending.pop();
-      i = assignment(i, ahead.keyStart, ahead.key, true);
-      backslashes = 0;
-      continue;
-    }
-    if (char === `
-`) {
-      lineFirst = -1;
-      floor = i + 1;
-      continue;
-    }
-    if (lineFirst === -1 && !isBlank(char) && char !== "\r")
-      lineFirst = i;
-    if (ahead !== undefined && i === ahead.close)
-      continue;
-    if ((char === '"' || char === "'") && !escaped) {
-      const close = closingQuoteOnLine(text, i, limitAt(i));
-      if (close === -1)
-        continue;
-      let separator = close + 1;
-      while (isJsonWhitespace(text[separator]))
-        separator++;
-      if (text[separator] === ":" || text[separator] === "=")
-        pending.push({ close, separator, keyStart: i, key: decodeQuotedKey(text.slice(i + 1, close), char) });
-      continue;
-    }
-    if (char === "\\" && text[i + 1] === '"' && !escaped && i >= escapedScanned) {
-      const { close, scanned } = escapedStringScan(text, i, limitAt(i));
-      escapedScanned = close === -1 ? scanned : close;
-      if (close === -1)
-        continue;
-      let separator = close + 2;
-      while (isJsonWhitespace(text[separator]))
-        separator++;
-      if (text[separator] !== ":" && text[separator] !== "=")
-        continue;
-      const inner = decodeQuotedKey(text.slice(i + 2, close), '"');
-      pending.push({ close, separator, keyStart: i, key: inner === null ? null : decodeQuotedKey(inner, '"') ?? inner });
-      continue;
-    }
-    if (char === "-" && text[i + 1] === "-" && (i === 0 || isWhitespace(text[i - 1]))) {
-      const limit = limitAt(i);
-      const keyStart2 = i + 2;
-      let end = keyStart2;
-      while (end < limit && isKeyChar(text.charCodeAt(end)))
-        end++;
-      i = end - 1;
-      if (end > keyStart2 && isBlank(text[end]) && isCredentialKey(text.slice(keyStart2, end))) {
-        let start = end;
-        while (start < limit && isBlank(text[start]))
-          start++;
-        const stop = start < limit && text[start] !== "-" && !isWhitespace(text[start]) ? valueEnd(start, false, limit) : start;
-        if (stop > start)
-          i = redact(start, stop);
-      }
-      backslashes = 0;
-      continue;
-    }
-    if (char !== "=" && char !== ":")
-      continue;
-    let keyEnd = i;
-    while (keyEnd > floor && isBlank(text[keyEnd - 1]))
-      keyEnd--;
-    if (keyEnd > floor && (text[keyEnd - 1] === '"' || text[keyEnd - 1] === "'"))
-      keyEnd--;
-    let keyStart = keyEnd;
-    while (keyStart > floor && isKeyChar(text.charCodeAt(keyStart - 1)))
-      keyStart--;
-    if (keyStart === keyEnd) {
-      floor = i + 1;
-      continue;
-    }
-    i = assignment(i, keyStart, text.slice(keyStart, keyEnd), false);
-  }
-  return out + text.slice(copied);
-}
-function scrubDiagnosticSecretsStrict(text) {
-  return scrubCredentialShapes(redactCredentialAssignments(maskAuthorizationValues(text).replace(/(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*)(:\/\/)([^\s/?#]*)@/gi, (match, scheme, slashes, userinfo) => userinfoHidesCredential(userinfo, scheme) ? `${scheme}${slashes}[REDACTED:CREDENTIALS]@` : match).replace(/(^|[\s'"(<=,;])([^\s'"()<>/?#=,;]+)@(?=[A-Za-z0-9[])/gm, (match, before, userinfo) => userinfoHidesCredential(userinfo, undefined) ? `${before}[REDACTED:CREDENTIALS]@` : match)), "precise");
-}
-function scrubDiagnosticSecrets(text) {
-  try {
-    return scrubDiagnosticSecretsStrict(text);
-  } catch (error) {
-    console.warn(`[dlp] diagnostic scrubber failed closed (${typeof text === "string" ? `${text.length} chars` : typeof text}): ${errorMessage(error)}`);
-    return "[REDACTED:DIAGNOSTIC]";
-  }
-}
-function scrubSecretsForLLM(text) {
-  return scrubCredentialShapes(maskAuthorizationValues(text), "broad");
-}
-var FORMAT_ROWS = [
-  { issuer: "github", prefixes: ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"], pattern: /(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{36,}/g },
-  { issuer: "github", prefixes: ["ghs_"], pattern: /(?<![A-Za-z0-9])ghs_[A-Za-z0-9]+_eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g },
-  { issuer: "github", prefixes: ["github_pat_"], pattern: /(?<![A-Za-z0-9])github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59,}/g },
-  { issuer: "gitlab", prefixes: ["glpat-", "gldt-", "glrt-", "glptt-", "glcbt-", "glsoat-"], pattern: /(?<![A-Za-z0-9])gl(?:pat|dt|rt|ptt|cbt|soat)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*/g },
-  { issuer: "npm", prefixes: ["npm_"], pattern: /(?<![A-Za-z0-9])npm_[A-Za-z0-9]{36,}/g },
-  { issuer: "slack", prefixes: ["xoxa-", "xoxb-", "xoxp-", "xoxo-", "xoxs-", "xoxr-", "xoxe-"], pattern: /(?<![A-Za-z0-9])xox[abposre]-\d{6,}-[0-9A-Za-z-]{8,}/g },
-  { issuer: "slack", prefixes: ["xapp-"], pattern: /(?<![A-Za-z0-9])xapp-\d-[A-Z0-9]+-\d+-[A-Za-z0-9]+/g },
-  { issuer: "aws", prefixes: ["AKIA", "ASIA"], pattern: /(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16,}/g },
-  { issuer: "google", prefixes: ["AIza"], pattern: /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{35,}/g },
-  { issuer: "anthropic", prefixes: ["sk-ant-"], pattern: /(?<![A-Za-z0-9])sk-ant-(?:api|admin|sid|oat|ort)\d{2}-[A-Za-z0-9_-]{32,}/g },
-  { issuer: "openai", prefixes: ["sk-proj-", "sk-svcacct-", "sk-admin-"], pattern: /(?<![A-Za-z0-9])sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}/g },
-  { issuer: "openai", prefixes: ["sk-"], pattern: /(?<![A-Za-z0-9])sk-[A-Za-z0-9]{48,}/g },
-  { issuer: "openai", prefixes: ["sk-"], pattern: /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]*T3BlbkFJ[A-Za-z0-9_-]*/g },
-  { issuer: "stripe", prefixes: ["sk_live_", "sk_test_", "pk_live_", "pk_test_", "rk_live_", "rk_test_"], pattern: /(?<![A-Za-z0-9])(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{24,}/g },
-  { issuer: "jwt", prefixes: ["eyJ"], pattern: /(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g }
-];
-var CREDENTIAL_FORMATS = FORMAT_ROWS.map((row) => ({
-  ...row,
-  lead: new RegExp(row.prefixes.map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("|"), "y")
-}));
-var CREDENTIAL_FORMAT_PREFIXES = FORMAT_ROWS.map((row) => row.prefixes);
-var CREDENTIAL_ISSUERS = ["github", "gitlab", "npm", "slack", "aws", "google", "openai", "anthropic", "stripe", "jwt"];
-var CREDENTIAL_ISSUER_NAMES = {
-  github: "a GitHub token",
-  gitlab: "a GitLab token",
-  npm: "an npm token",
-  slack: "a Slack token",
-  aws: "an AWS access key",
-  google: "a Google API key",
-  openai: "an OpenAI API key",
-  anthropic: "an Anthropic API key",
-  stripe: "a Stripe key",
-  jwt: "a JSON Web Token"
-};
-function reservedPrefixIn(text) {
-  let found = null;
-  for (const format of CREDENTIAL_FORMATS) {
-    format.pattern.lastIndex = 0;
-    const match = format.pattern.exec(text);
-    format.pattern.lastIndex = 0;
-    if (!match)
-      continue;
-    format.lead.lastIndex = match.index;
-    const prefix = format.lead.exec(text)?.[0];
-    if (prefix === undefined)
-      throw new Error(`credential format of ${format.issuer} matched without its prefix`);
-    if (found === null || match.index < found.at) {
-      found = { at: match.index, prefix, issuer: format.issuer };
-    }
-  }
-  return found === null ? null : { prefix: found.prefix, issuer: found.issuer };
-}
-function holdsCredential(text) {
-  return scrubDiagnosticSecrets(text) !== text;
-}
-function authorizationValueEnd(text, start) {
-  let end = start;
-  for (;; ) {
-    while (end < text.length && text[end] !== `
-` && text[end] !== "\r")
-      end++;
-    let next = end;
-    if (text[next] === "\r")
-      next++;
-    if (text[next] === `
-`)
-      next++;
-    if (next === end || next >= text.length || !isBlank(text[next]))
-      return end;
-    end = next;
-  }
-}
-function escapedNamePattern(name) {
-  return [...name].map((char) => {
-    const codes = [...new Set([char.toLowerCase(), char.toUpperCase()])].map((form) => form.charCodeAt(0).toString(16).padStart(4, "0"));
-    return `(?:${char}|(?<!\\\\)\\\\+u(?:${codes.join("|")}))`;
-  }).join("");
-}
-function isSeparatorSpace(char) {
-  return /^\s$/u.test(char);
-}
-var LETTER_ESCAPES = { n: `
-`, r: "\r", t: "\t", f: "\f", v: "\v", b: "\b" };
-function skipSeparatorSpace(text, start) {
-  let at = start;
-  while (at < text.length) {
-    if (isSeparatorSpace(text[at])) {
-      at++;
-      continue;
-    }
-    if (text[at] !== "\\")
-      return at;
-    let letter = at;
-    while (text[letter] === "\\")
-      letter++;
-    const code = text[letter];
-    let decoded;
-    let next = letter + 1;
-    if (code === "u" && /^[0-9A-Fa-f]{4}$/u.test(text.slice(letter + 1, letter + 5))) {
-      decoded = String.fromCharCode(Number.parseInt(text.slice(letter + 1, letter + 5), 16));
-      next = letter + 5;
-    } else if (code !== undefined) {
-      decoded = LETTER_ESCAPES[code];
-    }
-    if (decoded === undefined || !isSeparatorSpace(decoded))
-      return at;
-    at = next;
-  }
-  return at;
-}
-var isAlphanumeric = (char) => /^[A-Za-z0-9]$/u.test(char);
-function keyCharAt(text, at) {
-  if (at >= text.length)
-    return;
-  if (text[at] !== "\\")
-    return { char: text[at], next: at + 1 };
-  let letter = at;
-  while (text[letter] === "\\")
-    letter++;
-  const hex = text.slice(letter + 1, letter + 5);
-  if (text[letter] === "u" && /^[0-9A-Fa-f]{4}$/u.test(hex))
-    return { char: String.fromCharCode(Number.parseInt(hex, 16)), next: letter + 5 };
-  return { char: "\\", next: letter };
-}
-var AUTHORIZATION_NAME = new RegExp(String.raw`(?<!\S)--(?:proxy-)?authorization[ \t]+` + String.raw`|(?:(?<![A-Za-z0-9])|(?<=\\[nrtbfv])|(?<=\\u[0-9A-Fa-f]{4}))` + escapedNamePattern("authorization"), "giu");
-var KEY_WINDOW = 256;
-function separatorAfterName(text, nameEnd) {
-  const first = keyCharAt(text, nameEnd);
-  if (first !== undefined && isAlphanumeric(first.char))
-    return;
-  let at = nameEnd;
-  let lineBreaks = 0;
-  for (let read = 0;read < KEY_WINDOW && at < text.length; read++) {
-    if (text[at] === `
-` || text[at] === "\r") {
-      if (++lineBreaks > 1)
-        return;
-      at = skipSeparatorSpace(text, at);
-      continue;
-    }
-    const next = keyCharAt(text, at);
-    if (next.char === ":" || next.char === "=")
-      return next.next;
-    at = next.next;
-  }
-  return;
-}
-function maskAuthorizationValues(text) {
-  let out = "";
-  let copied = 0;
-  AUTHORIZATION_NAME.lastIndex = 0;
-  for (let match = AUTHORIZATION_NAME.exec(text);match !== null; match = AUTHORIZATION_NAME.exec(text)) {
-    const nameEnd = match.index + match[0].length;
-    const flag = match[0].startsWith("--");
-    const separatorEnd = flag ? nameEnd : separatorAfterName(text, nameEnd);
-    if (separatorEnd === undefined)
-      continue;
-    const start = flag ? nameEnd : skipSeparatorSpace(text, separatorEnd);
-    const end = authorizationValueEnd(text, start);
-    if (end === start)
-      continue;
-    out += `${text.slice(copied, start)}[REDACTED:TOKEN]`;
-    copied = end;
-    AUTHORIZATION_NAME.lastIndex = end;
-  }
-  return out + text.slice(copied);
-}
-function scrubCredentialShapes(text, mode) {
-  let out = text.replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g, "[REDACTED:PRIVATE_KEY]").replace(/((?:x-api-key|x-auth-token)\s*:\s*)[A-Za-z0-9._\-~+/=]+/gi, "$1[REDACTED:TOKEN]").replace(/\bbearer\s+[A-Za-z0-9._\-~+/=]+/gi, "Bearer [REDACTED:TOKEN]").replace(/([?&](?:api[_-]?key|token|access[_-]?token|refresh[_-]?token))=([^&\s]+)/gi, "$1=[REDACTED:TOKEN]").replace(/(["'](?:api[_-]?key|token|access[_-]?token|refresh[_-]?token|x-api-key|x-auth-token|aws[_-]?secret[_-]?access[_-]?key)["']\s*:\s*["'])[^"']+(["'])/gi, "$1[REDACTED:TOKEN]$2").replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\b/g, "[REDACTED:JWT]").replace(/\bAKIA[0-9A-Z]{16}([\s:=,]+)[A-Za-z0-9/+=]{40}(?=$|[^A-Za-z0-9/+=])/gi, "[REDACTED:TOKEN]$1[REDACTED:TOKEN]").replace(/\b(AWS_SECRET_ACCESS_KEY\s*[:=]\s*["']?)[A-Za-z0-9/+=]{40}(["']?)/gi, "$1[REDACTED:TOKEN]$2");
-  for (const format of CREDENTIAL_FORMATS)
-    out = out.replace(format.pattern, "[REDACTED:TOKEN]");
-  if (mode === "precise")
-    return out;
-  return out.replace(/\bgh[opsru]_[A-Za-z0-9_]{20,}\b/gi, "[REDACTED:TOKEN]").replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/gi, "[REDACTED:TOKEN]").replace(/\bxox[bp]-[A-Za-z0-9-]{10,}\b/gi, "[REDACTED:TOKEN]").replace(/\bxapp-[A-Za-z0-9-]{10,}\b/gi, "[REDACTED:TOKEN]").replace(/\bAKIA[0-9A-Z]{16}\b/gi, "[REDACTED:TOKEN]").replace(/\bAIza[0-9A-Za-z_-]{20,}\b/gi, "[REDACTED:TOKEN]").replace(/\b(?:sk|pk|rk|proj|test|live)-[A-Za-z0-9_-]{8,}\b/gi, "[REDACTED:TOKEN]");
-}
-function luhnValid(num) {
-  const digits = num.replace(/[^\d]/g, "");
-  if (digits.length < 13 || digits.length > 19)
-    return false;
-  let sum = 0;
-  let alt = false;
-  for (let i = digits.length - 1;i >= 0; i--) {
-    let n = Number(digits[i]);
-    if (alt) {
-      n *= 2;
-      if (n > 9)
-        n -= 9;
-    }
-    sum += n;
-    alt = !alt;
-  }
-  return sum % 10 === 0;
-}
-function internationalPhonePattern() {
-  const separator = String.raw`[ \t().-]{0,3}`;
-  const nationalNumber = (leadingDigits, remainingDigits) => `${leadingDigits.join(separator)}(?:${separator}\\d){${remainingDigits}}`;
-  const nationalForms = [
-    ["1", nationalNumber(["[2-9]", "\\d", "\\d", "[2-9]"], "6")],
-    ["44", nationalNumber(["[1-9]"], "9")],
-    ["82", `(?:${[
-      nationalNumber(["1", "0"], "8"),
-      `(?:1${separator}[16789]|2|[3-6]${separator}\\d)${separator}\\d{3,4}${separator}\\d{4}`
-    ].join("|")})`],
-    ["81", `(?:${[
-      nationalNumber(["[789]", "0"], "8"),
-      nationalNumber(["5", "0"], "8"),
-      nationalNumber([`(?!5${separator}0)[1-6]`], "8")
-    ].join("|")})`],
-    ...["33", "420", "351"].map((countryCode) => [countryCode, nationalNumber(["[1-9]"], "8")])
-  ];
-  const forms = nationalForms.map(([countryCode, national]) => `${countryCode}${separator}${national}`).join("|");
-  return new RegExp(String.raw`(?<![\p{L}\p{N}_+.-])\+(?:${forms})(?!\p{N}|[_+]|[.-][\p{L}\p{N}_]|[().-]{0,3}\d)`, "gu");
-}
-var PII_PATTERNS = [
-  {
-    kind: "SSN_KR",
-    nameKey: "be_dlp.patternResidentId",
-    pattern: /\b\d{6}-[1-4]\d{6}\b/g,
-    maskShape: (m) => m.replace(/\d/g, "*"),
-    redactToken: "[REDACTED:SSN]"
-  },
-  {
-    kind: "EMAIL",
-    nameKey: "be_dlp.patternEmail",
-    pattern: /[a-zA-Z0-9._%+-]+@([\w.-]+\.\w+)/g,
-    maskShape: (_m, domain) => `***@${domain}`,
-    redactToken: "[REDACTED:EMAIL]"
-  },
-  {
-    kind: "PHONE_INTL",
-    nameKey: "be_dlp.patternPhoneNumber",
-    pattern: internationalPhonePattern(),
-    valid: (m) => !(/^\+(?:\d{1,3}\.){3}\d{1,3}$/.test(m) && m.slice(1).split(".").every((octet) => Number(octet) <= 255)),
-    maskShape: (m) => m.replace(/\d/g, "*"),
-    redactToken: "[REDACTED:PHONE]"
-  },
-  {
-    kind: "PHONE_KR",
-    nameKey: "be_dlp.patternPhoneNumber",
-    pattern: /01[016789]-?\d{3,4}-?\d{4}/g,
-    maskShape: (m) => m.slice(0, 3) + m.slice(3).replace(/\d/g, "*"),
-    redactToken: "[REDACTED:PHONE]"
-  },
-  {
-    kind: "PHONE_US",
-    nameKey: "be_dlp.patternPhoneNumber",
-    pattern: /(?:\(\d{3}\)\s?|\b\d{3}[-.])\d{3}[-.\s]\d{4}\b/g,
-    maskShape: (m) => m.replace(/\d/g, "*"),
-    redactToken: "[REDACTED:PHONE]"
-  },
-  {
-    kind: "CREDIT_CARD",
-    nameKey: "be_dlp.patternCreditCard",
-    pattern: /\b(?:\d[ -]?){12,18}\d\b/g,
-    valid: luhnValid,
-    maskShape: (m) => {
-      const total = (m.match(/\d/g) ?? []).length;
-      let seen = 0;
-      return m.replace(/\d/g, (d) => ++seen > total - 4 ? d : "*");
-    },
-    redactToken: "[REDACTED:CC]"
-  }
-];
-function maskSensitiveData(text, options) {
-  const detections = [];
-  let masked = scrubSecretsForLLM(text);
-  if (masked !== text) {
-    detections.push(t("be_dlp.patternCredential"));
-  }
-  if (options?.pii === false)
-    return { masked, detections };
-  for (const spec of PII_PATTERNS) {
-    spec.pattern.lastIndex = 0;
-    const before = masked;
-    masked = masked.replace(spec.pattern, (match, ...rest) => {
-      if (spec.valid && !spec.valid(match))
-        return match;
-      const offsetIdx = rest.findIndex((a) => typeof a === "number");
-      const groups = offsetIdx === -1 ? [] : rest.slice(0, offsetIdx);
-      return spec.maskShape(match, ...groups);
-    });
-    if (masked !== before) {
-      const label = t(spec.nameKey);
-      if (!detections.includes(label))
-        detections.push(label);
-    }
-  }
-  return { masked, detections };
-}
 
 // src/shared/semver-compare.ts
 function compareSemver(a, b) {
@@ -30617,164 +30876,6 @@ function isSemver(value) {
   return value.length <= 128 && SEMVER_RE.test(value);
 }
 
-// src/shared/strict-json.ts
-var NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
-var WHITESPACE = /[ \t\n\r]*/y;
-function parseStrictJsonText(text, options) {
-  const { fail } = options;
-  const maxNodes = options.maxNodes ?? Number.POSITIVE_INFINITY;
-  const maxMembers = options.maxObjectMembers ?? Number.POSITIVE_INFINITY;
-  const maxItems = options.maxArrayItems ?? Number.POSITIVE_INFINITY;
-  let pos = 0;
-  let nodes = 0;
-  const skip = () => {
-    WHITESPACE.lastIndex = pos;
-    WHITESPACE.exec(text);
-    pos = WHITESPACE.lastIndex;
-  };
-  const readString = () => {
-    const start = pos;
-    pos += 1;
-    while (pos < text.length) {
-      const ch = text.charCodeAt(pos);
-      if (ch === 34) {
-        pos += 1;
-        try {
-          return JSON.parse(text.slice(start, pos));
-        } catch {
-          return fail("invalid string", start);
-        }
-      }
-      if (ch === 92)
-        pos += 2;
-      else if (ch < 32)
-        return fail("control character in string", pos);
-      else
-        pos += 1;
-    }
-    return fail("unterminated string", start);
-  };
-  const readValue = (depth) => {
-    if (depth > options.maxDepth)
-      fail("nesting too deep", pos);
-    skip();
-    nodes += 1;
-    if (nodes > maxNodes)
-      fail("too many values", pos);
-    const ch = text[pos];
-    if (ch === "{") {
-      pos += 1;
-      const out = options.nullPrototypeObjects ? Object.create(null) : {};
-      const seen = new Set;
-      skip();
-      if (text[pos] === "}") {
-        pos += 1;
-        return out;
-      }
-      for (;; ) {
-        skip();
-        if (text[pos] !== '"')
-          fail("expected a key", pos);
-        const keyAt = pos;
-        const key = readString();
-        if (options.forbiddenKeys.has(key))
-          fail(`the key ${key} is not allowed`, keyAt);
-        if (seen.has(key))
-          fail(`duplicate key ${JSON.stringify(key)}`, keyAt);
-        seen.add(key);
-        if (seen.size > maxMembers)
-          fail("too many object members", keyAt);
-        skip();
-        if (text[pos] !== ":")
-          fail("expected ':'", pos);
-        pos += 1;
-        out[key] = readValue(depth + 1);
-        skip();
-        if (text[pos] === ",") {
-          pos += 1;
-          continue;
-        }
-        if (text[pos] === "}") {
-          pos += 1;
-          return out;
-        }
-        fail("expected ',' or '}'", pos);
-      }
-    }
-    if (ch === "[") {
-      pos += 1;
-      const out = [];
-      skip();
-      if (text[pos] === "]") {
-        pos += 1;
-        return out;
-      }
-      for (;; ) {
-        if (out.length >= maxItems)
-          fail("too many array items", pos);
-        out.push(readValue(depth + 1));
-        skip();
-        if (text[pos] === ",") {
-          pos += 1;
-          continue;
-        }
-        if (text[pos] === "]") {
-          pos += 1;
-          return out;
-        }
-        fail("expected ',' or ']'", pos);
-      }
-    }
-    if (ch === '"')
-      return readString();
-    for (const [literal, value2] of [["true", true], ["false", false], ["null", null]]) {
-      if (text.startsWith(literal, pos)) {
-        pos += literal.length;
-        return value2;
-      }
-    }
-    NUMBER.lastIndex = pos;
-    const match = NUMBER.exec(text);
-    if (!match)
-      return fail("unexpected token", pos);
-    const numberAt = pos;
-    pos = NUMBER.lastIndex;
-    const parsed = Number(match[0]);
-    if (options.rejectNonFiniteNumbers && !Number.isFinite(parsed))
-      fail("number out of range", numberAt);
-    return parsed;
-  };
-  const value = readValue(0);
-  skip();
-  if (pos !== text.length)
-    fail("trailing content", pos);
-  return value;
-}
-var DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-
-// src/marketplace/catalog/strict-json.ts
-class StrictJsonError extends Error {
-  offset;
-  constructor(message, offset) {
-    super(`${message} at offset ${offset}`);
-    this.offset = offset;
-    this.name = "StrictJsonError";
-  }
-}
-var MARKETPLACE_FORBIDDEN_KEYS = new Set(["__proto__"]);
-var throwLocated = (reason, offset) => {
-  throw new StrictJsonError(reason, offset);
-};
-function parseStrictJson(text) {
-  return parseStrictJsonText(text, {
-    maxDepth: 64,
-    forbiddenKeys: MARKETPLACE_FORBIDDEN_KEYS,
-    nullPrototypeObjects: false,
-    rejectNonFiniteNumbers: false,
-    fail: throwLocated
-  });
-}
-
 // src/marketplace/catalog/version-range.ts
 function parseVersionRange(text) {
   const alternatives = text.split("||").map((part) => part.trim());
@@ -30793,7 +30894,83 @@ function parseVersionRange(text) {
   });
 }
 
+// src/plugins/public-contract.ts
+var BUNDLE_EVERYTHING_REGEX = new RegExp(".*");
+var AGENT_PLUGINS_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+var AVE_EXTENSION_NAMESPACE = "ai.agent-connector.ave";
+var PLUGIN_ID_PATTERN = /^(?!.*--)[a-z][a-z0-9-]*[a-z0-9]$/u;
+var PLUGIN_ID_MIN_LENGTH = 3;
+var PLUGIN_ID_MAX_LENGTH = 64;
+function isValidPluginId(value) {
+  return typeof value === "string" && value.length >= PLUGIN_ID_MIN_LENGTH && value.length <= PLUGIN_ID_MAX_LENGTH && PLUGIN_ID_PATTERN.test(value);
+}
+var AGENT_PLUGINS_TOP_LEVEL_FIELDS = [
+  "$schema",
+  "name",
+  "version",
+  "description",
+  "author",
+  "homepage",
+  "repository",
+  "license",
+  "keywords",
+  "extensions"
+];
+function foreignManifestTopLevelFields(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    return [];
+  }
+  return Object.keys(document).filter((key) => !AGENT_PLUGINS_TOP_LEVEL_FIELDS.includes(key));
+}
+function flattenAgentPluginsManifest(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    return document;
+  }
+  const top = document;
+  const extensions = top.extensions;
+  const namespaced = extensions && typeof extensions === "object" && !Array.isArray(extensions) ? extensions[AVE_EXTENSION_NAMESPACE] : undefined;
+  const hostBlock = namespaced && typeof namespaced === "object" && !Array.isArray(namespaced) ? namespaced : {};
+  const { displayName, ...hostFields } = hostBlock;
+  const flat = {
+    ...hostFields,
+    id: top.name,
+    version: top.version,
+    description: top.description
+  };
+  if (displayName !== undefined)
+    flat.name = displayName;
+  return flat;
+}
+var WORKER_CONTROL_FRAME_BYTES_MAX = 16 * 1024 * 1024;
+
+// src/plugins/isolation/host-api-wire.ts
+var HOST_PROTOCOL_VERSION = "5";
+var WIRE_BYTES_MAX = 16 * 1024 * 1024;
+var FRAME_ENVELOPE_HEADROOM_BYTES = 1024 * 1024;
+var FRAME_BYTES_MAX = 2 * Math.ceil(WIRE_BYTES_MAX / 3) * 4 + FRAME_ENVELOPE_HEADROOM_BYTES;
+var SECRET_REDACTED_SENTINEL = Symbol.for("ave.config.secret.redacted");
+var NULL_BODY_STATUSES = new Set([204, 205, 304]);
+var WORKER_EXIT_REASONS = new Set([
+  "exited",
+  "stopped",
+  "control-violation",
+  "output-overflow"
+]);
+var WORKER_ERROR_CODES = new Set([
+  "worker-request-failed",
+  "worker-request-cancelled",
+  "worker-backpressure",
+  "worker-incarnation-ended",
+  "payload-too-large"
+]);
+
+// src/marketplace/catalog/host-protocol.ts
+function supportsHostProtocol(kind, hostProtocol) {
+  return kind !== "plugin" || hostProtocol === HOST_PROTOCOL_VERSION;
+}
+
 // src/marketplace/catalog/validate.ts
+var log2 = createMarketplaceLogger("marketplace-catalog");
 var PART_TEXT = { name: "its name", version: "a version", component: "a component name" };
 function credentialRefusal(part, text) {
   const reserved = reservedPrefixIn(text);
@@ -30833,8 +31010,29 @@ var INDEX_ID = index_schema_default.$id;
 var PACKAGE_ID = package_schema_default.$id;
 var REVOCATIONS_ID = revocations_schema_default.$id;
 var SNAPSHOT_PIN = { anyOf: [{ $ref: PACKAGE_ID + "#/definitions/commit" }, { type: "string", pattern: "^local-[0-9a-f]{64}$" }] };
+var EXCLUSION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["packageId", "versionIndex", "version", "hostProtocol", "reason", "package"],
+  properties: {
+    packageId: { type: "string" },
+    versionIndex: { type: "integer", minimum: 0, maximum: 499 },
+    version: { anyOf: [{ $ref: PACKAGE_ID + "#/definitions/semver" }, { type: "string", pattern: "^versions\\[[0-9]{1,3}\\]$" }] },
+    hostProtocol: index_schema_default.definitions.indexVersion.properties.hostProtocol,
+    reason: { const: "foreign-host-protocol" },
+    package: {
+      ...index_schema_default.definitions.indexPackage,
+      properties: {
+        ...Object.fromEntries(Object.keys(index_schema_default.definitions.indexPackage.properties).filter((key) => key !== "versions" && key !== "latest").map((key) => [key, { $ref: INDEX_ID + "#/definitions/indexPackage/properties/" + key }])),
+        kind: { const: "plugin" }
+      }
+    }
+  }
+};
 var compiled = null;
 var CATALOG_SCHEMA_VERSION = 2;
+var HOST_PROTOCOL_PATTERN = new RegExp(index_schema_default.definitions.indexVersion.properties.hostProtocol.pattern, "u");
+var SEMVER_PATTERN = new RegExp(package_schema_default.definitions.semver.pattern, "u");
 function unsupportedSchemaVersion(document, file) {
   if (!isRecord(document) || !Object.hasOwn(document, "schemaVersion"))
     return null;
@@ -30865,6 +31063,7 @@ function validators() {
     descriptor: get(PACKAGE_ID),
     revocations: get(REVOCATIONS_ID),
     conditionalRevocations: get(revocations_by_app_schema_default.$id),
+    exclusion: ajv.compile(EXCLUSION_SCHEMA),
     snapshot: ajv.compile({
       type: "object",
       additionalProperties: false,
@@ -30908,7 +31107,8 @@ function validators() {
           additionalProperties: false,
           required: ["subject", "message"],
           properties: { subject: { type: "string" }, message: { type: "string" } }
-        } }
+        } },
+        excluded: { type: "array", items: EXCLUSION_SCHEMA }
       }
     })
   };
@@ -31045,15 +31245,50 @@ function validateIndexText(text, context) {
   }
   const diagnostics = [];
   const candidates = [];
+  const exclusions = new Map;
+  const excludedOnly = new Set;
   const byName = new Map;
   const byPath = new Map;
   const claim = (counts, key) => counts.set(key, (counts.get(key) ?? 0) + 1);
+  let retiredCount = 0;
+  let versionsSkipped = 0;
+  let packagesDropped = 0;
   root.packages.forEach((raw, position) => {
-    const entry = raw;
+    if (isRecord(raw) && raw.kind === "theme") {
+      retiredCount += 1;
+      return;
+    }
+    const entry = isRecord(raw) ? raw : {};
     const named = typeof entry.kind === "string" && typeof entry.name === "string" && !holdsCredential(entry.name);
     const subject = named ? `${entry.kind}/${entry.name}` : `packages[${position}]`;
     if (typeof entry.kind === "string" && typeof entry.name === "string")
       claim(byName, `${entry.kind}/${entry.name}`);
+    const omitted = [];
+    let foreignOnly = false;
+    if (isRecord(raw) && raw.kind === "plugin" && Array.isArray(raw.versions) && raw.versions.length <= index_schema_default.definitions.indexPackage.properties.versions.maxItems) {
+      const skipped = [];
+      const versions = raw.versions.filter((version2, index) => {
+        if (!isRecord(version2) || typeof version2.hostProtocol !== "string" || !HOST_PROTOCOL_PATTERN.test(version2.hostProtocol) || supportsHostProtocol("plugin", version2.hostProtocol))
+          return true;
+        skipped.push(version2.version);
+        const label = typeof version2.version === "string" && version2.version.length <= package_schema_default.definitions.semver.maxLength && SEMVER_PATTERN.test(version2.version) && !holdsCredential(version2.version) ? version2.version : `versions[${index}]`;
+        omitted.push({ packageId: subject, versionIndex: index, version: label, hostProtocol: version2.hostProtocol, reason: "foreign-host-protocol" });
+        return false;
+      });
+      if (skipped.length > 0) {
+        versionsSkipped += skipped.length;
+        if (versions.length === 0) {
+          packagesDropped += 1;
+          foreignOnly = true;
+          const { versions: _versions, latest: _latest, ...metadata } = raw;
+          raw = metadata;
+        } else {
+          raw = { ...raw, versions };
+          if (isRecord(raw) && skipped.includes(raw.latest))
+            delete raw.latest;
+        }
+      }
+    }
     if (!indexPackage(raw)) {
       diagnostics.push({ subject, message: describeErrors(indexPackage.errors) });
       return;
@@ -31069,10 +31304,20 @@ function validateIndexText(text, context) {
       diagnostics.push({ subject, message: rule });
       return;
     }
-    claim(byPath, raw.path);
-    candidates.push(raw);
+    claim(byPath, listed.path);
+    candidates.push(listed);
+    if (foreignOnly)
+      excludedOnly.add(listed);
+    if (omitted.length > 0) {
+      const { versions: _versions, latest: _latest, ...metadata } = listed;
+      exclusions.set(listed, omitted.map((item) => ({ ...item, package: metadata })));
+    }
   });
-  const packages = candidates.filter((entry) => {
+  if (retiredCount > 0)
+    log2.info({ entriesSkipped: retiredCount }, "Retired catalog entries skipped");
+  if (versionsSkipped > 0)
+    log2.info({ versionsSkipped, packagesDropped }, "Catalog foreign-host-protocol versions skipped");
+  const admitted = candidates.filter((entry) => {
     const subject = `${entry.kind}/${entry.name}`;
     if ((byName.get(subject) ?? 0) > 1) {
       diagnostics.push({ subject, message: "the index lists this package more than once" });
@@ -31084,7 +31329,9 @@ function validateIndexText(text, context) {
     }
     return true;
   });
-  return { ok: true, value: { index: { ...root, packages }, diagnostics } };
+  const packages = admitted.filter((entry) => !excludedOnly.has(entry));
+  const excluded = admitted.flatMap((entry) => exclusions.get(entry) ?? []);
+  return { ok: true, value: { index: { ...root, packages }, diagnostics, excluded } };
 }
 function validateDescriptorText(text, context) {
   const parsed = parse(text);
@@ -31201,7 +31448,6 @@ var MARKETPLACE_PACKAGE_TYPES = [
   "agent",
   "skill",
   "provider",
-  "theme",
   "language-pack",
   "messaging-connection"
 ];
@@ -31215,7 +31461,6 @@ var INSTALLABLE_MARKETPLACE_PACKAGE_TYPES = [
 // src/shared/marketplace-package-sections.ts
 var MARKETPLACE_ASSET_PACKAGE_TYPES = [
   "provider",
-  "theme",
   "language-pack",
   "messaging-connection"
 ];
@@ -31227,7 +31472,6 @@ var MARKETPLACE_PACKAGE_TYPE_LABELS = Object.freeze({
   agent: "Agents",
   skill: "Skills",
   provider: "Providers",
-  theme: "Themes",
   "language-pack": "Languages",
   "messaging-connection": "Messaging"
 });
@@ -31243,10 +31487,6 @@ var MARKETPLACE_ASSET_PACKAGE_TRUST_LABEL_KEYS = Object.freeze({
   provider: Object.freeze([
     "marketplaceTab.trustProviderCredentials",
     "marketplaceTab.trustProviderNetwork"
-  ]),
-  theme: Object.freeze([
-    "marketplaceTab.trustNoCode",
-    "marketplaceTab.trustThemeTokens"
   ]),
   "language-pack": Object.freeze([
     "marketplaceTab.trustNoCode",
@@ -31638,17 +31878,6 @@ function defaultBlock(vendor) {
 }
 var LLM_VENDOR_DEFAULTS = Object.freeze(Object.fromEntries(LLM_VENDORS.map((v) => [v, defaultBlock(v)])));
 
-// src/shared/theme-bundles.ts
-var BUNDLE_IDS = Object.freeze(["moonstone", "gallery"]);
-var BUNDLE_ID_SET = new Set(BUNDLE_IDS);
-function isBundleId(value) {
-  return typeof value === "string" && BUNDLE_ID_SET.has(value);
-}
-var THEME_ID = /^(?!.*--)[a-z][a-z0-9-]*[a-z0-9]$/u;
-function isThemeId(value) {
-  return typeof value === "string" && value.length >= 3 && value.length <= 64 && THEME_ID.test(value);
-}
-
 // src/shared/loopback-url.ts
 function isLoopbackHttpUrl(value) {
   let parsed;
@@ -32025,216 +32254,6 @@ function isModelFacingKey(key) {
   return MODEL_FACING_KEYS.has(key) || MODEL_FACING_PREFIXES.some((prefix) => key.startsWith(prefix));
 }
 
-// src/shared/theme-tokens.ts
-var THEME_TOKEN_NAMES = [
-  "background",
-  "foreground",
-  "card",
-  "card-foreground",
-  "popover",
-  "popover-foreground",
-  "primary",
-  "primary-foreground",
-  "secondary",
-  "secondary-foreground",
-  "muted",
-  "muted-foreground",
-  "accent",
-  "accent-foreground",
-  "destructive",
-  "destructive-foreground",
-  "warning",
-  "warning-foreground",
-  "success",
-  "success-foreground",
-  "info",
-  "info-foreground",
-  "emphasis",
-  "emphasis-foreground",
-  "border",
-  "input",
-  "ring",
-  "ui-line",
-  "message-user-bg",
-  "message-user-fg",
-  "input-bar-bg",
-  "overlay",
-  "hover-overlay",
-  "focus-ring",
-  "link-fg",
-  "selection-bg",
-  "selection-fg",
-  "scrollbar-thumb",
-  "scrollbar-track",
-  "kbd-bg",
-  "kbd-border",
-  "code-bg",
-  "code-fg",
-  "code-border",
-  "chart-1",
-  "chart-2",
-  "chart-3",
-  "chart-4",
-  "chart-5",
-  "action-view",
-  "action-branch",
-  "action-compact"
-];
-var HSL_TRIPLE = /^(\d{1,3}(?:\.\d{1,4})?) (\d{1,3}(?:\.\d{1,4})?)% (\d{1,3}(?:\.\d{1,4})?)%$/u;
-function parseHslTriple(value) {
-  const match = HSL_TRIPLE.exec(value);
-  if (!match)
-    return null;
-  const [h, s, l] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  if (h > 360 || s > 100 || l > 100)
-    return null;
-  return { h, s, l };
-}
-function hslToRgb({ h, s, l }) {
-  const sat = s / 100;
-  const light = l / 100;
-  const c = (1 - Math.abs(2 * light - 1)) * sat;
-  const hue = h % 360;
-  const x = c * (1 - Math.abs(hue / 60 % 2 - 1));
-  const m = light - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (hue < 60) {
-    r = c;
-    g = x;
-  } else if (hue < 120) {
-    r = x;
-    g = c;
-  } else if (hue < 180) {
-    g = c;
-    b = x;
-  } else if (hue < 240) {
-    g = x;
-    b = c;
-  } else if (hue < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
-}
-function relativeLuminance(rgb) {
-  const lin = (channel) => {
-    const cs = channel / 255;
-    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
-  };
-  return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-}
-function contrastRatio(a, b) {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-function blend(overlay, backdrop, alpha) {
-  return overlay.map((channel, index) => channel * alpha + backdrop[index] * (1 - alpha));
-}
-function pair(background, foreground, minimum) {
-  return {
-    label: `${background} ↔ ${foreground}`,
-    minimum,
-    ratio: (tokens) => contrastRatio(rgbOf(tokens, background), rgbOf(tokens, foreground))
-  };
-}
-function rgbOf(tokens, name) {
-  const hsl = parseHslTriple(tokens[name]);
-  if (!hsl)
-    throw new Error(`${name} is not an "H S% L%" triple: ${tokens[name]}`);
-  return hslToRgb(hsl);
-}
-var DIFF_WASH_ALPHA = 0.15;
-var THEME_CONTRAST_RULES = Object.freeze([
-  pair("background", "foreground", 4.5),
-  pair("card", "card-foreground", 4.5),
-  pair("popover", "popover-foreground", 4.5),
-  pair("muted", "muted-foreground", 4.5),
-  pair("message-user-bg", "message-user-fg", 4.5),
-  pair("primary", "primary-foreground", 3),
-  pair("secondary", "secondary-foreground", 3),
-  pair("destructive", "destructive-foreground", 3),
-  pair("accent", "accent-foreground", 3),
-  pair("warning", "warning-foreground", 3),
-  pair("success", "success-foreground", 3),
-  pair("info", "info-foreground", 3),
-  pair("emphasis", "emphasis-foreground", 3),
-  pair("background", "ui-line", 3),
-  pair("input-bar-bg", "ui-line", 3),
-  ...["success", "destructive"].map((state) => ({
-    label: `foreground over the ${state} diff wash`,
-    minimum: 4.5,
-    ratio: (tokens) => contrastRatio(blend(rgbOf(tokens, state), rgbOf(tokens, "background"), DIFF_WASH_ALPHA), rgbOf(tokens, "foreground"))
-  }))
-]);
-function themeTokenProblems(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return ["tokens must be an object"];
-  const record = value;
-  const known = new Set(THEME_TOKEN_NAMES);
-  const problems = [];
-  for (const name of Object.keys(record)) {
-    if (!known.has(name))
-      problems.push(`unknown token ${name}`);
-  }
-  for (const name of THEME_TOKEN_NAMES) {
-    const token = record[name];
-    if (token === undefined)
-      problems.push(`missing token ${name}`);
-    else if (typeof token !== "string" || !parseHslTriple(token))
-      problems.push(`${name} is not an "H S% L%" triple`);
-  }
-  if (problems.length > 0)
-    return problems;
-  const tokens = record;
-  for (const rule of THEME_CONTRAST_RULES) {
-    const ratio = rule.ratio(tokens);
-    if (ratio < rule.minimum)
-      problems.push(`${rule.label} contrast ${ratio.toFixed(2)} is under ${rule.minimum}`);
-  }
-  return problems;
-}
-var THEME_SURFACE_NAMES = [
-  "surface-sunken",
-  "surface",
-  "surface-raised",
-  "surface-overlay",
-  "border-subtle",
-  "border-strong"
-];
-function themeSurfaceProblems(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return ["surfaces must be an object"];
-  const record = value;
-  const known = new Set(THEME_SURFACE_NAMES);
-  const problems = Object.keys(record).filter((name) => !known.has(name)).map((name) => `unknown surface ${name}`);
-  for (const name of THEME_SURFACE_NAMES) {
-    const surface = record[name];
-    if (surface === undefined)
-      problems.push(`missing surface ${name}`);
-    else if (typeof surface !== "string" || !parseHslTriple(surface))
-      problems.push(`surface ${name} is not an "H S% L%" triple`);
-  }
-  return problems;
-}
-var SHELL_SHADOWS = Object.freeze({
-  light: Object.freeze({
-    "shadow-e1": "0 1px 2px hsl(var(--overlay) / 0.06), 0 1px 1px hsl(var(--overlay) / 0.04)",
-    "shadow-e2": "0 2px 4px hsl(var(--overlay) / 0.06), 0 4px 12px hsl(var(--overlay) / 0.06)",
-    "shadow-e3": "0 8px 24px hsl(var(--overlay) / 0.1), 0 2px 6px hsl(var(--overlay) / 0.06)",
-    "shadow-e4": "0 16px 48px hsl(var(--overlay) / 0.14), 0 4px 12px hsl(var(--overlay) / 0.08)"
-  }),
-  dark: Object.freeze({
-    "shadow-e1": "inset 0 1px 0 hsl(0 0% 100% / 0.04), 0 1px 2px hsl(var(--overlay) / 0.5), 0 1px 1px hsl(var(--overlay) / 0.4)",
-    "shadow-e2": "inset 0 1px 0 hsl(0 0% 100% / 0.04), 0 2px 4px hsl(var(--overlay) / 0.5), 0 4px 10px hsl(var(--overlay) / 0.4)",
-    "shadow-e3": "inset 0 1px 0 hsl(0 0% 100% / 0.05), 0 8px 24px hsl(var(--overlay) / 0.5), 0 2px 6px hsl(var(--overlay) / 0.4)",
-    "shadow-e4": "inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 48px hsl(var(--overlay) / 0.6), 0 4px 12px hsl(var(--overlay) / 0.45)"
-  })
-});
-
 // src/main/agent-profile-store.ts
 import { readFile as readFile2, readdir as readdir2, realpath as realpath2 } from "node:fs/promises";
 import { resolve as resolve5, join as join5, relative as relative3, isAbsolute as isAbsolute3 } from "node:path";
@@ -32309,7 +32328,7 @@ var TOOL_TIMEOUT_POLICY = {
   pluginFactoryMs: 1e4,
   pluginStartupDefaultMs: 1e4,
   pluginStartupMaxMs: 60000,
-  pluginShutdownHandlerMs: 5000,
+  pluginRetirementDrainMs: 5000,
   pluginShutdownKillGraceMs: 1000,
   workerControlHelloMs: 60000,
   pluginUiResourceReadMs: 1e4,
@@ -33895,7 +33914,7 @@ function parseAgentPluginSkillSelector(skillName) {
 }
 
 // src/main/skill-store.ts
-var log2 = createLogger("ave");
+var log3 = createLogger("ave");
 var SKILL_NAME_ALLOWLIST = /^[a-zA-Z0-9_-]+$/;
 var MAX_SKILL_TRIGGERS = 8;
 var MAX_SKILL_TRIGGER_CHARS = 48;
@@ -34080,7 +34099,7 @@ function warnOnShortenedScalar(key, rawLine, parsedValue, skillName) {
   if (raw === parsedValue)
     return;
   const label = typeof skillName === "string" && skillName.length > 0 ? skillName : "<unnamed>";
-  log2.warn(`skill frontmatter: '${key}' of "${label}" read as ${JSON.stringify(parsedValue)}, ` + `but the line carries ${JSON.stringify(raw)} — an unquoted '#' starts a YAML ` + `comment; quote the value to keep it whole`);
+  log3.warn(`skill frontmatter: '${key}' of "${label}" read as ${JSON.stringify(parsedValue)}, ` + `but the line carries ${JSON.stringify(raw)} — an unquoted '#' starts a YAML ` + `comment; quote the value to keep it whole`);
 }
 
 class SkillStore {
@@ -34161,7 +34180,7 @@ class SkillStore {
       const canonicalFile = await realpath(join4(dir, "SKILL.md"));
       return escapesRoot(relative2(canonicalDir, canonicalFile)) ? null : canonicalFile;
     } catch (err) {
-      log2.warn(`skill package unreadable at ${dir}: %s`, err.message);
+      log3.warn(`skill package unreadable at ${dir}: %s`, err.message);
       return null;
     }
   }
@@ -34172,7 +34191,7 @@ class SkillStore {
     try {
       return await this.loadFile(file, name);
     } catch (err) {
-      log2.warn(`skill package load failed for ${name}: %s`, err.message);
+      log3.warn(`skill package load failed for ${name}: %s`, err.message);
       return null;
     }
   }
@@ -34224,7 +34243,7 @@ class SkillStore {
           triggers: boundedTriggers(fm.triggers)
         });
       } catch (err) {
-        log2.warn(`skill catalog: package ${name} unreadable: %s`, err.message);
+        log3.warn(`skill catalog: package ${name} unreadable: %s`, err.message);
       }
     }
     if (this.bundledDir) {
@@ -34276,13 +34295,13 @@ class SkillStore {
         canonicalFile = await realpath(filePath);
       } catch (err) {
         if (err.code !== "ENOENT") {
-          log2.warn(`skill load: realpath failed for ${filePath}: %s`, err.message);
+          log3.warn(`skill load: realpath failed for ${filePath}: %s`, err.message);
         }
         continue;
       }
       const rel = relative2(canonicalDir, canonicalFile);
       if (rel.startsWith("..") || isAbsolute2(rel)) {
-        log2.warn(`skill load: rejected traversal — ${filePath} -> ${canonicalFile} escapes ${canonicalDir}`);
+        log3.warn(`skill load: rejected traversal — ${filePath} -> ${canonicalFile} escapes ${canonicalDir}`);
         continue;
       }
       const raw = this.userSkillText(entryName, filePath);
@@ -34291,11 +34310,11 @@ class SkillStore {
       try {
         loaded.push(await this.loadFile(canonicalFile, name, raw));
       } catch (err) {
-        log2.warn(`skill load failed for ${filePath}: %s`, err.message);
+        log3.warn(`skill load failed for ${filePath}: %s`, err.message);
       }
     }
     if (loaded.length > 1) {
-      log2.warn(`skill load: duplicate skill id "${name}" exists as both directory and flat file; refusing ambiguous load`);
+      log3.warn(`skill load: duplicate skill id "${name}" exists as both directory and flat file; refusing ambiguous load`);
       return null;
     }
     if (loaded[0])
@@ -34345,7 +34364,7 @@ class SkillStore {
     try {
       canonicalDir = await realpath(skillDir);
     } catch (err) {
-      log2.warn(`skill resources: skill directory unresolvable: %s`, err.message);
+      log3.warn(`skill resources: skill directory unresolvable: %s`, err.message);
       throw new Error(`skill directory unavailable for resource: ${resourcePath}`);
     }
     if (!await this.isBundleRoot(canonicalDir, basename(skill.filePath))) {
@@ -34365,7 +34384,7 @@ class SkillStore {
     try {
       canonicalFile = await realpath(join4(skillDir, resourcePath));
     } catch (err) {
-      log2.warn("skill resources: resolve failed: %s", err.message);
+      log3.warn("skill resources: resolve failed: %s", err.message);
       throw new Error(`resource not found: ${resourcePath}`);
     }
     const rel = relative2(canonicalDir, canonicalFile);
@@ -34379,7 +34398,7 @@ class SkillStore {
     try {
       handle = await open(canonicalFile, "r");
     } catch (err) {
-      log2.warn("skill resources: open failed: %s", err.message);
+      log3.warn("skill resources: open failed: %s", err.message);
       throw new Error(`resource not found: ${resourcePath}`);
     }
     try {
@@ -34437,7 +34456,7 @@ class SkillStore {
       try {
         skill = materializedSkill(generation, contribution);
       } catch (err) {
-        log2.warn(`plugin Skill '${generation.pluginId}:${contribution.localId}' skipped: %s`, err.message);
+        log3.warn(`plugin Skill '${generation.pluginId}:${contribution.localId}' skipped: %s`, err.message);
         continue;
       }
       skills.push(skill);
@@ -34523,19 +34542,19 @@ class SkillStore {
         continue;
       const { baseName, filePath } = candidate;
       if (!SKILL_NAME_ALLOWLIST.test(baseName)) {
-        log2.warn(`skill scan: rejected non-allowlist entry: ${entry.name}`);
+        log3.warn(`skill scan: rejected non-allowlist entry: ${entry.name}`);
         continue;
       }
       let canonicalFile;
       try {
         canonicalFile = await realpath(filePath);
       } catch (err) {
-        log2.warn(`skill scan: realpath failed for ${filePath}: %s`, err.message);
+        log3.warn(`skill scan: realpath failed for ${filePath}: %s`, err.message);
         continue;
       }
       const rel = relative2(canonicalDir, canonicalFile);
       if (rel.startsWith("..") || isAbsolute2(rel)) {
-        log2.warn(`skill scan: rejected traversal — ${filePath} -> ${canonicalFile} escapes ${canonicalDir}`);
+        log3.warn(`skill scan: rejected traversal — ${filePath} -> ${canonicalFile} escapes ${canonicalDir}`);
         continue;
       }
       let raw;
@@ -34547,7 +34566,7 @@ class SkillStore {
       try {
         skills.push(await this.loadFile(canonicalFile, baseName, raw));
       } catch (err) {
-        log2.warn(`skill load failed for ${filePath}: %s`, err.message);
+        log3.warn(`skill load failed for ${filePath}: %s`, err.message);
       }
     }
     return skills;
@@ -34558,12 +34577,12 @@ class SkillStore {
     try {
       entry = readAveHomeEntrySync(item);
     } catch (err) {
-      log2.warn(`skill ${entryName} unreadable: %s`, err.message);
+      log3.warn(`skill ${entryName} unreadable: %s`, err.message);
       return;
     }
     if (entry.status !== "trusted") {
       if (entry.status === "untrusted")
-        log2.warn(`skill ${entryName} is waiting for review and is not loaded`);
+        log3.warn(`skill ${entryName} is waiting for review and is not loaded`);
       return;
     }
     const bytes = entry.kind === "file" ? entry.bytes : entry.files.get(relative2(item, filePath).split(sep3).join("/"));
@@ -34626,7 +34645,7 @@ class SkillStore {
         }
         const rel = relative2(canonicalDir, canonicalChild);
         if (escapesRoot(rel)) {
-          log2.warn(`skill resources: skipped ${childPath} — escapes ${canonicalDir}`);
+          log3.warn(`skill resources: skipped ${childPath} — escapes ${canonicalDir}`);
           continue;
         }
         if (seen.has(canonicalChild))
@@ -34646,7 +34665,7 @@ class SkillStore {
         if (posixRel === "SKILL.md")
           continue;
         if (!isSafeResourcePath(posixRel)) {
-          log2.warn(`skill resources: skipped an unsafe resource filename under ${canonicalDir}`);
+          log3.warn(`skill resources: skipped an unsafe resource filename under ${canonicalDir}`);
           continue;
         }
         if (info.size > SKILL_RESOURCE_MAX_BYTES)
@@ -34675,7 +34694,7 @@ class SkillStore {
     const sortedEntries = entries.slice().sort((a, b) => a.name.localeCompare(b.name));
     const limitedEntries = Number.isFinite(limit) ? sortedEntries.slice(0, limit) : sortedEntries;
     if (Number.isFinite(limit) && entries.length > limit) {
-      log2.warn(`skill catalog: scanned first ${limit} entries out of ${entries.length}`);
+      log3.warn(`skill catalog: scanned first ${limit} entries out of ${entries.length}`);
     }
     for (const entry of limitedEntries) {
       const candidate = this.skillCandidate(dir, entry);
@@ -34683,19 +34702,19 @@ class SkillStore {
         continue;
       const { baseName, filePath } = candidate;
       if (!SKILL_NAME_ALLOWLIST.test(baseName)) {
-        log2.warn(`skill catalog: rejected non-allowlist entry: ${entry.name}`);
+        log3.warn(`skill catalog: rejected non-allowlist entry: ${entry.name}`);
         continue;
       }
       let canonicalFile;
       try {
         canonicalFile = realpathSync(filePath);
       } catch (err) {
-        log2.warn(`skill catalog: realpath failed for ${filePath}: %s`, err.message);
+        log3.warn(`skill catalog: realpath failed for ${filePath}: %s`, err.message);
         continue;
       }
       const rel = relative2(canonicalDir, canonicalFile);
       if (rel.startsWith("..") || isAbsolute2(rel)) {
-        log2.warn(`skill catalog: rejected traversal — ${filePath} -> ${canonicalFile} escapes ${canonicalDir}`);
+        log3.warn(`skill catalog: rejected traversal — ${filePath} -> ${canonicalFile} escapes ${canonicalDir}`);
         continue;
       }
       let raw;
@@ -34715,7 +34734,7 @@ class SkillStore {
           filePath: canonicalFile
         });
       } catch (err) {
-        log2.warn(`skill catalog failed for ${filePath}: %s`, err.message);
+        log3.warn(`skill catalog failed for ${filePath}: %s`, err.message);
       }
     }
     return skills;
@@ -34773,7 +34792,7 @@ function normalizeCatalogDescription(value) {
 }
 
 // src/main/agent-profile-store.ts
-var log3 = createLogger("ave");
+var log4 = createLogger("ave");
 var AGENT_NAME_ALLOWLIST = /^[a-zA-Z0-9_-]+$/;
 var AGENT_PROFILE_MAX_BODY_BYTES = 16 * 1024;
 var userAgentsDir = () => resolve5(aveHome(), "agents");
@@ -34842,12 +34861,12 @@ class AgentProfileStore {
     const { fm, body } = parseAgentFrontmatter(raw);
     const name = fm.name || baseName;
     if (!AGENT_NAME_ALLOWLIST.test(name)) {
-      log3.warn(`agent profile scan: rejected non-allowlist frontmatter name "${name}" in ${realFile}`);
+      log4.warn(`agent profile scan: rejected non-allowlist frontmatter name "${name}" in ${realFile}`);
       return null;
     }
     const trimmedBody = body.trim();
     if (Buffer.byteLength(trimmedBody, "utf-8") > AGENT_PROFILE_MAX_BODY_BYTES) {
-      log3.warn(`agent profile scan: rejected oversized body for ${realFile} (>${AGENT_PROFILE_MAX_BODY_BYTES} bytes)`);
+      log4.warn(`agent profile scan: rejected oversized body for ${realFile} (>${AGENT_PROFILE_MAX_BODY_BYTES} bytes)`);
       return null;
     }
     return {
@@ -34871,7 +34890,7 @@ class AgentProfileStore {
       const profile = await this.readProfile(realFile, name);
       return profile && profile.name === name ? profile : null;
     } catch (err) {
-      log3.warn(`agent package ${name} unreadable: %s`, err.message);
+      log4.warn(`agent package ${name} unreadable: %s`, err.message);
       return null;
     }
   }
@@ -34914,7 +34933,7 @@ class AgentProfileStore {
         continue;
       const { baseName, filePath } = candidate;
       if (!AGENT_NAME_ALLOWLIST.test(baseName)) {
-        log3.warn(`agent profile scan: rejected non-allowlist entry: ${entry.name}`);
+        log4.warn(`agent profile scan: rejected non-allowlist entry: ${entry.name}`);
         continue;
       }
       let realFile;
@@ -34922,25 +34941,25 @@ class AgentProfileStore {
         realFile = await realpath2(join5(this.userDir, filePath));
       } catch (err) {
         if (err.code !== "ENOENT") {
-          log3.warn(`agent profile scan: realpath failed for ${filePath}: %s`, err.message);
+          log4.warn(`agent profile scan: realpath failed for ${filePath}: %s`, err.message);
         }
         continue;
       }
       const rel = relative3(realDir, realFile);
       if (rel.startsWith("..") || isAbsolute3(rel)) {
-        log3.warn(`agent profile scan: rejected traversal — ${filePath} -> ${realFile} escapes ${realDir}`);
+        log4.warn(`agent profile scan: rejected traversal — ${filePath} -> ${realFile} escapes ${realDir}`);
         continue;
       }
       let entryRead;
       try {
         entryRead = readAveHomeEntrySync(join5(this.userDir, entry.name));
       } catch (err) {
-        log3.warn(`agent profile ${entry.name} unreadable: %s`, err.message);
+        log4.warn(`agent profile ${entry.name} unreadable: %s`, err.message);
         continue;
       }
       if (entryRead.status !== "trusted") {
         if (entryRead.status === "untrusted")
-          log3.warn(`agent profile ${entry.name} is waiting for review and is not loaded`);
+          log4.warn(`agent profile ${entry.name} is waiting for review and is not loaded`);
         continue;
       }
       const verified = entryRead.kind === "file" ? entryRead.bytes : entryRead.files.get("AGENTS.md");
@@ -34951,7 +34970,7 @@ class AgentProfileStore {
         if (profile)
           profiles.push(profile);
       } catch (err) {
-        log3.warn(`agent profile load failed for ${realFile}: %s`, err.message);
+        log4.warn(`agent profile load failed for ${realFile}: %s`, err.message);
       }
     }
     return profiles;
@@ -34978,195 +34997,6 @@ class AgentProfileStore {
       };
     }
     return null;
-  }
-}
-
-// src/marketplace/errors.ts
-var MARKETPLACE_ERROR_DETAIL_FIELDS = {
-  SOURCE_URL_REJECTED: {
-    "credentials-in-url": {},
-    "helper-transport": { scheme: "string" },
-    "scheme-unsupported": { scheme: "string" },
-    format: {},
-    "address-metadata": { host: "string", address: "string" },
-    "address-unroutable": { host: "string", address: "string" },
-    "catalog-this-computer": { source: "string", host: "string" },
-    "deep-link-path": {},
-    "relative-path": {},
-    "device-path": {},
-    "windows-path": {},
-    "network-file-url": {},
-    "unc-without-share": {},
-    "unc-credentials": {},
-    "outside-root": {},
-    "folder-options": {},
-    "folder-pick-unknown": {}
-  },
-  SOURCE_ID_INVALID: {
-    "reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
-    "holds-credential": {},
-    "stored-id-holds-credential": {}
-  },
-  SOURCE_INDEX_INVALID: {
-    "name-reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
-    "version-reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
-    "component-reserved-prefix": { prefix: "string", issuer: "credential-issuer" },
-    "name-holds-credential": {},
-    "version-holds-credential": {},
-    "component-holds-credential": {}
-  },
-  SOURCE_POLICY_BLOCKED: {
-    "blocked-by-pattern": { target: "string", pattern: "string", policyPath: "string" },
-    "not-in-allow-list": { target: "string", policyPath: "string" },
-    "https-required": { target: "string", policyPath: "string" },
-    "private-network-blocked": { target: "string", address: "string", policyPath: "string" },
-    "local-sources-blocked": { target: "string", policyPath: "string" },
-    "direct-install-blocked": { target: "string", policyPath: "string" },
-    "policy-invalid": { error: "string" }
-  },
-  SOURCE_CONFIRMATION_REQUIRED: {
-    unencrypted: { host: "string" },
-    "token-unencrypted": { host: "string" },
-    "internal-network": { host: "string", address: "string" },
-    "this-computer": { host: "string", address: "string" },
-    "internal-downloads": { source: "string", host: "string" },
-    "network-folder": { server: "string", path: "string" },
-    "unencrypted-updates": { source: "string" }
-  },
-  SOURCE_AUTH_REQUIRED: {
-    token: { host: "string" },
-    "token-no-access": { host: "string" },
-    "token-unencrypted": { host: "string" },
-    ssh: { host: "string" }
-  },
-  SOURCE_SSH_HOST_UNKNOWN: {
-    unknown: { host: "string", port: "number" },
-    changed: { host: "string", port: "number" }
-  },
-  SOURCE_REF_NOT_FOUND: {
-    missing: { ref: "string", repository: "string", available: "string[]" }
-  },
-  SOURCE_UNREACHABLE: {
-    offline: {},
-    dns: { host: "string" },
-    refused: { host: "string" },
-    timeout: { host: "string" },
-    "http-status": { host: "string", status: "number" },
-    tls: { host: "string" },
-    proxy: { host: "string", proxy: "string" },
-    "not-found": { host: "string" },
-    "not-found-ssh": { host: "string" }
-  },
-  SOURCE_LOCAL_DATA_DAMAGED: {
-    "state-missing": { sourceId: "string" },
-    "state-invalid": { sourceId: "string" },
-    "state-unreadable": { sourceId: "string" },
-    "snapshot-invalid": { sourceId: "string" },
-    "snapshot-unreadable": { sourceId: "string" },
-    "repository-damaged": { sourceId: "string" },
-    "repair-failed": { sourceId: "string" },
-    "repair-failed-unpinned": { sourceId: "string" },
-    "repair-write-failed": { sourceId: "string" }
-  },
-  SOURCE_LIST_UNREADABLE: {
-    unreadable: { fsCode: "string" },
-    invalid: {}
-  },
-  SOURCE_ID_TAKEN: {
-    "repository-already-added": { url: "string", existingId: "string" },
-    "folder-already-added": { path: "string", existingId: "string" },
-    "folder-inside-source": { path: "string", existingId: "string", existingPath: "string" },
-    "folder-contains-source": { path: "string", existingId: "string", existingPath: "string" }
-  },
-  SOURCE_LOCAL_UNREADABLE: {
-    "not-found": { path: "string" },
-    permission: { path: "string", message: "string" },
-    io: { path: "string", message: "string" },
-    moved: { path: "string", target: "string" },
-    "not-a-directory": { path: "string" },
-    "ambiguous-case": { path: "string" },
-    "changed-during-read": { path: "string" },
-    "classifier-unavailable": { path: "string" }
-  },
-  CONTENT_RULE_VIOLATION: {
-    "link-outside-folder": { path: "string", target: "string" },
-    "link-to-network": { path: "string", target: "string" },
-    "link-to-skipped": { path: "string", target: "string" },
-    "special-file": { path: "string" },
-    "case-collision": { path: "string" },
-    limit: { path: "string", limit: "string" }
-  },
-  NO_INSTALLABLE_ARTIFACT: {
-    "folder-has-no-build": { name: "string" }
-  },
-  PLAN_EXPIRED: {
-    "policy-changed": {},
-    "package-changed": {}
-  },
-  PACKAGE_INCOMPATIBLE: {
-    min_app_version: { name: "string", version: "string" },
-    platform: { name: "string", platform: "string" },
-    host_protocol: { name: "string" }
-  }
-};
-var MARKETPLACE_ERROR_REASONS = Object.entries(MARKETPLACE_ERROR_DETAIL_FIELDS).flatMap(([code, reasons]) => Object.keys(reasons).map((reason) => [code, reason]));
-function fieldMatches(value, kind) {
-  if (kind === "string")
-    return typeof value === "string";
-  if (kind === "number")
-    return typeof value === "number" && Number.isFinite(value);
-  if (kind === "credential-issuer")
-    return typeof value === "string" && CREDENTIAL_ISSUERS.includes(value);
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-function parseMarketplaceErrorDetail(code, value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return;
-  if (!Object.hasOwn(MARKETPLACE_ERROR_DETAIL_FIELDS, code))
-    return;
-  const reasons = MARKETPLACE_ERROR_DETAIL_FIELDS[code];
-  const record = value;
-  if (typeof record.reason !== "string" || !Object.hasOwn(reasons, record.reason))
-    return;
-  const fields = reasons[record.reason];
-  const keys = Object.keys(record).filter((key) => key !== "reason");
-  if (keys.length !== Object.keys(fields).length)
-    return;
-  for (const key of keys) {
-    if (!Object.hasOwn(fields, key) || !fieldMatches(record[key], fields[key]))
-      return;
-  }
-  return { ...record };
-}
-function scrubMarketplaceStrings(value) {
-  if (typeof value === "string")
-    return scrubDiagnosticSecrets(value);
-  if (Array.isArray(value))
-    return value.map((item) => scrubMarketplaceStrings(item));
-  if (typeof value === "object" && value !== null && [Object.prototype, null].includes(Object.getPrototypeOf(value))) {
-    const scrubbed = {};
-    for (const [key, item] of Object.entries(value)) {
-      const masked = scrubDiagnosticSecrets(key);
-      let name = masked;
-      for (let n = 2;Object.hasOwn(scrubbed, name); n += 1)
-        name = `${masked} (${n})`;
-      Object.defineProperty(scrubbed, name, { value: scrubMarketplaceStrings(item), enumerable: true, writable: true, configurable: true });
-    }
-    return scrubbed;
-  }
-  return value;
-}
-class MarketplaceError extends Error {
-  code;
-  detail;
-  constructor(code, message, options) {
-    super(message, options && "cause" in options ? { cause: options.cause } : undefined);
-    this.code = code;
-    this.name = "MarketplaceError";
-    if (options?.detail !== undefined && parseMarketplaceErrorDetail(code, options.detail) === undefined) {
-      throw new TypeError(`${JSON.stringify(options.detail)} is not a detail of ${code}`);
-    }
-    this.detail = options?.detail;
   }
 }
 
@@ -35500,57 +35330,8 @@ function projectPortableMcp(parsed, auth = {}) {
   return projected;
 }
 
-// src/plugins/public-contract.ts
-var BUNDLE_EVERYTHING_REGEX = new RegExp(".*");
-var AGENT_PLUGINS_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-var AVE_EXTENSION_NAMESPACE = "ai.agent-connector.ave";
-var PLUGIN_ID_PATTERN = /^(?!.*--)[a-z][a-z0-9-]*[a-z0-9]$/u;
-var PLUGIN_ID_MIN_LENGTH = 3;
-var PLUGIN_ID_MAX_LENGTH = 64;
-function isValidPluginId(value) {
-  return typeof value === "string" && value.length >= PLUGIN_ID_MIN_LENGTH && value.length <= PLUGIN_ID_MAX_LENGTH && PLUGIN_ID_PATTERN.test(value);
-}
-var AGENT_PLUGINS_TOP_LEVEL_FIELDS = [
-  "$schema",
-  "name",
-  "version",
-  "description",
-  "author",
-  "homepage",
-  "repository",
-  "license",
-  "keywords",
-  "extensions"
-];
-function foreignManifestTopLevelFields(document) {
-  if (!document || typeof document !== "object" || Array.isArray(document)) {
-    return [];
-  }
-  return Object.keys(document).filter((key) => !AGENT_PLUGINS_TOP_LEVEL_FIELDS.includes(key));
-}
-function flattenAgentPluginsManifest(document) {
-  if (!document || typeof document !== "object" || Array.isArray(document)) {
-    return document;
-  }
-  const top = document;
-  const extensions = top.extensions;
-  const namespaced = extensions && typeof extensions === "object" && !Array.isArray(extensions) ? extensions[AVE_EXTENSION_NAMESPACE] : undefined;
-  const hostBlock = namespaced && typeof namespaced === "object" && !Array.isArray(namespaced) ? namespaced : {};
-  const { displayName, ...hostFields } = hostBlock;
-  const flat = {
-    ...hostFields,
-    id: top.name,
-    version: top.version,
-    description: top.description
-  };
-  if (displayName !== undefined)
-    flat.name = displayName;
-  return flat;
-}
-var WORKER_CONTROL_FRAME_BYTES_MAX = 16 * 1024 * 1024;
-
 // src/plugins/agent-plugin-manifest.ts
-var log4 = createLogger("agent-plugin-manifest");
+var log5 = createLogger("agent-plugin-manifest");
 var compiledManifestValidator;
 function manifestValidator() {
   if (compiledManifestValidator)
@@ -35568,12 +35349,12 @@ function validatePluginManifestShape(bytes) {
   const document = value;
   const foreign = foreignManifestTopLevelFields(document);
   for (const key of foreign)
-    log4.warn(`plugin.json: ignoring unknown top-level field ${key}`);
+    log5.warn(`plugin.json: ignoring unknown top-level field ${key}`);
   const extensions = document.extensions;
   if (extensions && typeof extensions === "object" && !Array.isArray(extensions)) {
     for (const key of Object.keys(extensions)) {
       if (key !== AVE_EXTENSION_NAMESPACE)
-        log4.warn(`plugin.json: ignoring unknown extensions namespace ${key}`);
+        log5.warn(`plugin.json: ignoring unknown extensions namespace ${key}`);
     }
   }
   const known = Object.fromEntries(Object.entries(document).filter(([key]) => !foreign.includes(key)));
@@ -35701,7 +35482,7 @@ var HOOK_EVENT_TYPES = {
 };
 
 // src/hooks/hook-discovery.ts
-var log5 = createLogger("hook-discovery");
+var log6 = createLogger("hook-discovery");
 var EXACT_MATCHER = /^[A-Za-z0-9_\- ,|]+$/u;
 var HOOK_MATCHER_PATTERN_MAX = 256;
 var HOOK_MATCHER_SUBJECT_MAX = 256;
@@ -36083,10 +35864,10 @@ import { randomUUID } from "node:crypto";
 
 // src/main/storage/feature-namespace.ts
 import { randomBytes } from "node:crypto";
-import { chmodSync, constants as constants3, promises as fs, linkSync, mkdirSync as mkdirSync2, rmSync } from "node:fs";
+import { constants as constants3, promises as fs } from "node:fs";
 import { join as join7, dirname as dirname5, isAbsolute as isAbsolute5, relative as relative4, resolve as resolve7, sep as sep4 } from "node:path";
 import { platform } from "node:process";
-var log6 = createLogger("feature-namespace");
+var log7 = createLogger("feature-namespace");
 function assertProtectedBoundary(dir) {
   if (platform !== "win32")
     return;
@@ -36173,9 +35954,9 @@ async function readJsonFileOrEmpty(filePath, empty, hydrate) {
     const backup = `${filePath}.corrupt-${Date.now()}-${randomBytes(4).toString("hex")}.bak`;
     try {
       await fs.rename(filePath, backup);
-      log6.warn(`corrupt JSON in ${filePath}; moved to ${backup}, starting empty`);
+      log7.warn(`corrupt JSON in ${filePath}; moved to ${backup}, starting empty`);
     } catch (err) {
-      log6.warn(`corrupt JSON in ${filePath}; could not move it to ${backup} (${err.message}), starting empty`);
+      log7.warn(`corrupt JSON in ${filePath}; could not move it to ${backup} (${err.message}), starting empty`);
     }
     return empty();
   }
@@ -36336,7 +36117,13 @@ function windowsVolumeRoot(path) {
   }
   return win324.parse(path).root;
 }
+function isPowerShellFilesystemSyntax(path) {
+  return !path.includes(":") || /^[A-Za-z]:[\\/][^:]*$/.test(path) || /^[\\/]{2}/.test(path);
+}
 function modelShellPath(path, model) {
+  if (model.dialect === "powershell" && !isPowerShellFilesystemSyntax(path)) {
+    return { nativePath: undefined, normalizedPath: path, volumeRoot: "", floorPaths: [] };
+  }
   if (sep5 !== "\\") {
     const absolute2 = isAbsolute6(path) ? path : resolve8(model.location ?? "/", path);
     return { nativePath: absolute2, normalizedPath: normalize(absolute2), volumeRoot: parse2(absolute2).root, floorPaths: [] };
@@ -36948,7 +36735,7 @@ class ChangeSignal {
 }
 
 // src/main/routines-store.ts
-var log7 = createLogger("ave");
+var log8 = createLogger("ave");
 var MAX_FUTURE_OFFSET_MS = 5 * 365.25 * 24 * 60 * 60 * 1000;
 var MAX_CRON_EXPR_LENGTH = 256;
 var MIN_INTERVAL_MS = 60000;
@@ -37070,7 +36857,7 @@ function repairStoredFailure(record) {
   const routine = record;
   if (routine.lastFailure === undefined || isValidRoutineFailure(routine.lastFailure))
     return;
-  log7.warn("[routines-store] dropping an unreadable lastFailure on routine %s; the routine itself is kept", String(routine.id));
+  log8.warn("[routines-store] dropping an unreadable lastFailure on routine %s; the routine itself is kept", String(routine.id));
   delete routine.lastFailure;
 }
 function isValidRoutinePluginScope(value) {
@@ -37092,7 +36879,7 @@ function isCanonicalRecord(r) {
   if (!isValidRecord(r))
     return false;
   if ("allowedPlugins" in r) {
-    log7.warn("[routines-store] rejecting non-canonical routine record with allowedPlugins (id=%s)", r.id);
+    log8.warn("[routines-store] rejecting non-canonical routine record with allowedPlugins (id=%s)", r.id);
     return false;
   }
   return true;
@@ -37204,7 +36991,7 @@ class RoutinesStore {
   invalidCache = [];
   loaded = false;
   filePath;
-  changed = new ChangeSignal((err) => log7.warn("[routines-store] change listener threw: %s", err.message));
+  changed = new ChangeSignal((err) => log8.warn("[routines-store] change listener threw: %s", err.message));
   constructor(filePath = defaultPath()) {
     this.filePath = filePath;
   }
@@ -37219,7 +37006,7 @@ class RoutinesStore {
     this.cache = file.routines;
     this.invalidCache = file.invalid;
     for (const held of file.invalid) {
-      log7.warn("[routines-store] holding back routine %s: %s %s is not a valid plugin id", held.id, held.field, JSON.stringify(held.value));
+      log8.warn("[routines-store] holding back routine %s: %s %s is not a valid plugin id", held.id, held.field, JSON.stringify(held.value));
     }
     this.loaded = true;
   }
@@ -38008,7 +37795,7 @@ function deriveAgentPluginComponents(files, expected = {}) {
 
 // src/marketplace/content/kinds.ts
 function isDataContentKind(kind) {
-  return kind === "agent-plugin" || kind === "theme" || kind === "language" || kind === "font" || kind === "provider" || kind === "messaging-connection" || kind === "skill" || kind === "agent";
+  return kind === "agent-plugin" || kind === "language" || kind === "font" || kind === "provider" || kind === "messaging-connection" || kind === "skill" || kind === "agent";
 }
 
 class ContentFailure extends MarketplaceError {
@@ -38053,82 +37840,6 @@ function text(record2, path, key, max) {
     throw new ContentFailure(path, `${key} must be a single-line string of at most ${max} characters`);
   }
   return value;
-}
-function imageSize(bytes) {
-  if (bytes.length >= 24 && bytes.readUInt32BE(0) === 2303741511 && bytes.readUInt32BE(4) === 218765834 && bytes.subarray(12, 16).toString("latin1") === "IHDR") {
-    return { format: "png", width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-  }
-  if (bytes.length >= 30 && bytes.subarray(0, 4).toString("latin1") === "RIFF" && bytes.subarray(8, 12).toString("latin1") === "WEBP") {
-    const chunk = bytes.subarray(12, 16).toString("latin1");
-    if (chunk === "VP8X")
-      return { format: "webp", width: 1 + bytes.readUIntLE(24, 3), height: 1 + bytes.readUIntLE(27, 3) };
-    if (chunk === "VP8 ")
-      return { format: "webp", width: bytes.readUInt16LE(26) & 16383, height: bytes.readUInt16LE(28) & 16383 };
-    if (chunk === "VP8L" && bytes[20] === 47) {
-      const bits = bytes.readUInt32LE(21);
-      return { format: "webp", width: (bits & 16383) + 1, height: (bits >> 14 & 16383) + 1 };
-    }
-    return null;
-  }
-  if (bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216) {
-    let at = 2;
-    while (at + 9 < bytes.length) {
-      if (bytes[at] !== 255)
-        return null;
-      const marker = bytes[at + 1];
-      const length = bytes.readUInt16BE(at + 2);
-      if (marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204) {
-        return { format: "jpeg", width: bytes.readUInt16BE(at + 7), height: bytes.readUInt16BE(at + 5) };
-      }
-      at += 2 + length;
-    }
-  }
-  return null;
-}
-var PREVIEW_EXTENSIONS = { ".png": "png", ".jpg": "jpeg", ".webp": "webp" };
-var PREVIEW_MAX_SIDE = 2048;
-function theme(files, context) {
-  const path = "theme.json";
-  if (isBundleId(context.name))
-    throw new ContentFailure(path, `${context.name} is a built-in theme`);
-  const record2 = readJson(files, path);
-  closed(record2, path, ["name", "description", "shell", "highContrast", "tokens", "surfaces", "preview", "pair"]);
-  if (record2.shell !== "light" && record2.shell !== "dark")
-    throw new ContentFailure(path, 'shell must be "light" or "dark"');
-  if (typeof record2.highContrast !== "boolean")
-    throw new ContentFailure(path, "highContrast must be true or false");
-  if (record2.pair !== undefined && (typeof record2.pair !== "string" || !isThemeId(record2.pair) || record2.pair === context.name)) {
-    throw new ContentFailure(path, "pair must name another theme");
-  }
-  const problems = [...themeTokenProblems(record2.tokens), ...themeSurfaceProblems(record2.surfaces)];
-  if (problems.length > 0)
-    throw new ContentFailure(path, problems.join("; "));
-  let preview;
-  if (record2.preview !== undefined) {
-    const bytes = typeof record2.preview === "string" && record2.preview !== path ? files.get(record2.preview) : undefined;
-    if (typeof record2.preview !== "string" || !bytes) {
-      throw new ContentFailure(path, "preview must name an image file of the package");
-    }
-    const expected = PREVIEW_EXTENSIONS[record2.preview.slice(record2.preview.lastIndexOf(".")).toLowerCase()];
-    const size = imageSize(bytes);
-    if (!size || size.format !== expected)
-      throw new ContentFailure(record2.preview, "is not an image of the format its extension names");
-    if (size.width < 1 || size.height < 1 || size.width > PREVIEW_MAX_SIDE || size.height > PREVIEW_MAX_SIDE) {
-      throw new ContentFailure(record2.preview, `must be at most ${PREVIEW_MAX_SIDE}×${PREVIEW_MAX_SIDE} pixels`);
-    }
-    preview = record2.preview;
-  }
-  return {
-    kind: "theme",
-    name: text(record2, path, "name", 64),
-    description: text(record2, path, "description", 240),
-    shell: record2.shell,
-    highContrast: record2.highContrast,
-    tokens: record2.tokens,
-    surfaces: record2.surfaces,
-    ...preview ? { preview } : {},
-    ...record2.pair !== undefined ? { pair: record2.pair } : {}
-  };
 }
 var MESSAGE_MAX = 4000;
 var PLACEHOLDER = /\{([a-zA-Z0-9_]+)\}/gu;
@@ -38332,8 +38043,6 @@ function parseContent(kind, files, context) {
     case "skill":
     case "agent":
       return instruction(kind, map, context);
-    case "theme":
-      return theme(map, context);
     case "language":
       return language(map, context);
     case "font":
@@ -38346,7 +38055,7 @@ function parseContent(kind, files, context) {
 }
 
 // src/marketplace/content/rules.ts
-var CONTENT_KINDS = ["agent-plugin", "skill", "agent", "theme", "font", "language", "provider", "messaging-connection"];
+var CONTENT_KINDS = ["agent-plugin", "skill", "agent", "font", "language", "provider", "messaging-connection"];
 function isContentKind(kind) {
   return CONTENT_KINDS.includes(kind);
 }
@@ -38390,13 +38099,6 @@ var CONTENT_RULES = Object.freeze({
     extensions: [".md"],
     layout: (path) => path === "AGENTS.md",
     describe: "AGENTS.md"
-  },
-  theme: {
-    maxBytes: 256 * KB,
-    maxFiles: 4,
-    extensions: [".json", ...IMAGE2],
-    layout: (path) => path === "theme.json" || !path.includes("/") && IMAGE2.some((ext) => path.toLowerCase().endsWith(ext)),
-    describe: "theme.json and a preview image"
   },
   font: {
     maxBytes: 20 * MB,
@@ -41783,7 +41485,7 @@ var ASRT_SANDBOX_ENV_KEYS = new Set([
 var ASRT_SANDBOX_ENV_KEYS_LOWER = new Set([...ASRT_SANDBOX_ENV_KEYS].map((key) => key.toLowerCase()));
 
 // src/main/managed-child-processes.ts
-var log8 = createLogger("ave");
+var log9 = createLogger("ave");
 var PROCESS_TREE_KILL_TIMEOUT_MS = TOOL_TIMEOUT_POLICY.processTreeKillMs;
 var DETACHED_PROCESS_GROUP_POLL_MS = TOOL_TIMEOUT_POLICY.processGroupPollMs;
 var PROCESS_GROUP_RETENTION_WARNING_MS = TOOL_TIMEOUT_POLICY.processGroupRetentionWarningMs;
@@ -41915,7 +41617,7 @@ function ipv4ToBigInt(ip) {
   return BigInt(parts[0] * 16777216 + parts[1] * 65536 + parts[2] * 256 + parts[3]);
 }
 // src/permissions/policy-store.ts
-var log9 = createLogger("policy-store");
+var log10 = createLogger("policy-store");
 
 // src/marketplace/sources/official.ts
 var OFFICIAL_SOURCE_ID = "ave";
@@ -41958,21 +41660,8 @@ var SECTION_KEYS = new Set([
 var ADDITIONAL_KEYS = new Set(["id", "url", "path", "ref", "auth", "label"]);
 var PACKAGE_KEY_KEYS = new Set(["kind", "name", "source"]);
 
-// src/marketplace/log.ts
-function createMarketplaceLogger(module) {
-  const log10 = createLogger(module);
-  const scrubbed = (level) => (objectOrMessage, message) => {
-    const first = scrubMarketplaceStrings(objectOrMessage);
-    if (message === undefined)
-      log10[level](first);
-    else
-      log10[level](first, scrubMarketplaceStrings(message));
-  };
-  return { debug: scrubbed("debug"), info: scrubbed("info"), warn: scrubbed("warn"), error: scrubbed("error") };
-}
-
 // src/marketplace/net/network-gate.ts
-var log10 = createMarketplaceLogger("marketplace-network-gate");
+var log11 = createMarketplaceLogger("marketplace-network-gate");
 var DNS_ERROR_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "EAI_NONAME", "EAI_FAIL", "ENODATA"]);
 var REFUSED_ERROR_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "EPIPE"]);
 
@@ -41982,33 +41671,6 @@ var STDERR_TAIL_BYTES = 64 * 1024;
 
 // src/marketplace/git/repo.ts
 var REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-
-// src/plugins/isolation/host-api-wire.ts
-var HOST_PROTOCOL_VERSIONS_SERVED = ["5"];
-var HOST_PROTOCOL_FIRST_APP_VERSION = {
-  "5": undefined
-};
-function isServedHostProtocolVersion(value) {
-  return HOST_PROTOCOL_VERSIONS_SERVED.includes(value);
-}
-var WIRE_BYTES_MAX = 16 * 1024 * 1024;
-var FRAME_ENVELOPE_HEADROOM_BYTES = 1024 * 1024;
-var FRAME_BYTES_MAX = 2 * Math.ceil(WIRE_BYTES_MAX / 3) * 4 + FRAME_ENVELOPE_HEADROOM_BYTES;
-var SECRET_REDACTED_SENTINEL = Symbol.for("ave.config.secret.redacted");
-var NULL_BODY_STATUSES = new Set([204, 205, 304]);
-var WORKER_EXIT_REASONS = new Set([
-  "exited",
-  "stopped",
-  "control-violation",
-  "output-overflow"
-]);
-var WORKER_ERROR_CODES = new Set([
-  "worker-request-failed",
-  "worker-request-cancelled",
-  "worker-backpressure",
-  "worker-incarnation-ended",
-  "payload-too-large"
-]);
 
 // src/plugins/sandbox-authority.ts
 var HOST_DIRECTORY_CATALOG = {
@@ -42136,10 +41798,6 @@ function gitInstallManifestMismatches(document, expected, descriptor = MARKETPLA
   if (hostProtocol !== expected.hostProtocol) {
     problems.push(`requires.hostProtocol differs from the descriptor's hostProtocol`);
   }
-  const protocolFloor = expected.hostProtocol !== undefined && isServedHostProtocolVersion(expected.hostProtocol) ? HOST_PROTOCOL_FIRST_APP_VERSION[expected.hostProtocol] : undefined;
-  if (protocolFloor !== undefined && compareSemver(expected.minAppVersion, protocolFloor) < 0) {
-    problems.push(`minAppVersion in ${descriptor} is "${expected.minAppVersion}"; host protocol ${expected.hostProtocol} needs ${protocolFloor} or newer, the first release that serves it`);
-  }
   for (const field of PLUGIN_AUTHORITY_FIELDS) {
     if (!sameField(ave, expected.authority, field))
       problems.push(`${field} differs from the descriptor's authority`);
@@ -42185,7 +41843,7 @@ var import_adm_zip = __toESM(require_adm_zip(), 1);
 var KINDS = new Set(PACKAGE_KINDS);
 
 // src/plugins/plugin-install-receipt.ts
-var log11 = createLogger("plugin-install-receipt");
+var log12 = createLogger("plugin-install-receipt");
 var SOURCE_ORIGINS = new Set(["official", "managed", "custom", "direct"]);
 var FOLDER_SOURCE_ORIGINS = new Set(["managed", "custom", "direct"]);
 var RUNG_SKIP_REASONS = new Set(["NOT_DECLARED", "ARTIFACT_NOT_PINNED"]);
@@ -42561,7 +42219,7 @@ function checkRetiredNotificationDeclaration(document, minAppVersion, alertsRele
     report(`notificationEvents is retired for minAppVersion ${minAppVersion} at or above the alerts release ${alertsReleaseVersion}; declare alerts kinds instead`);
   }
 }
-function checkReleasedManifests(entry, released, alertsReleaseVersion, report) {
+function checkReleasedManifests(entry, released, alertsReleaseVersion, report, excluded = []) {
   const prefix = `${entry.name}@`;
   const versions = new Map((entry.versions ?? []).map((version) => [version.version, version]));
   for (const [key, document] of released) {
@@ -42569,6 +42227,8 @@ function checkReleasedManifests(entry, released, alertsReleaseVersion, report) {
       continue;
     const version = versions.get(key.slice(prefix.length));
     if (!version) {
+      if (excluded.some((item) => item.packageId === `plugin/${entry.name}` && key === `${entry.name}@${item.version}`))
+        continue;
       report(`a released plugin.json was supplied for ${key}, which the index does not list`);
       continue;
     }
@@ -42588,9 +42248,9 @@ function checkReleasedManifests(entry, released, alertsReleaseVersion, report) {
     checkRetiredNotificationDeclaration(held, version.minAppVersion, alertsReleaseVersion, (message) => report(`the released plugin.json of ${version.version}: ${message}`));
   }
 }
-function checkPlugin(tree, entry, descriptor, options, report) {
+function checkPlugin(tree, entry, descriptor, options, report, excluded) {
   if (options.releasedManifests)
-    checkReleasedManifests(entry, options.releasedManifests, options.alertsReleaseVersion, report);
+    checkReleasedManifests(entry, options.releasedManifests, options.alertsReleaseVersion, report, excluded);
   const manifestPath = repoPath(entry.path, "plugin.json");
   const manifest = tree.read(manifestPath);
   const artifact = descriptor.payload.artifact;
@@ -42664,13 +42324,25 @@ function checkContent(tree, entry, descriptor, options) {
     unknownMessageKeys: "refuse"
   });
 }
-function checkPackage(tree, entry, options, problems) {
+function checkPackage(tree, entry, options, problems, excluded) {
   const subject = `${entry.kind}/${entry.name}`;
   const report = (text2) => problems.push({ subject, message: text2 });
   const path = repoPath(entry.path, MARKETPLACE_DESCRIPTOR_FILE);
   const bytes = tree.read(path);
   if (!bytes) {
     report(`${path} is missing`);
+    return;
+  }
+  let document;
+  try {
+    document = parseStrictJson(bytes.toString("utf8"));
+  } catch (error) {
+    report(`${path}: ${errorMessage(error)}`);
+    return;
+  }
+  if (!entry.versions && isRecord(document) && document.kind === entry.kind && document.name === entry.name && excluded.some((item) => item.packageId === subject && item.version === document.version && item.hostProtocol === document.hostProtocol)) {
+    if (options.releasedManifests)
+      checkReleasedManifests(entry, options.releasedManifests, options.alertsReleaseVersion, report, excluded);
     return;
   }
   const checked = validateDescriptorText(bytes.toString("utf8"), { expected: { kind: entry.kind, name: entry.name }, direct: false });
@@ -42689,7 +42361,7 @@ function checkPackage(tree, entry, options, problems) {
   }
   try {
     if (descriptor.kind === "plugin")
-      checkPlugin(tree, entry, descriptor, options, report);
+      checkPlugin(tree, entry, descriptor, options, report, excluded);
     else if (descriptor.kind === "mcp")
       checkMcp(tree, entry, descriptor, report);
     else
@@ -42714,15 +42386,20 @@ function checkMarketplaceRepository(tree, options) {
     return [{ subject: MARKETPLACE_INDEX_FILE, message: index.error }];
   for (const diagnostic of index.value.diagnostics)
     problems.push(diagnostic);
-  for (const entry of index.value.index.packages)
-    checkPackage(tree, entry, options, problems);
-  const plugins = new Set(index.value.index.packages.filter((entry) => entry.kind === "plugin").map((entry) => entry.name));
+  const listedEntries = new Map(index.value.index.packages.map((entry) => [`${entry.kind}/${entry.name}`, entry]));
+  for (const item of index.value.excluded) {
+    if (!listedEntries.has(item.packageId))
+      listedEntries.set(item.packageId, item.package);
+  }
+  for (const entry of listedEntries.values())
+    checkPackage(tree, entry, options, problems, index.value.excluded);
+  const plugins = new Set([...listedEntries.values()].filter((entry) => entry.kind === "plugin").map((entry) => entry.name));
   for (const key of options.releasedManifests?.keys() ?? []) {
     if (!plugins.has(key.slice(0, key.lastIndexOf("@")))) {
       problems.push({ subject: key, message: "a released plugin.json was supplied for a plugin the index does not list" });
     }
   }
-  const listed = new Set(index.value.index.packages.map((entry) => entry.path));
+  const listed = new Set([...listedEntries.values()].map((entry) => entry.path));
   for (const dir of unlisted(tree, listed)) {
     problems.push({ subject: repoPath(dir, MARKETPLACE_DESCRIPTOR_FILE), message: "no index entry points at this package" });
   }

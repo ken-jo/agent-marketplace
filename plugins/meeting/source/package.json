@@ -1,6 +1,6 @@
 {
   "name": "@ave/plugin-meeting",
-  "version": "0.11.0",
+  "version": "0.10.3",
   "description": "Ave meeting extension for recording, transcription, and summaries.",
   "type": "module",
   "main": "dist/index.cjs",
@@ -23,15 +23,14 @@
     "plugin.json"
   ],
   "scripts": {
-    "build": "tsup && tsc -p tsconfig.build.json --emitDeclarationOnly && node scripts/copy-build-assets.mjs src/ui/meeting-control.html dist/ui/meeting-control.html && node scripts/copy-ffmpeg-vendor.mjs",
+    "build": "tsup && tsc -p tsconfig.build.json --emitDeclarationOnly && node scripts/build-ui.mjs && node scripts/copy-ffmpeg-vendor.mjs",
     "clean": "node scripts/clean.mjs",
     "install:ffmpeg:win64": "node scripts/install-ffmpeg-vendor.mjs --platform win32-x64",
     "typecheck": "tsc --noEmit",
     "test": "bun run build && vitest run",
     "dev:test": "vitest",
-    "validate:events": "node scripts/validate-events.mjs",
-    "validate:hostapi": "node scripts/validate-hostapi.mjs",
-    "install:ffmpeg": "node scripts/install-ffmpeg-vendor.mjs"
+    "install:ffmpeg": "node scripts/install-ffmpeg-vendor.mjs",
+    "validate:manifest": "node scripts/validate-manifest.mjs && node scripts/validate-alerts.mjs"
   },
   "keywords": [
     "electron",
@@ -58,9 +57,13 @@
     "ajv-formats": "3",
     "tsup": "^8.2.4",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "ajv": "^8.17.1"
   },
   "patchedDependencies": {
     "tsup@8.5.1": "patches/tsup@8.5.1.patch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.4"
   }
 }

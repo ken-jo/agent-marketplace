@@ -50,14 +50,14 @@ function makeBroker(opts: {
   caption?: EgressChannel;
   isUpstreamAllowed?: (url: string) => boolean;
   upstreamFetch?: EgressUpstreamFetch;
-  logEvent?: (level: "info" | "warn" | "error", event: string, fields: Record<string, unknown>) => void;
+  audit?: (level: "info" | "warn" | "error", event: string, fields: Record<string, unknown>) => void;
   requestTimeoutMs?: number;
 }): EgressBroker {
   return new EgressBroker({
     channels: { embedding: opts.embedding ?? openaiChannel(), caption: opts.caption ?? openaiChannel() },
     isUpstreamAllowed: opts.isUpstreamAllowed ?? (() => true),
     upstreamFetch: opts.upstreamFetch ?? makeUpstreamStub().fetch,
-    logEvent: opts.logEvent,
+    audit: opts.audit,
     requestTimeoutMs: opts.requestTimeoutMs,
   });
 }
@@ -268,7 +268,7 @@ describe("EgressBroker — refused requests answer as HTTP and never relay", () 
       embedding: async () => ({ upstreamBaseUrl: "https://evil.attacker.example/v1", apiKey: REAL_HOST_KEY, authScheme: "bearer" }),
       isUpstreamAllowed: (url) => new URL(url).host === "api.openai.com",
       upstreamFetch: upstream.fetch,
-      logEvent: (_lvl, event, fields) => logs.push([event, fields]),
+      audit: (_lvl, event, fields) => logs.push([event, fields]),
     });
     const answer = await ask(broker, embeddingRequest());
     expect(answer.status).toBe(403);
@@ -300,15 +300,15 @@ describe("EgressBroker — refused requests answer as HTTP and never relay", () 
 
   it("maps lease and effect denials to one terminal 403 event", async () => {
     for (const reason of ["audience-not-allowlisted", "lease-unavailable", "effect-boundary-denied"]) {
-      const logEvent = vi.fn();
+      const audit = vi.fn();
       const upstreamFetch = vi.fn(async () => ({ status: 200, headers: {}, body: Buffer.alloc(0) }));
       const channel: EgressChannel = async () => { throw new EgressLeaseDenied(reason); };
-      const broker = makeBroker({ embedding: channel, upstreamFetch, logEvent });
+      const broker = makeBroker({ embedding: channel, upstreamFetch, audit });
       const answer = await ask(broker, embeddingRequest());
       expect(answer.status).toBe(403);
       expect(JSON.parse(answer.body)).toEqual({ error: "egress-denied", reason, terminal: true });
       expect(upstreamFetch).not.toHaveBeenCalled();
-      expect(logEvent.mock.calls.filter(([, event]) => event === "indexer.egress.denied")).toHaveLength(1);
+      expect(audit.mock.calls.filter(([, event]) => event === "indexer.egress.denied")).toHaveLength(1);
     }
   });
 
@@ -415,15 +415,15 @@ describe("EgressBroker — caption relay cap", () => {
   it("refuses a larger caption request with a visible 413, without resolving a credential", async () => {
     const upstream = makeUpstreamStub();
     const caption = vi.fn(openaiChannel());
-    const logEvent = vi.fn();
-    const broker = makeBroker({ caption, upstreamFetch: upstream.fetch, logEvent });
+    const audit = vi.fn();
+    const broker = makeBroker({ caption, upstreamFetch: upstream.fetch, audit });
     const body = "x".repeat(CAPTION_REQUEST_BYTES_MAX + 1);
     const answer = await ask(broker, embeddingRequest({ path: "/responses", body }), EGRESS_CAPTION_METHOD);
     expect(answer.status).toBe(413);
     expect(JSON.parse(answer.body)).toEqual({ error: "caption image exceeds the 11 MiB relay cap" });
     expect(caption).not.toHaveBeenCalled();
     expect(upstream.calls).toHaveLength(0);
-    expect(logEvent).toHaveBeenCalledWith("warn", "local_indexer.egress_refused", expect.objectContaining({
+    expect(audit).toHaveBeenCalledWith("warn", "local_indexer.egress_refused", expect.objectContaining({
       channel: "caption",
       reason: "caption image over the relay cap",
     }));

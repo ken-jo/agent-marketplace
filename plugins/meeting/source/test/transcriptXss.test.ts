@@ -1,5 +1,5 @@
 /**
- * Security regression test — CWE-79 XSS in transcript renderer (meeting-control.js).
+ * Security regression test — CWE-79 XSS in transcript renderer (meeting-control.mjs).
  *
  * Vulnerability: prior to fix, transcript segment text/speaker fields were
  * interpolated directly into innerHTML, allowing a meeting attendee to say
@@ -9,7 +9,7 @@
  *  1. Static: The JS source no longer contains innerHTML with interpolated
  *     user-controlled fields (speaker / original / text).
  *  2. Functional: When XSS payloads are rendered via the DOM helpers extracted
- *     from meeting-control.js, the output DOM contains only text nodes —
+ *     from meeting-control.mjs, the output DOM contains only text nodes —
  *     no <img> or <script> elements.
  */
 
@@ -22,7 +22,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = join(__filename, "..");
 
 const UI_SRC = readFileSync(
-  join(__dirname, "..", "src", "ui", "meeting-control.js"),
+  join(__dirname, "..", "src", "ui", "meeting-control.mjs"),
   "utf8"
 );
 
@@ -47,7 +47,7 @@ describe("transcript renderer — XSS static analysis (CWE-79)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Defense-in-depth: no bare innerHTML assignments remain in meeting-control.js.
+// Defense-in-depth: no bare innerHTML assignments remain in meeting-control.mjs.
 // The only allowed innerHTML usage is inside DOMParser (which operates on a
 // detached document and is therefore safe for static template parsing).
 // All dynamic text MUST use textContent / replaceChildren / createElement.
@@ -127,7 +127,7 @@ function makeFakeDocument() {
 }
 
 /**
- * Re-implement the fixed rendering logic from meeting-control.js so we can
+ * Re-implement the fixed rendering logic from meeting-control.mjs so we can
  * test it in node environment. This mirrors the exact code in the source file —
  * if the source changes, this test should be updated too.
  *

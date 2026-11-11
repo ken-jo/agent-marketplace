@@ -108,8 +108,6 @@ function makeContext(hostRoot: string) {
     config: { scanFolders: [hostRoot] },
     log: vi.fn(),
     hostApi: {
-      emitEvent: vi.fn(),
-      onEvent: vi.fn(),
       addTask: vi.fn(),
       saveNote: vi.fn(),
       config: {
@@ -119,8 +117,6 @@ function makeContext(hostRoot: string) {
       },
       getSecret: vi.fn(() => null),
       hostFetch: vi.fn(async () => new Response("{}", { status: 200 })),
-      logEvent: vi.fn(),
-      onShutdown: vi.fn(),
     },
   };
   return ctx;

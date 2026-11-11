@@ -13,8 +13,30 @@
       "path": "plugins/hello-world",
       "displayName": "Hello World",
       "description": "Hello World demo extension for checking marketplace install and dynamic UI load.",
-      "latest": "0.3.2",
+      "latest": "0.4.0",
       "versions": [
+        {
+          "version": "0.4.0",
+          "commit": "c4b70e0459c6e1456b582ade1a594d813843b8cd",
+          "minAppVersion": "0.14.2",
+          "hostProtocol": "5",
+          "authority": {
+            "capabilities": [],
+            "requires": {
+              "hostProtocol": "5",
+              "minAppVersion": "0.14.2"
+            }
+          },
+          "artifact": {
+            "release": {
+              "repo": "ken-jo/agent-marketplace",
+              "tag": "hello-world-v0.4.0",
+              "asset": "hello-world-0.4.0.zip",
+              "sha256": "48702fd425085af2530606fb0b426526e3740dae5e17975335410960bb6ed212"
+            }
+          },
+          "publishedAt": "2026-11-07T01:32:38Z"
+        },
         {
           "version": "0.3.2",
           "commit": "78e3ff94a514561ce13f7009aaf5b1c2f748c560",
@@ -44,9 +66,159 @@
       "name": "local-indexer",
       "path": "plugins/local-indexer",
       "displayName": "Ave Local Indexer",
-      "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 익스텐션 데이터 디렉터리의 index/",
-      "latest": "0.7.2",
+      "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 색인 워커 전용 상태 디렉터리(또는 사용자가 지정한 인덱스 저장 경로)",
+      "latest": "0.8.1",
       "versions": [
+        {
+          "version": "0.8.1",
+          "commit": "31bdca15599673dac80911702af6cd1de3849687",
+          "minAppVersion": "0.14.2",
+          "hostProtocol": "5",
+          "authority": {
+            "capabilities": [
+              "knowledge-index",
+              "document-indexer",
+              "external-auth-consumer",
+              "host:overlay",
+              "lifecycle-observer"
+            ],
+            "networkAccess": {
+              "allowedDomains": [
+                "api.openai.com",
+                "openai.azure.com",
+                "cognitiveservices.azure.com",
+                "localhost",
+                "127.0.0.1",
+                "::1"
+              ],
+              "reasoning": "워커의 임베딩/비전 캡셔닝 egress. 이 정적 allow-list는 디폴트 OpenAI/Azure 호스트(api.openai.com, *.openai.azure.com, *.cognitiveservices.azure.com — dot-boundary suffix-match)만 커버한다. 워커는 provider 키도 네트워크도 갖지 않는다. 임베딩/캡션 요청은 worker stdio control 채널의 egress_embedding / egress_caption 요청으로 플러그인에 넘기고, 플러그인의 egress broker(src/egressBroker.ts)가 hostApi.hostFetch chokepoint를 통해 실제 provider 호출을 수행한다. 따라서 provider egress는 이 manifest networkAccess.allowedDomains, HTTPS-only, SSRF guard, effect-boundary audit를 모두 통과한다. 워커는 임의 host를 지정할 수 없고, suffix에 맞지 않는 사용자-설정 커스텀 OpenAI-호환 endpoint는 hostFetch 단계에서 hard-deny된다. 루프백 리터럴(localhost / 127.0.0.1 / ::1)은 embeddingProvider=\"openai\" 일 때 사용자가 embeddingEndpoint 설정에 직접 적어 넣는 로컬 추론 서버(LM Studio, LiteLLM, 사내 프록시)를 위한 선언이다. 이 선언이 없으면 해당 설정은 hostFetch에서 항상 거부되어 조작할 수 없는 설정이 된다. 호스트는 이 리터럴에 한해 http cleartext를 허용하되(바이트가 기기 밖으로 나가지 않으므로 https 규칙이 보호할 대상이 없다) 이름이 실제로 루프백으로만 resolve되는지 증명한 뒤에만 허용하며, 이 선언은 LAN(RFC1918)이나 다른 어떤 host도 열지 않는다."
+            },
+            "hostSecrets": {
+              "read": [
+                "llm.apiKey.openai",
+                "llm.apiKey.azure-foundry"
+              ]
+            },
+            "requires": {
+              "hostProtocol": "5",
+              "minAppVersion": "0.14.2"
+            },
+            "sandbox": {
+              "read": [
+                {
+                  "kind": "hostDirectory",
+                  "segments": [
+                    "runtime"
+                  ],
+                  "why": "the Python interpreter the worker executes"
+                },
+                {
+                  "kind": "hostDirectory",
+                  "segments": [
+                    "certs"
+                  ],
+                  "why": "the corporate CA bundle used by the worker"
+                }
+              ],
+              "write": [
+                {
+                  "kind": "userChosenDirectory",
+                  "configKey": "indexStorageRoot",
+                  "why": "a user-chosen index location; without one the index lives in the worker state directory the host creates"
+                },
+                {
+                  "kind": "userChosenDirectory",
+                  "configKey": "workspace",
+                  "why": "the workers scratch and state directory"
+                }
+              ]
+            }
+          },
+          "artifact": {
+            "release": {
+              "repo": "ken-jo/agent-marketplace",
+              "tag": "local-indexer-v0.8.1",
+              "asset": "local-indexer-0.8.1.zip",
+              "sha256": "fec38ffd613adc40e72f2d6a439579e018703612c5a441f611d5b403cd393a6a"
+            }
+          },
+          "publishedAt": "2026-11-07T02:29:17Z"
+        },
+        {
+          "version": "0.8.0",
+          "commit": "1243437f6ff9ea5b3f6f0b16c6a73aeb058fa421",
+          "minAppVersion": "0.14.2",
+          "hostProtocol": "5",
+          "authority": {
+            "capabilities": [
+              "knowledge-index",
+              "document-indexer",
+              "external-auth-consumer",
+              "host:overlay",
+              "lifecycle-observer"
+            ],
+            "networkAccess": {
+              "allowedDomains": [
+                "api.openai.com",
+                "openai.azure.com",
+                "cognitiveservices.azure.com",
+                "localhost",
+                "127.0.0.1",
+                "::1"
+              ],
+              "reasoning": "워커의 임베딩/비전 캡셔닝 egress. 이 정적 allow-list는 디폴트 OpenAI/Azure 호스트(api.openai.com, *.openai.azure.com, *.cognitiveservices.azure.com — dot-boundary suffix-match)만 커버한다. 워커는 provider 키도 네트워크도 갖지 않는다. 임베딩/캡션 요청은 worker stdio control 채널의 egress_embedding / egress_caption 요청으로 플러그인에 넘기고, 플러그인의 egress broker(src/egressBroker.ts)가 hostApi.hostFetch chokepoint를 통해 실제 provider 호출을 수행한다. 따라서 provider egress는 이 manifest networkAccess.allowedDomains, HTTPS-only, SSRF guard, effect-boundary audit를 모두 통과한다. 워커는 임의 host를 지정할 수 없고, suffix에 맞지 않는 사용자-설정 커스텀 OpenAI-호환 endpoint는 hostFetch 단계에서 hard-deny된다. 루프백 리터럴(localhost / 127.0.0.1 / ::1)은 embeddingProvider=\"openai\" 일 때 사용자가 embeddingEndpoint 설정에 직접 적어 넣는 로컬 추론 서버(LM Studio, LiteLLM, 사내 프록시)를 위한 선언이다. 이 선언이 없으면 해당 설정은 hostFetch에서 항상 거부되어 조작할 수 없는 설정이 된다. 호스트는 이 리터럴에 한해 http cleartext를 허용하되(바이트가 기기 밖으로 나가지 않으므로 https 규칙이 보호할 대상이 없다) 이름이 실제로 루프백으로만 resolve되는지 증명한 뒤에만 허용하며, 이 선언은 LAN(RFC1918)이나 다른 어떤 host도 열지 않는다."
+            },
+            "hostSecrets": {
+              "read": [
+                "llm.apiKey.openai",
+                "llm.apiKey.azure-foundry"
+              ]
+            },
+            "requires": {
+              "hostProtocol": "5",
+              "minAppVersion": "0.14.2"
+            },
+            "sandbox": {
+              "read": [
+                {
+                  "kind": "hostDirectory",
+                  "segments": [
+                    "runtime"
+                  ],
+                  "why": "the Python interpreter the worker executes"
+                },
+                {
+                  "kind": "hostDirectory",
+                  "segments": [
+                    "certs"
+                  ],
+                  "why": "the corporate CA bundle used by the worker"
+                }
+              ],
+              "write": [
+                {
+                  "kind": "userChosenDirectory",
+                  "configKey": "indexStorageRoot",
+                  "why": "a user-chosen index location; without one the index lives in the worker state directory the host creates"
+                },
+                {
+                  "kind": "userChosenDirectory",
+                  "configKey": "workspace",
+                  "why": "the workers scratch and state directory"
+                }
+              ]
+            }
+          },
+          "artifact": {
+            "release": {
+              "repo": "ken-jo/agent-marketplace",
+              "tag": "local-indexer-v0.8.0",
+              "asset": "local-indexer-0.8.0.zip",
+              "sha256": "de8eeaadb3d636128949f48fc4e2a1360a1cfbb90533272041fbcae465ff166b"
+            }
+          },
+          "publishedAt": "2026-11-07T01:32:39Z"
+        },
         {
           "version": "0.7.2",
           "commit": "2bded323d775b77c594dc625a80f55278871cbe9",
@@ -129,9 +301,51 @@
       "name": "meeting",
       "path": "plugins/meeting",
       "displayName": "Ave Meeting",
-      "description": "회의 녹음·음성 전사(STT)·요약 생성 익스텐션. 녹음 시작/중지, 실시간 오디오 청크 전사(OpenAI Whisper), AI 요약·하이라이트·액션 아이템 자동 추출. 액션 아이템은 meeting.summary.created 이벤트의 actionItems 페이로드로 broadcast 되며, 요약은 로컬 SessionStore(JSON)에 영속화. MS Teams·Zoom 등 회의 후처리 지원.",
-      "latest": "0.10.2",
+      "description": "회의 녹음, 전사, 준비 및 요약. 사용자 또는 에이전트가 시작한 회의록은 로컬에 저장됩니다.",
+      "latest": "0.10.3",
       "versions": [
+        {
+          "version": "0.10.3",
+          "commit": "904ba59af6e924f70bcf72b1dd584abb050ba130",
+          "minAppVersion": "0.14.2",
+          "hostProtocol": "5",
+          "authority": {
+            "capabilities": [
+              "meeting-recorder",
+              "external-auth-consumer"
+            ],
+            "networkAccess": {
+              "allowedDomains": [
+                "openai.azure.com",
+                "cognitiveservices.azure.com",
+                "services.ai.azure.com",
+                "api.openai.com",
+                "github.com",
+                "release-assets.githubusercontent.com"
+              ],
+              "reasoning": "STT transcription egress to Azure OpenAI / OpenAI Whisper endpoints via host-mediated fetch. github.com and release-assets.githubusercontent.com carry the FFmpeg runtime archive that a marketplace install downloads on first use: the release URL is on github.com and answers 302 to release-assets.githubusercontent.com, and because the host re-runs the full gate on every hop, BOTH hosts have to be declared for the download to complete."
+            },
+            "hostSecrets": {
+              "read": [
+                "llm.apiKey.openai",
+                "llm.apiKey.azure-foundry"
+              ]
+            },
+            "requires": {
+              "minAppVersion": "0.14.2",
+              "hostProtocol": "5"
+            }
+          },
+          "artifact": {
+            "release": {
+              "repo": "ken-jo/agent-marketplace",
+              "tag": "meeting-v0.10.3",
+              "asset": "meeting-0.10.3.zip",
+              "sha256": "3234eed207be8698c08166377163603cbe451f125f1dff7be1dd9a932caec159"
+            }
+          },
+          "publishedAt": "2026-11-07T01:32:39Z"
+        },
         {
           "version": "0.10.2",
           "commit": "0a8f35747af3d00cd4b4c07870bf9fbbafb57cbd",
@@ -245,8 +459,18 @@
       "path": "mcp/airtable-mcp",
       "displayName": "Airtable MCP",
       "description": "Reads Airtable bases, tables, records and comments with a default tool allowlist. Service writes require an explicit opt-in. Supply a PAT through Ave's secret prompt with only the needed read scopes and base access by default. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -313,8 +537,18 @@
       "path": "mcp/confluence-mcp",
       "displayName": "Confluence MCP",
       "description": "Reads Confluence Cloud pages through mcp-atlassian in read-only mode. Set the wiki URL and account email in Ave and supply the API token through its secret prompt. Attachment downloads may write local files. Requires Node.js 24+ and uv (or an explicit AVE_CONNECTOR_UV path); installs only hash-locked Python packages.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -381,8 +615,18 @@
       "path": "mcp/figma-context-mcp",
       "displayName": "Figma Context MCP",
       "description": "Reads Figma layout and styles through Framelink. Image downloads and the local-write download tool are disabled by default and require an explicit local-write opt-in. Supply a Figma personal token through Ave's secret prompt. Telemetry is off. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -509,8 +753,18 @@
       "path": "mcp/google-workspace-mcp",
       "displayName": "Google Workspace MCP",
       "description": "Reads Gmail, Calendar, Drive, Docs and Sheets with memory-only OAuth credentials. Enter JSON with email, client_id, client_secret and refresh_token through Ave's secret prompt. Interactive login is disabled. Local download and full-message export tools require an explicit local-write opt-in. Requires Node.js 24+ and uv (or AVE_CONNECTOR_UV); the source wheel and dependencies are hash-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -529,8 +783,18 @@
       "path": "mcp/jira-mcp",
       "displayName": "Jira MCP",
       "description": "Reads Jira Cloud issues through mcp-atlassian in read-only mode. Set the site URL and account email in Ave and supply the API token through its secret prompt. Attachment downloads may write local files. Requires Node.js 24+ and uv (or an explicit AVE_CONNECTOR_UV path); installs only hash-locked Python packages.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -581,8 +845,18 @@
       "path": "mcp/ms-365-mcp",
       "displayName": "Microsoft 365 MCP",
       "description": "Reads Microsoft 365 data through Microsoft Graph with an existing delegated access token supplied through Ave's secret prompt. Interactive login and account mutation tools are absent; replace expired tokens in Ave. Token-cache files are disabled. Local file downloads require an explicit local-write opt-in. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -639,8 +913,18 @@
       "path": "mcp/obsidian-mcp",
       "displayName": "Obsidian MCP",
       "description": "Reads and searches Obsidian vault notes through the Local REST API plugin on this computer, with a default tool allowlist. Creating, editing or deleting notes requires an explicit write opt-in. Supply the plugin API key through Ave's secret prompt. Requires Node.js 24+ and uv (or AVE_CONNECTOR_UV); the reviewed source wheel and Python dependencies are hash-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -827,8 +1111,18 @@
       "path": "mcp/todoist-mcp",
       "displayName": "Todoist MCP",
       "description": "Reads Todoist tasks, projects, labels, filters and comments with a default tool allowlist. Creating, editing, completing and deleting objects requires an explicit write opt-in. Supply the Todoist API token through Ave's secret prompt. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -847,8 +1141,18 @@
       "path": "mcp/trello-mcp",
       "displayName": "Trello MCP",
       "description": "Reads Trello boards, lists, cards and checklists with a default tool allowlist. Service writes and local downloads/configuration changes require separate explicit opt-ins. Enter JSON with apiKey and token through Ave's secret prompt; use a read-scoped token by default. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -867,8 +1171,18 @@
       "path": "mcp/youtube-mcp",
       "displayName": "YouTube MCP",
       "description": "Reads YouTube video, channel, playlist and transcript data through the community server. Supply a YouTube Data API v3 key through Ave's secret prompt. Transcript availability depends on the video and service. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",
-      "latest": "2026.10.27",
+      "latest": "2026.11.6",
       "versions": [
+        {
+          "version": "2026.11.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.0",
+          "platforms": [
+            "darwin",
+            "linux"
+          ],
+          "publishedAt": "2026-11-06T09:30:45Z"
+        },
         {
           "version": "2026.10.27",
           "commit": "0851366cd98660d1245fbd610638f3a1454a2bc3",
@@ -6034,242 +6348,30 @@
       ]
     },
     {
-      "kind": "theme",
-      "name": "catppuccin-latte",
-      "path": "themes/catppuccin-latte",
-      "displayName": "Catppuccin Latte",
-      "description": "Light shell + mauve accent + warm pastels",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "catppuccin-mocha",
-      "path": "themes/catppuccin-mocha",
-      "displayName": "Catppuccin Mocha",
-      "description": "Dark shell + mauve accent + pastel aurora",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "cherry-blossom",
-      "path": "themes/cherry-blossom",
-      "displayName": "Cherry Blossom",
-      "description": "Light shell + cherry blossom palette + vivid interaction lines",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "executive-graphite",
-      "path": "themes/executive-graphite",
-      "displayName": "Executive Graphite",
-      "description": "Dark shell + warm graphite surfaces + teal work accent",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "forest",
-      "path": "themes/forest",
-      "displayName": "Forest",
-      "description": "Light shell + teal accent + light code",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "gruvbox-dark-hard",
-      "path": "themes/gruvbox-dark-hard",
-      "displayName": "Gruvbox Dark Hard",
-      "description": "Dark shell + warm orange accent + retro Vim palette",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "high-contrast",
-      "path": "themes/high-contrast",
-      "displayName": "High Contrast",
-      "description": "Black background + yellow accent — accessibility first",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "midnight",
-      "path": "themes/midnight",
-      "displayName": "Midnight",
-      "description": "Dark shell + magenta accent + dark code",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "nord",
-      "path": "themes/nord",
-      "displayName": "Nord",
-      "description": "Dark shell + arctic frost accents + aurora state colors",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "rose-pine",
-      "path": "themes/rose-pine",
-      "displayName": "Rosé Pine",
-      "description": "Dark shell + iris accent + soft rose tones",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "solarized-light",
-      "path": "themes/solarized-light",
-      "displayName": "Solarized Light",
-      "description": "Light shell + Solarized classic + warm beige surface",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "tokyo-night",
-      "path": "themes/tokyo-night",
-      "displayName": "Tokyo Night",
-      "description": "Dark shell + blue accent + dark code",
-      "latest": "1.0.1",
-      "versions": [
-        {
-          "version": "1.0.1",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "violet-dark",
-      "path": "themes/violet-dark",
-      "displayName": "Violet Dark",
-      "description": "Dark shell + warm-grey surface + vivid purple accent",
-      "latest": "1.0.2",
-      "versions": [
-        {
-          "version": "1.0.2",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
-      "kind": "theme",
-      "name": "violet-light",
-      "path": "themes/violet-light",
-      "displayName": "Violet Light",
-      "description": "Light shell + warm-grey surface + vivid purple accent",
-      "latest": "1.0.2",
-      "versions": [
-        {
-          "version": "1.0.2",
-          "commit": "5071dd04c2c46e6e7c10dc4ef9bb811a7126faac",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-15T09:49:59Z"
-        }
-      ]
-    },
-    {
       "kind": "language",
       "name": "korean",
       "path": "languages/korean",
       "displayName": "한국어 (Korean)",
       "description": "Korean interface translation for Ave 0.14.2 and later.",
-      "latest": "1.0.7",
+      "latest": "1.0.8",
       "versions": [
         {
-          "version": "1.0.7",
-          "commit": "e7cef1fe92d4d344efb4a0c63a02a2ed8570c116",
+          "version": "1.0.8",
+          "commit": "6fffccef92ad6f8ad981dd2fe5e4f2436d66cfe0",
           "minAppVersion": "0.14.2",
-          "publishedAt": "2026-11-05T15:45:59Z"
+          "publishedAt": "2026-11-06T12:57:14Z"
+        },
+        {
+          "version": "1.0.7",
+          "commit": "63f8b87c5708e0bfd3246ccc56a67202c68721f2",
+          "minAppVersion": "0.14.2",
+          "publishedAt": "2026-11-06T09:30:59Z"
+        },
+        {
+          "version": "1.0.6",
+          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
+          "minAppVersion": "0.14.2",
+          "publishedAt": "2026-11-06T09:30:45Z"
         },
         {
           "version": "1.0.5",

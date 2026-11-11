@@ -15357,6 +15357,9 @@ var init_alerts = __esm(() => {
 var en4;
 var init_app = __esm(() => {
   en4 = {
+    "app.replaceAppDraftTitle": "{appName} suggested a draft",
+    "app.replaceAppDraft": "Replace draft",
+    "app.dismissAppDraft": "Dismiss",
     "app.routineFailedTitle": "[Failed] Routine",
     "app.conversationCeilingReached": "The window is already holding {count} conversations and none of the others can be set aside — every one that could be is generating a reply. Stop one or wait for it to finish.",
     "app.conversationSetAside": "A conversation was closed to make room. It is saved, so reopening it picks up where it left off; anything typed but unsent is not kept.",
@@ -15427,9 +15430,8 @@ var init_app = __esm(() => {
 var en5;
 var init_appearanceTab = __esm(() => {
   en5 = {
-    "appearanceTab.pageTitle": "Theme",
-    "appearanceTab.pageDescription": "Configure screen colors, fonts, and how external URLs are displayed",
-    "appearanceTab.bundleCardAriaLabel": "Theme: {name}",
+    "appearanceTab.pageTitle": "Appearance",
+    "appearanceTab.pageDescription": "Choose interface and terminal colors and fonts",
     "appearanceTab.fontSizeSmall": "Small",
     "appearanceTab.fontSizeNormal": "Normal",
     "appearanceTab.fontSizeLarge": "Large",
@@ -15443,15 +15445,8 @@ var init_appearanceTab = __esm(() => {
     "appearanceTab.fontFamilyCustomPlaceholder": 'e.g. "Spoqa Han Sans Neo", system-ui, sans-serif',
     "appearanceTab.fontFamilyCustomAriaLabel": "Custom font stack",
     "appearanceTab.fontFamilyCustomHint": "Font names separated by commas. Enter saves, Escape cancels.",
-    "appearanceTab.themeSectionTitle": "Color Theme",
-    "appearanceTab.themeSectionDescription": "Selecting a theme changes the chat background, accent colors, and code blocks together. Changes apply immediately without restarting.",
-    "appearanceTab.moreThemesInMarketplace": "More themes in Marketplace",
     "appearanceTab.moreLanguagesInMarketplace": "More languages in Marketplace",
     "appearanceTab.marketplaceInstalledBadge": "Marketplace",
-    "appearanceTab.themeRadioGroupLabel": "Theme selection",
-    "appearanceTab.followSystemLabel": "Follow system theme",
-    "appearanceTab.followSystemDescription": "Automatically switches between this theme and its light or dark counterpart to match the OS light/dark mode.",
-    "appearanceTab.followSystemAriaLabel": "Follow OS system color scheme",
     "appearanceTab.fontSectionTitle": "Font",
     "appearanceTab.fontSectionDescription": "Applied across the host shell, chat, and settings windows. System default uses the OS sans-serif and Korean font fallback chain. Extension windows use their own fonts independently of this setting.",
     "appearanceTab.fontSizePreview": "Size preview:",
@@ -15474,7 +15469,7 @@ var init_approvalAttribution = __esm(() => {
     "approvalAttribution.unattributed": "No conversation (host request)",
     "approvalAttribution.headlessSession": "Conversation not open in any tile",
     "approvalAttribution.hostRequest": "Host request",
-    "approvalAttribution.pluginRequest": "Extension request · {plugin}",
+    "approvalAttribution.pluginRequest": "Extension panel request · {plugin}",
     "approvalAttribution.paneConversation": "Request from the conversation behind this surface: {title}",
     "approvalAttribution.returnToConversation": "Return to conversation"
   };
@@ -16425,13 +16420,7 @@ var init_be_pluginRuntime = __esm(() => {
 var en44;
 var init_be_pluginUiHost = __esm(() => {
   en44 = {
-    "be_pluginUiHost.webviewLoadFailed": "Extension webview failed to load.",
-    "be_pluginUiHost.webviewRegisterFailed": "Extension webview registration failed: {error}",
     "be_pluginUiHost.pluginViewNotFound": "Extension view not found.",
-    "be_pluginUiHost.legacyIframeNotSupported": "Legacy iframe UI format is not supported. Use an entry-based module UI.",
-    "be_pluginUiHost.uiModuleEntryNotFound": "UI module entry not found.",
-    "be_pluginUiHost.webviewAssetUrlNotFound": "Extension webview asset URL not found in aveApi (preload not injected or dist missing).",
-    "be_pluginUiHost.loading": "Loading...",
     "be_pluginUiHost.pluginUiTitle": "Extension UI",
     "be_pluginUiHost.pluginUiLoadingDesc": "Loading extension view."
   };
@@ -17664,6 +17653,7 @@ var en96;
 var init_dockedApprovalCard = __esm(() => {
   en96 = {
     "dockedApprovalCard.headline": "'{toolName}' is trying to read outside the allowed directories",
+    "dockedApprovalCard.headlineWrite": "'{toolName}' is trying to write outside the allowed directories",
     "dockedApprovalCard.targetParent": "{path}  (the whole parent folder)",
     "dockedApprovalCard.denySummary": "Access will be denied"
   };
@@ -17847,6 +17837,7 @@ var init_formatIpcError = __esm(() => {
     "formatIpcError.removalPreviewFailed": "Couldn't check what removing this project would affect, so it wasn't removed.",
     "formatIpcError.userKeyboardRequired": "This permission change can only be performed from active user input.",
     "formatIpcError.unauthorized": "You are not authorized.",
+    "formatIpcError.eventTargetForbidden": "An extension can send updates only to its own panel.",
     "formatIpcError.chatGroupLimitReached": "No more chat tiles can be opened.",
     "formatIpcError.chatGroupsUnavailable": "Chat tiles are not available in this window.",
     "formatIpcError.chatGroupRequired": "This request did not say which chat tile it was for.",
@@ -18088,7 +18079,7 @@ var init_formatIpcError = __esm(() => {
     "formatIpcError.allowSelectionFailed": "That sentence couldn't be resolved. Pick one of the buttons on the approval card.",
     "formatIpcError.unknownError": "Unknown error",
     "formatIpcError.errorSuffix": " has occurred.",
-    "formatIpcError.installedContentUnavailable": "Installed themes, languages and fonts could not be loaded.",
+    "formatIpcError.installedContentUnavailable": "Installed languages and fonts could not be loaded.",
     "formatIpcError.languageNotInstalled": "That language is not installed.",
     "formatIpcError.providerPresetRefreshFailed": "The provider change was saved but could not be applied yet. Restart the app to apply it.",
     "formatIpcError.workApprovalsSourceUnavailable": "Items that need your review could not be loaded."
@@ -18165,7 +18156,6 @@ var init_gitMarketplace = __esm(() => {
     "gitMarketplace.kind.mcp": "MCP",
     "gitMarketplace.kind.skill": "Skills",
     "gitMarketplace.kind.agent": "Agents",
-    "gitMarketplace.kind.theme": "Themes",
     "gitMarketplace.kind.font": "Fonts",
     "gitMarketplace.kind.language": "Languages",
     "gitMarketplace.kind.provider": "Providers",
@@ -19060,7 +19050,6 @@ var init_marketplaceTab = __esm(() => {
     "marketplaceTab.trustProviderCredentials": "Uses provider credentials",
     "marketplaceTab.trustProviderNetwork": "Sends model requests to provider",
     "marketplaceTab.trustNoCode": "No code",
-    "marketplaceTab.trustThemeTokens": "Theme tokens only",
     "marketplaceTab.trustLanguageCatalog": "UI text catalog only",
     "marketplaceTab.trustMessagingCredentials": "Uses credentials you enter",
     "marketplaceTab.trustMessagingNetwork": "Sends messages to an external service"
@@ -19250,9 +19239,65 @@ var init_memorySearchPanel = __esm(() => {
     "memorySearchPanel.notesTab": "Memories",
     "memorySearchPanel.sessionsTab": "Chat history",
     "memorySearchPanel.searching": "Searching…",
-    "memorySearchPanel.noNotesEmpty": "No saved memories",
+    "memorySearchPanel.noNotesEmpty": "No saved memories yet. Tell Ave what to remember in a conversation or use /remember. Ave also saves what it learns and leaves a notice you can undo.",
     "memorySearchPanel.noResults": "No results",
-    "memorySearchPanel.noSessionsEmpty": "No saved sessions"
+    "memorySearchPanel.noSessionsEmpty": "No saved sessions",
+    "memorySearchPanel.overview": "Overview",
+    "memorySearchPanel.useLog": "Use log",
+    "memorySearchPanel.history": "Change history",
+    "memorySearchPanel.origin": "Learned in",
+    "memorySearchPanel.noOrigin": "No source conversation was recorded.",
+    "memorySearchPanel.originUnavailable": "The source conversation is unavailable or was deleted.",
+    "memorySearchPanel.noMessagePosition": "/remember · No message position",
+    "memorySearchPanel.savedFromMessage": "Saved from this message",
+    "memorySearchPanel.viewConversation": "View conversation",
+    "memorySearchPanel.sameOrigin": "Other memories from this conversation",
+    "memorySearchPanel.liveQuote": "The quote is read live from the conversation. Only its location is stored.",
+    "memorySearchPanel.recentUse": "Recent use",
+    "memorySearchPanel.noUse": "No recorded use",
+    "memorySearchPanel.useAll": "All",
+    "memorySearchPanel.useInjected": "Injected",
+    "memorySearchPanel.useSearched": "Searched",
+    "memorySearchPanel.useRead": "Read",
+    "memorySearchPanel.useFilter": "Filter use log",
+    "memorySearchPanel.useIncomplete": "Some use records may be missing or older records have been removed.",
+    "memorySearchPanel.historyIncomplete": "Some changes were not recorded. This history may be incomplete.",
+    "memorySearchPanel.noHistory": "No recorded changes",
+    "memorySearchPanel.created": "Saved",
+    "memorySearchPanel.updated": "Updated",
+    "memorySearchPanel.changeConversation": "Conversation requesting this change",
+    "memorySearchPanel.historyTruncated": "Records before {date} were removed to retain recent history.",
+    "memorySearchPanel.detailFailed": "Could not load memory details. Select the memory again to retry.",
+    "memorySearchPanel.detailLabel": "Selected memory: {title}",
+    "memorySearchPanel.backToList": "Back to memories",
+    "memorySearchPanel.clearOriginFilter": "Show all conversations",
+    "memorySearchPanel.global": "Global",
+    "memorySearchPanel.learnedIn": "Learned in: {title}",
+    "memorySearchPanel.useCount": "{count} uses",
+    "memorySearchPanel.kind.preference": "Preference",
+    "memorySearchPanel.kind.constraint": "Constraint",
+    "memorySearchPanel.kind.fact": "Fact",
+    "memorySearchPanel.kind.goal": "Goal",
+    "memorySearchPanel.kind.reference": "Reference",
+    "memorySearchPanel.kind.note": "Note",
+    "memorySearchPanel.sort.recent": "Recently used",
+    "memorySearchPanel.sort.kind": "By kind",
+    "memorySearchPanel.sort.origin": "By conversation",
+    "memorySearchPanel.idleDays": "Unused for {days} days",
+    "memorySearchPanel.summaryFailed": "Could not load memory summaries. Reopen the panel to retry.",
+    "memorySearchPanel.scopes": "Memory scopes",
+    "memorySearchPanel.currentProject": "Current project",
+    "memorySearchPanel.projectScopeDescription": "Only in conversations in this project",
+    "memorySearchPanel.globalScopeDescription": "Applies in every project",
+    "memorySearchPanel.defaultProject": "Default project",
+    "memorySearchPanel.defaultScopeDescription": "Only in the default project",
+    "memorySearchPanel.notAppliedHere": "Does not apply here",
+    "memorySearchPanel.recentDescription": "· Last 7 days · Saved immediately",
+    "memorySearchPanel.startConversation": "Tell Ave in a new conversation",
+    "memorySearchPanel.startConversationFailed": "Could not open a new conversation right now.",
+    "memorySearchPanel.globalMemories": "Global memories",
+    "memorySearchPanel.globalMemoryExplanation": "Global memories also apply in this project. Default-project memories apply only in the default project.",
+    "memorySearchPanel.manageGlobal": "Manage global memories"
   };
 });
 
@@ -20490,7 +20535,7 @@ var init_settingsContent = __esm(() => {
     "settingsContent.sidebarAriaLabel": "Settings categories",
     "settingsContent.tabGeneral": "General",
     "settingsContent.tabLlm": "Model",
-    "settingsContent.tabAppearance": "Theme",
+    "settingsContent.tabAppearance": "Appearance",
     "settingsContent.tabChat": "Chat",
     "settingsContent.tabWeb": "Web / Browsing",
     "settingsContent.tabPermissions": "Permissions",
@@ -21424,7 +21469,7 @@ var init_toolApprovalDialog = __esm(() => {
     "toolApprovalDialog.networkRuleUnavailable": "This address cannot be named by a host rule. Deny it once instead.",
     "toolApprovalDialog.networkScopeNotOffered": "This connection is not offered for that lifetime.",
     "toolApprovalDialog.networkLocalScopeNotOffered": "A local or unverified destination cannot be allowed for good.",
-    "toolApprovalDialog.pathGrantOnlyFolder": "A folder is allowed once or for good.",
+    "toolApprovalDialog.pathGrantOnlyFolder": "A folder is allowed once, for this session, or for good.",
     "toolApprovalDialog.hostTerminalTarget": "Types `{command}` into your own terminal {terminal} ({shell}) and runs it there, in {cwd}. You can take over at any time.",
     "toolApprovalDialog.hostTerminalWarning": "This is your real shell, with your permissions and no sandbox. The command's output returns to the model and may contain secrets from your machine.",
     "toolApprovalDialog.hostTerminalAfterExternalContent": "External content was read earlier in this turn. Check that this command follows your request before approving it for this time only.",
@@ -21714,9 +21759,7 @@ var init_useStatusBarInstall = __esm(() => {
     "useStatusBarInstall.installSuccess": "{target} installed successfully",
     "useStatusBarInstall.installFailure": "{target} installation failed: {error}",
     "useStatusBarInstall.uninstallSuccess": "{target} removed successfully",
-    "useStatusBarInstall.uninstallFailure": "{target} removal failed: {error}",
-    "useStatusBarInstall.labelAgent": "agent",
-    "useStatusBarInstall.labelSkill": "skill"
+    "useStatusBarInstall.uninstallFailure": "{target} removal failed: {error}"
   };
 });
 
@@ -22735,7 +22778,7 @@ var TOOL_TIMEOUT_POLICY = {
   pluginFactoryMs: 1e4,
   pluginStartupDefaultMs: 1e4,
   pluginStartupMaxMs: 60000,
-  pluginShutdownHandlerMs: 5000,
+  pluginRetirementDrainMs: 5000,
   pluginShutdownKillGraceMs: 1000,
   workerControlHelloMs: 60000,
   pluginUiResourceReadMs: 1e4,
@@ -25991,6 +26034,23 @@ var OFFICIAL_PACKAGE_LOCALE_SET = new Set(OFFICIAL_PACKAGE_LOCALES);
 var installedLocales = new Map;
 // src/i18n/messages/en.ts
 var en = {
+  "approvalAttribution.extensionSessionRequest": "Extension request · {extension}",
+  "appearanceTab.fontSaveFailed": "The font setting could not be loaded or saved.",
+  "appearanceTab.schemeTitle": "Color scheme",
+  "appearanceTab.schemeDescription": "One scheme sets the interface and terminal colors. System mode keeps a selection for each appearance.",
+  "appearanceTab.mode": "Appearance mode",
+  "appearanceTab.mode.system": "System",
+  "appearanceTab.mode.dark": "Dark",
+  "appearanceTab.mode.light": "Light",
+  "appearanceTab.scheme.dark": "Dark scheme",
+  "appearanceTab.scheme.light": "Light scheme",
+  "appearanceTab.terminalTitle": "Terminal font",
+  "appearanceTab.terminalFamily": "Font family",
+  "appearanceTab.terminalSize": "Size (px)",
+  "appearanceTab.terminalLineHeight": "Line height",
+  "settingsContent.search": "Search settings",
+  "settingsContent.searchEmpty": "No matching settings",
+  "settingsContent.searchCount": "{count} settings found",
   "sidebarPreview.localFile": "Local file",
   "sidebarPreview.running": "Agent responding",
   "ptyTerminal.hostChipApproval": "Host · conversation permissions",
@@ -26010,6 +26070,7 @@ var en = {
   "approvalAction.editFile": "Edit {target} file",
   "approvalAction.readFile": "Read {target} file",
   "approvalAction.outsideDirectory": "Read {target} outside scope",
+  "approvalAction.outsideDirectoryWrite": "Write {target} outside scope",
   "approvalAction.read": "Read data",
   "approvalAction.write": "Change data",
   "approvalAction.network": "Transfer network data",
@@ -26389,13 +26450,11 @@ Restore each entry from the shown quarantine path to its original path after ins
   "pluginConfigTab.protocolUpdateRepository": "Update required: get a compatible release from {source}",
   "pluginConfigTab.protocolUpdateUnavailable": "Update required: contact the extension publisher for a compatible release.",
   "pluginConfigTab.protocolUpdateButton": "Update to {version}",
-  "pluginConfigTab.doctorMigrateButton": "Migrate with AI",
   "pluginConfigTab.installFromFolder": "Install from folder…",
   "pluginConfigTab.installUnreviewedDev": "Install unreviewed (dev)",
   "pluginConfigTab.runtimeArmLabel": "Runs as",
   "pluginConfigTab.runtimeArmLine": "{arm} · {confinement}",
   "pluginConfigTab.armChild": "Separate process",
-  "pluginConfigTab.armInProcess": "Inside the app process",
   "pluginConfigTab.confinementMacosSandbox": "macOS sandbox",
   "pluginConfigTab.confinementLinuxBubblewrap": "Linux sandbox (bubblewrap)",
   "pluginConfigTab.confinementWindowsSrt": "Windows sandbox",
@@ -27502,7 +27561,8 @@ var plugin_manifest_schema_default = {
                   "id",
                   "slot",
                   "kind",
-                  "title"
+                  "title",
+                  "resourceUri"
                 ],
                 properties: {
                   id: {
@@ -27516,9 +27576,7 @@ var plugin_manifest_schema_default = {
                   },
                   kind: {
                     enum: [
-                      "embedded-module",
-                      "embedded-page",
-                      "info-card"
+                      "mcp-app"
                     ]
                   },
                   displayName: {
@@ -27533,17 +27591,13 @@ var plugin_manifest_schema_default = {
                   locales: {
                     $ref: "#/definitions/pluginUiExtensionLocales"
                   },
-                  defaults: {
-                    type: "object"
-                  },
-                  entry: {
-                    type: "string"
-                  },
-                  exportName: {
-                    type: "string"
-                  },
-                  page: {
-                    type: "string"
+                  resourceUri: {
+                    type: "string",
+                    pattern: "^ui://",
+                    maxLength: 512,
+                    not: {
+                      pattern: "[\\r\\n]"
+                    }
                   }
                 }
               },
@@ -27551,7 +27605,7 @@ var plugin_manifest_schema_default = {
             },
             uiResources: {
               type: "array",
-              description: "MCP App ui:// resources this plugin serves (distinct from `ui[]`, which declares host-mounted React sidebar panels). DECLARED POLICY, SERVED CONTENT: each entry declares a `ui://<pluginId>/<path>` uri plus that resource's OWN _meta.ui security policy (csp/permissions); the card HTML itself is served by the plugin at read time (`RuntimePlugin.readUiResource(uri)`), exactly as an external MCP server answers resources/read with bytes — the host never reads a plugin-declared disk path. When a tool result carries `_meta.ui.resourceUri` matching one of these uris, the loopback host asks the plugin for the HTML and renders it through the same sandbox-proxy + main-computed CSP path as an external MCP server's ui:// resource. Security (enforced fail-closed at serve time): the uri authority MUST equal the plugin id (own-namespace-only), the uri MUST be declared here (declared-only — this is what binds served content to a reviewed policy), and main COMPUTES the CSP header AND the frame's Permissions-Policy `allow` attribute from csp/permissions — the plugin never supplies a policy header string or an allow-list. csp/permissions stay in the manifest (not on the hook's return) so they are statically reviewable and covered by manifestSha256. See mcpUiResourcePermissions for the accepted permission set (host-honorable, proven end-to-end).",
+              description: "MCP App ui:// resources this plugin serves as interactive cards and resources placed in host panels by `ui[]`. DECLARED POLICY, SERVED CONTENT: each entry declares a `ui://<pluginId>/<path>` uri plus that resource's OWN _meta.ui security policy (csp/permissions); the card HTML itself is served by the plugin at read time (`RuntimePlugin.readUiResource(uri)`), exactly as an external MCP server answers resources/read with bytes — the host never reads a plugin-declared disk path. When a tool result carries `_meta.ui.resourceUri` matching one of these uris, the loopback host asks the plugin for the HTML and renders it through the same sandbox-proxy + main-computed CSP path as an external MCP server's ui:// resource. Security (enforced fail-closed at serve time): the uri authority MUST equal the plugin id (own-namespace-only), the uri MUST be declared here (declared-only — this is what binds served content to a reviewed policy), and main COMPUTES the CSP header AND the frame's Permissions-Policy `allow` attribute from csp/permissions — the plugin never supplies a policy header string or an allow-list. csp/permissions stay in the manifest (not on the hook's return) so they are statically reviewable and covered by manifestSha256. See mcpUiResourcePermissions for the accepted permission set (host-honorable, proven end-to-end).",
               maxItems: 64,
               items: {
                 type: "object",
@@ -27620,7 +27674,7 @@ var plugin_manifest_schema_default = {
             },
             capabilities: {
               type: "array",
-              description: "Free-form capability declarations (format-validated, NOT a closed enum). The host ENFORCES only two at runtime — 'external-auth-consumer' and 'host:overlay' (see src/plugins/capabilities.ts KNOWN_CAPABILITY_IDS). Every other string is a harmless self-declaration (strings on already-installed manifests that the host no longer reads). Kept free-form — rather than an enum — so an installed manifest declaring a removed capability still validates and loads instead of being rejected at schema validation. Emit authorization for event-source namespaces (email/calendar/meeting/index) is inferred from emittedEvents, not from a capability here. The pattern is format hygiene only (blocks uppercase/whitespace/garbage), not a vocabulary.",
+              description: "Free-form capability declarations (format-validated, NOT a closed enum). The host ENFORCES only two at runtime — 'external-auth-consumer' and 'host:overlay' (see src/plugins/capabilities.ts KNOWN_CAPABILITY_IDS). Every other string is a harmless self-declaration (strings on already-installed manifests that the host no longer reads). Kept free-form — rather than an enum — so an installed manifest declaring a removed capability still validates and loads instead of being rejected at schema validation. The pattern is format hygiene only (blocks uppercase/whitespace/garbage), not a vocabulary.",
               items: {
                 type: "string",
                 pattern: "^[a-z][a-z0-9:-]*$",
@@ -27710,72 +27764,6 @@ var plugin_manifest_schema_default = {
                   },
                   description: "Opt-in session-cookie vault: names the sub-namespace of this plugin's own auth partition (persist:plugin-auth:<pluginId>:<sub>) whose harvested session cookies the host attaches to every hostApi.hostFetch request, scoped per URL and re-scoped per redirect hop. For portals with no SSO/OAuth — where the session cookie IS the credential — this keeps the value on the host: the plugin never receives it (pair with openAuthWindow({ retainCookies: true })). A plugin that declares this must not send its own Cookie header; the host rejects such a request. Only the <sub> segment is named here, so a plugin cannot address another plugin's partition."
                 }
-              }
-            },
-            eventSubscriptions: {
-              type: "array",
-              items: {
-                oneOf: [
-                  {
-                    type: "string"
-                  },
-                  {
-                    type: "object",
-                    required: [
-                      "type"
-                    ],
-                    additionalProperties: false,
-                    properties: {
-                      type: {
-                        type: "string",
-                        minLength: 1
-                      },
-                      hint: {
-                        type: "object",
-                        required: [
-                          "category",
-                          "priority",
-                          "title"
-                        ],
-                        additionalProperties: false,
-                        properties: {
-                          category: {
-                            type: "string",
-                            enum: [
-                              "task",
-                              "note",
-                              "session",
-                              "meeting",
-                              "email",
-                              "calendar",
-                              "system"
-                            ]
-                          },
-                          priority: {
-                            type: "string",
-                            enum: [
-                              "high",
-                              "medium",
-                              "low"
-                            ]
-                          },
-                          title: {
-                            type: "string",
-                            minLength: 1
-                          }
-                        }
-                      }
-                    }
-                  }
-                ]
-              }
-            },
-            emittedEvents: {
-              type: "array",
-              description: "Event types this plugin emits.",
-              items: {
-                type: "string",
-                minLength: 1
               }
             },
             hostSecrets: {
@@ -27891,50 +27879,6 @@ var plugin_manifest_schema_default = {
                         }
                       }
                     ]
-                  }
-                }
-              }
-            },
-            workProposals: {
-              type: "object",
-              description: "Recommended-work channel declaration. Declaration IS authorization (no capability string): a plugin may post a proposal only in a kind declared here, and may hold at most ONE OPEN PROPOSAL PER DECLARED KIND — the declared list doubles as the nag ceiling. Absent or empty = the plugin may post nothing. A malformed block grants nothing rather than the entries that happened to parse.",
-              additionalProperties: false,
-              required: [
-                "kinds"
-              ],
-              properties: {
-                reasoning: {
-                  type: "string",
-                  description: "Human-readable justification surfaced to the user.",
-                  maxLength: 400
-                },
-                kinds: {
-                  type: "array",
-                  minItems: 1,
-                  maxItems: 4,
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: [
-                      "id",
-                      "label"
-                    ],
-                    properties: {
-                      id: {
-                        type: "string",
-                        description: "Slot id, unique within the plugin. Namespaced by the host as <pluginId>:<kind>.",
-                        pattern: "^[a-z][a-z0-9-]{0,31}$",
-                        not: {
-                          pattern: "[\\r\\n]"
-                        }
-                      },
-                      label: {
-                        type: "string",
-                        description: "User-facing name of the slot, shown in the install disclosure and on the card.",
-                        minLength: 1,
-                        maxLength: 60
-                      }
-                    }
                   }
                 }
               }
@@ -28113,31 +28057,9 @@ var plugin_manifest_schema_default = {
                       pluginId: {
                         type: "string",
                         minLength: 1
-                      },
-                      events: {
-                        type: "array",
-                        items: {
-                          type: "string",
-                          minLength: 1
-                        },
-                        uniqueItems: true
                       }
                     }
                   }
-                },
-                agentApprovalScopes: {
-                  type: "array",
-                  description: "§8 P0 security — approval action scopes this plugin is permitted to issue and respond to via hostApi.agentApproval. Omitted or empty array means no approval scopes allowed (host enforces empty-list semantics). Known values: 'agent_file_share', 'agent_task_delegate', 'agent_external_api_call'.",
-                  default: [],
-                  items: {
-                    type: "string",
-                    minLength: 1,
-                    pattern: "^[a-z][a-z0-9_]*$",
-                    not: {
-                      pattern: "[\\r\\n]"
-                    }
-                  },
-                  uniqueItems: true
                 }
               }
             },
@@ -28590,12 +28512,9 @@ var plugin_manifest_schema_default = {
                 routineTemplates: false,
                 capabilities: false,
                 networkAccess: false,
-                eventSubscriptions: false,
-                emittedEvents: false,
                 hostSecrets: false,
                 startupTimeoutMs: false,
                 auth: false,
-                workProposals: false,
                 alerts: false,
                 configInherits: false,
                 dependencies: false,
@@ -29074,7 +28993,7 @@ var plugin_manifest_schema_default = {
                 }
               }
             },
-            "ave/pathFields": {
+            "ai.agent-connector.ave/pathFields": {
               type: "array",
               uniqueItems: true,
               items: {
@@ -29086,8 +29005,17 @@ var plugin_manifest_schema_default = {
                 }
               }
             },
-            "ave/operationPolicy": {
+            "ai.agent-connector.ave/operationPolicy": {
               $ref: "#/definitions/pluginToolOperationPolicy"
+            }
+          }
+        },
+        annotations: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            readOnlyHint: {
+              type: "boolean"
             }
           }
         }
@@ -29133,7 +29061,7 @@ var plugin_manifest_schema_default = {
       }
     },
     mcpUiResourcePermissions: {
-      $comment: "MCP Apps spec `McpUiResourcePermissions`, restricted to what this host can DEMONSTRABLY honor. Main derives the inner iframe's Permissions-Policy `allow` attribute AND the Electron session grant from this; the plugin never supplies either. An ABSENT key is denied. The inner frame carries `allow-same-origin` (spec origin requirement, apps.mdx:474-475), so it inherits the per-server proxy origin and a delegated feature can be honored. SOT for the accepted set: src/shared/mcp-app-permissions.ts MCP_APP_PERMISSION_FEATURES, proven end-to-end in test/e2e/ui/mcp-app-permissions.spec.ts. The spec's `clipboardWrite` is deliberately NOT accepted — measured, a script-initiated clipboard write is denied even when delegated — so declaring it FAILS validation loudly rather than silently doing nothing.",
+      $comment: "MCP Apps resource permissions honored by the isolated app frame. Main derives iframe delegation and session grants from this declaration. Missing features are denied; clipboard writing requires a user action and clipboard reading is unsupported. The supported set is src/shared/mcp-app-permissions.ts, verified by test/e2e/ui/mcp-app-permissions.spec.ts.",
       type: "object",
       additionalProperties: false,
       properties: {
@@ -29150,6 +29078,11 @@ var plugin_manifest_schema_default = {
         geolocation: {
           type: "object",
           description: "Request the Geolocation API for this card's frame. Absent means denied.",
+          additionalProperties: false
+        },
+        clipboardWrite: {
+          type: "object",
+          description: "Request clipboard writing for this app frame after a user action. Clipboard reading remains denied.",
           additionalProperties: false
         }
       }
@@ -30249,7 +30182,7 @@ import { randomUUID } from "node:crypto";
 
 // src/main/storage/feature-namespace.ts
 import { randomBytes } from "node:crypto";
-import { chmodSync, constants as constants3, promises as fs, linkSync, mkdirSync as mkdirSync2, rmSync } from "node:fs";
+import { constants as constants3, promises as fs } from "node:fs";
 import { join as join7, dirname as dirname5, isAbsolute as isAbsolute5, relative as relative4, resolve as resolve7, sep as sep4 } from "node:path";
 import { platform } from "node:process";
 var log6 = createLogger("feature-namespace");
@@ -30502,7 +30435,13 @@ function windowsVolumeRoot(path) {
   }
   return win324.parse(path).root;
 }
+function isPowerShellFilesystemSyntax(path) {
+  return !path.includes(":") || /^[A-Za-z]:[\\/][^:]*$/.test(path) || /^[\\/]{2}/.test(path);
+}
 function modelShellPath(path, model) {
+  if (model.dialect === "powershell" && !isPowerShellFilesystemSyntax(path)) {
+    return { nativePath: undefined, normalizedPath: path, volumeRoot: "", floorPaths: [] };
+  }
   if (sep5 !== "\\") {
     const absolute2 = isAbsolute6(path) ? path : resolve8(model.location ?? "/", path);
     return { nativePath: absolute2, normalizedPath: normalize(absolute2), volumeRoot: parse(absolute2).root, floorPaths: [] };

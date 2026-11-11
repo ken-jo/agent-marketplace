@@ -4,7 +4,7 @@ import { flattenAgentPluginsManifest } from "@ave/plugin-contract";
 
 describe("large upload memory guard", () => {
   it("does not use whole-file WebAudio decode for >25MB uploads", () => {
-    const ui = readFileSync(new URL("../src/ui/meeting-control.js", import.meta.url), "utf8");
+    const ui = readFileSync(new URL("../src/ui/meeting-control.mjs", import.meta.url), "utf8");
 
     expect(ui).not.toContain("decodeAudioData");
     expect(ui).not.toContain("file.arrayBuffer()");

@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "mcp",
   "name": "youtube-mcp",
-  "version": "2026.10.27",
+  "version": "2026.11.6",
   "minAppVersion": "0.14.0",
   "displayName": "YouTube MCP",
   "description": "Reads YouTube video, channel, playlist and transcript data through the community server. Supply a YouTube Data API v3 key through Ave's secret prompt. Transcript availability depends on the video and service. Requires Node.js 24+ and npm; runtime artifacts and dependencies are integrity-locked.",

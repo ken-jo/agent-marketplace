@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import type { OutputOnlyPluginWorker, PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
+import type { PluginWorkerSpec, SpawnedPluginWorker } from "@ave/plugin-contract";
 
 export const FFMPEG_VENDOR_PLATFORM = `${process.platform}-${process.arch}`;
 
@@ -111,23 +111,17 @@ export async function runMediatedCommand(
   const label = run.label ?? run.command;
   if (run.signal?.aborted) throw new Error(`${label} aborted`);
 
-  let handle: OutputOnlyPluginWorker;
+  let handle: SpawnedPluginWorker;
   try {
-    // Every meeting command is output-only: raw stdout/stderr, stdin left for liveness, no control channel.
-    const spawned = await run.spawnWorker({
-      workerId: run.workerId,
+    handle = await run.spawnWorker({
       control: "output-only-v1",
+      workerId: run.workerId,
       command: run.command,
       args: [...run.args],
       env: run.env as Record<string, string | undefined> | undefined,
       allowReadPaths: [...(run.readPaths ?? [])],
       allowWritePaths: [...(run.writePaths ?? [])],
     });
-    if (spawned.control !== "output-only-v1") {
-      try { spawned.stop(); } catch { /* already gone */ }
-      throw new Error(`${label}: the host returned a '${String((spawned as { control: unknown }).control)}' worker for an output-only spec`);
-    }
-    handle = spawned;
   } catch (err) {
     throw new MediatedSpawnStartError(label, err);
   }
@@ -156,6 +150,7 @@ export async function runMediatedCommand(
       run.timeoutMs,
     );
     run.signal?.addEventListener("abort", abort, { once: true });
+    if (handle.control !== "output-only-v1") { finish(new Error("Unexpected worker control mode")); return; }
     handle.onStdout((chunk) => { stdout = `${stdout}${chunk}`.slice(-10_000); });
     handle.onStderr((chunk) => { stderr = `${stderr}${chunk}`.slice(-10_000); });
     handle.onExit(({ code }) => {
@@ -183,7 +178,7 @@ type EnsureFfmpegRuntimeOptions = {
   hostFetch: MediatedFetch;
   spawnWorker: MediatedSpawn;
   log?: (message: string) => void;
-  logEvent?: (level: "info" | "warn" | "error", message: string, data?: unknown) => void;
+  diagnostic?: (level: "info" | "warn" | "error", message: string, data?: unknown) => void;
 };
 
 type EnsureFfmpegRuntimeResult = {
@@ -338,15 +333,15 @@ async function checkFfmpegRuntime(opts: EnsureFfmpegRuntimeOptions): Promise<Ens
     return { ok: true, source: "explicit", platform: spec.platform };
   }
   if (runtimeExists(managedDir, spec)) {
-    opts.logEvent?.("info", "meeting_ffmpeg_runtime.ready", { source: "managed", platform: spec.platform });
+    opts.diagnostic?.("info", "meeting_ffmpeg_runtime.ready", { source: "managed", platform: spec.platform });
     return { ok: true, source: "managed", platform: spec.platform, binDir: join(managedDir, "bin") };
   }
   if (runtimeExists(bundledDir, spec)) {
-    opts.logEvent?.("info", "meeting_ffmpeg_runtime.ready", { source: "bundled", platform: spec.platform });
+    opts.diagnostic?.("info", "meeting_ffmpeg_runtime.ready", { source: "bundled", platform: spec.platform });
     return { ok: true, source: "bundled", platform: spec.platform, binDir: join(bundledDir, "bin") };
   }
   if (await pathRuntimeAvailable(opts.spawnWorker)) {
-    opts.logEvent?.("info", "meeting_ffmpeg_runtime.ready", { source: "path", platform: spec.platform });
+    opts.diagnostic?.("info", "meeting_ffmpeg_runtime.ready", { source: "path", platform: spec.platform });
     return { ok: true, source: "path", platform: spec.platform };
   }
 
@@ -356,14 +351,14 @@ async function checkFfmpegRuntime(opts: EnsureFfmpegRuntimeOptions): Promise<Ens
 
   const artifactUrl = runtimeArtifactUrl(spec);
   opts.log?.(`[meeting] installing FFmpeg runtime for ${spec.platform}`);
-  opts.logEvent?.("info", "meeting_ffmpeg_runtime.download_start", {
+  opts.diagnostic?.("info", "meeting_ffmpeg_runtime.download_start", {
     platform: spec.platform,
     source: spec.source,
   });
 
   await installRuntime(opts, spec, artifactUrl, managedDir);
 
-  opts.logEvent?.("info", "meeting_ffmpeg_runtime.download_done", {
+  opts.diagnostic?.("info", "meeting_ffmpeg_runtime.download_done", {
     platform: spec.platform,
     source: spec.source,
     binDir: join(managedDir, "bin"),

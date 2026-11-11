@@ -1,3 +1,4 @@
+import { ChangeStream } from "../src/changeStream.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -323,7 +324,7 @@ vi.mock("../src/localIndexerPlugin.js", () => {
   return { LocalIndexerPlugin };
 });
 
-import createPlugin from "../src/hostPlugin.js";
+import createPlugin, { MAX_PREVIEW_ENTRIES } from "../src/hostPlugin.js";
 
 /**
  * The home the fixture TELLS the plugin about — which is no longer the real
@@ -335,10 +336,14 @@ function fixtureUserHome(hostRoot) {
   return join(hostRoot, "user-home");
 }
 
+const publishChange = ChangeStream.prototype.publish;
+
 function makeContext(hostRoot, config = {}, options = {}) {
+  vi.restoreAllMocks();
   const events = [];
   const logs = [];
-  const shutdownHandlers = [];
+  vi.spyOn(ChangeStream.prototype, "publish").mockImplementation(function (kind, payload) { publishChange.call(this, kind, payload); events.push([kind, payload]); });
+  const auditSpy = vi.spyOn(console, "error").mockImplementation((level, msg, data) => logs.push([`${level}:${msg}`, data]));
   const ctx = {
     pluginId: "local-indexer",
     pluginRoot: hostRoot,
@@ -357,14 +362,10 @@ function makeContext(hostRoot, config = {}, options = {}) {
     userHome: options.userHome ?? fixtureUserHome(hostRoot),
     aveHome: options.aveHome ?? join(fixtureUserHome(hostRoot), ".ave"),
     config,
-    log: vi.fn(),
+    stderr: auditSpy,
     hostApi: {
       pickFolders: pickFoldersMock,
-      emitEvent: vi.fn((type, data) => {
-        events.push([type, data]);
-      }),
       raiseAlert: vi.fn(async () => ({ status: "disabled_by_user" as const })),
-      onEvent: vi.fn(),
       addTask: vi.fn(),
       saveNote: vi.fn(),
       // Per SDK PluginHostApi: `config.{get,set,onChange}` is a required
@@ -386,12 +387,10 @@ function makeContext(hostRoot, config = {}, options = {}) {
         ok: true, exposure: "lease", leaseId: "lease-test", vendor: "openai",
         release: async () => {}, onClosed: () => () => {},
       })),
-      logEvent: vi.fn((level, msg, data) => logs.push([`${level}:${msg}`, data])),
-      onShutdown: vi.fn((handler) => shutdownHandlers.push(handler)),
       hostFetch: vi.fn(async () => new Response("{}", { status: 200 })),
     },
   };
-  return { ctx, events, logs, shutdownHandlers };
+  return { ctx, events, logs };
 }
 
 function latestEgressChannels() {
@@ -460,14 +459,14 @@ describe("hostPlugin createPlugin", () => {
 
   afterEach(async () => {
     await rm(hostRoot, { recursive: true, force: true });
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
-  it("registers the shutdown hook and exposes public methods", async () => {
-    const { ctx, shutdownHandlers } = makeContext(hostRoot);
+  it("exposes lifecycle methods without host shutdown registration", async () => {
+    const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
 
-    expect(shutdownHandlers.length).toBe(1);
     expect(typeof plugin.start).toBe("function");
     expect(typeof plugin.onPublished).toBe("function");
     expect(typeof plugin.stop).toBe("function");
@@ -480,10 +479,24 @@ describe("hostPlugin createPlugin", () => {
     expect(folderAutoIndexerStopMock).not.toHaveBeenCalled();
 
     await plugin.onPublished?.();
-    expect(ctx.log).toHaveBeenCalledWith("local-indexer plugin started");
+    expect(ctx.stderr).toHaveBeenCalledWith("local-indexer plugin started");
 
     await plugin.stop();
-    expect(ctx.log).toHaveBeenCalledWith("local-indexer plugin stopped");
+    expect(ctx.stderr).toHaveBeenCalledWith("local-indexer plugin stopped");
+  });
+
+  it("delivers scan invalidations through the app-only wait and releases it on stop", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const initial = await plugin.handlers.index_wait_changes({ cursor: "", waitMs: 0 });
+    const pending = plugin.handlers.index_wait_changes({ cursor: initial.cursor, waitMs: 10000 });
+    await plugin.handlers.index_scan();
+    const changed = await pending;
+    const remaining = await plugin.handlers.index_wait_changes({ cursor: changed.cursor, waitMs: 0 });
+    expect([...changed.changes, ...remaining.changes].some(c => c.kind === "index.scan.progress")).toBe(true);
+    const waiting = plugin.handlers.index_wait_changes({ cursor: remaining.cursor, waitMs: 10000 });
+    await plugin.stop();
+    expect(await waiting).toMatchObject({ closed: true });
   });
 
   it("single-flights concurrent post-publication startup", async () => {
@@ -620,24 +633,24 @@ describe("hostPlugin createPlugin", () => {
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
     expect(logs).toContainEqual([
       "warn:local_indexer.startup_warmup_failed",
-      { error: warmupError.message },
+      { error: { name: "Error" } },
     ]);
   });
 
-  it("shares teardown between concurrent stop and shutdown calls", async () => {
+  it("shares teardown between concurrent stop calls", async () => {
     let releaseStartup!: () => void;
     const startupGate = new Promise<void>((resolve) => {
       releaseStartup = resolve;
     });
     localIndexerStartMock.mockImplementationOnce(() => startupGate);
-    const { ctx, shutdownHandlers } = makeContext(hostRoot);
+    const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
 
     const publishing = plugin.onPublished?.();
     await vi.waitFor(() => expect(localIndexerStartMock).toHaveBeenCalledTimes(1));
     const folderStopsBeforeTeardown = folderAutoIndexerStopMock.mock.calls.length;
     const stopping = plugin.stop();
-    const shuttingDown = shutdownHandlers[0]();
+    const shuttingDown = plugin.stop();
 
     releaseStartup();
     await Promise.all([publishing, stopping, shuttingDown]);
@@ -689,14 +702,14 @@ describe("hostPlugin createPlugin", () => {
   });
 
   it("makes repeated teardown idempotent", async () => {
-    const { ctx, shutdownHandlers } = makeContext(hostRoot);
+    const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
     await plugin.onPublished?.();
     const folderStopsBeforeTeardown = folderAutoIndexerStopMock.mock.calls.length;
 
     await plugin.stop();
     await plugin.stop();
-    await shutdownHandlers[0]();
+    await plugin.stop();
 
     expect(folderAutoIndexerStopMock).toHaveBeenCalledTimes(folderStopsBeforeTeardown + 1);
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
@@ -704,7 +717,7 @@ describe("hostPlugin createPlugin", () => {
 
   it("shares and preserves a teardown rejection without retrying components", async () => {
     const stopError = new Error("worker shutdown failed");
-    const { ctx, logs, shutdownHandlers } = makeContext(hostRoot);
+    const { ctx, logs } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
     await plugin.onPublished?.();
     const folderStopsBeforeTeardown = folderAutoIndexerStopMock.mock.calls.length;
@@ -714,14 +727,10 @@ describe("hostPlugin createPlugin", () => {
     const secondStop = plugin.stop();
     await expect(firstStop).rejects.toBe(stopError);
     await expect(secondStop).rejects.toBe(stopError);
-    await expect(shutdownHandlers[0]()).resolves.toBeUndefined();
+    await expect(plugin.stop()).rejects.toBe(stopError);
 
     expect(folderAutoIndexerStopMock).toHaveBeenCalledTimes(folderStopsBeforeTeardown + 1);
     expect(localIndexerStopMock).toHaveBeenCalledTimes(1);
-    expect(logs).toContainEqual([
-      "error:local_indexer.shutdown.failed",
-      { error: stopError.message },
-    ]);
   });
 
   it("preserves both component failures in an aggregate teardown error", async () => {
@@ -847,6 +856,72 @@ describe("hostPlugin createPlugin", () => {
     expect(status.warnings).toEqual([]);
   });
 
+  it("SSRF-guard rejections log the endpoint host only, never userinfo or path", async () => {
+    const { ctx } = makeContext(hostRoot, {}, {
+      pluginDataDir: hostRoot,
+      configValues: {
+        embeddingProvider: "openai",
+        embeddingEndpoint: "http://user:pass@evil.example/tenant/v1",
+        imageCaptionProvider: "openai",
+        imageCaptionEndpoint: "user:pass tenant not a url",
+      },
+    });
+    const plugin = await createPlugin(ctx);
+    await plugin.handlers.index_scan_status();
+    const calls = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls;
+    const embedding = calls.find(([, event]) => event === "embeddingEndpoint rejected by SSRF guard");
+    expect(embedding?.[2]).toMatchObject({ endpointHost: "evil.example" });
+    expect(embedding?.[2]).not.toHaveProperty("value");
+    const caption = calls.find(([, event]) => event === "imageCaptionEndpoint rejected by SSRF guard");
+    expect(caption?.[2]).toMatchObject({ parsable: false });
+    const written = JSON.stringify(calls);
+    for (const secret of ["user", "pass", "tenant"]) expect(written).not.toContain(secret);
+    await plugin.stop();
+  });
+
+  it("host stderr never echoes worker lines or fs error messages that carry paths", async () => {
+    const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
+    const plugin = await createPlugin(ctx);
+    const stderr = ctx.stderr as ReturnType<typeof vi.fn>;
+    const secretPath = join(fixtureUserHome(hostRoot), "Documents", "empty.pdf");
+    stderr.mockClear();
+
+    // A parsed worker event: the warning channel still sees the path.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(
+      JSON.stringify({ event: "indexer.file.empty", level: "info", doc_id: "d1", path: secretPath, error: `empty: ${secretPath}`, chunks: 0 }),
+    );
+    // An unparsed line, as a Python traceback prints it.
+    localIndexerPluginInstances.at(-1)?.opts.onWorkerStderr(`  File "${secretPath}", line 12, in parse`);
+    const status = await plugin.handlers.index_scan_status();
+    expect(status.warnings).toHaveLength(1);
+    expect(status.warnings[0]).toMatchObject({ kind: "file.empty", path: secretPath });
+
+    // An fs error whose message embeds a path: the settings file is a directory.
+    await mkdir(join(hostRoot, "image-embedding-settings.json"), { recursive: true });
+    await writeFile(join(hostRoot, "image-embedding-settings.json", "x"), "x");
+    await expect(
+      plugin.handlers.index_set_image_embedding({ enabled: true, mode: "cloud" }),
+    ).rejects.toThrow(hostRoot);
+
+    const calls = stderr.mock.calls.map(([level, event, fields]) => ({ level, event, fields }));
+    expect(calls).toContainEqual({
+      level: "info",
+      event: "local_indexer.worker.event",
+      fields: { event: "indexer.file.empty", level: "info", doc_id: "d1", chunks: 0 },
+    });
+    expect(calls).toContainEqual({
+      level: "info",
+      event: "local_indexer.worker.unparsed_line",
+      fields: { length: `  File "${secretPath}", line 12, in parse`.length },
+    });
+    const writeFailed = calls.find((c) => c.event === "image_settings.write_failed");
+    expect(writeFailed?.fields.error).toMatchObject({ name: "Error", code: expect.any(String) });
+    const written = JSON.stringify(stderr.mock.calls);
+    expect(written).not.toContain(hostRoot);
+    expect(written).not.toContain("empty.pdf");
+    await plugin.stop();
+  });
+
   describe("0.8.0 index location rebuild", () => {
     async function legacyIndexFixture(): Promise<string> {
       const legacy = join(hostRoot, "index");
@@ -949,9 +1024,9 @@ describe("hostPlugin createPlugin", () => {
       expect(notices).toHaveLength(2);
       expect(notices[0]).toMatch(/전체 재인덱싱/);
       expect(notices[1]).toMatch(/재구축 완료/);
-      const migrationEvents = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls
+      const migrationEvents = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
         .map(([, event]: [string, string]) => event)
-        .filter((event: string) => event.startsWith("local_indexer.index_migration."));
+        .filter((event: string) => typeof event === "string" && event.startsWith("local_indexer.index_migration."));
       expect(migrationEvents).toEqual([
         "local_indexer.index_migration.manifest",
         "local_indexer.index_migration.rebuilding",
@@ -1112,7 +1187,7 @@ describe("hostPlugin createPlugin", () => {
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
       expect((await settledMigration(plugin)).phase).toBe("completed");
-      const events = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      const events = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
       expect(events.filter((e: string) => e === "local_indexer.index_migration.copy_torn")).toHaveLength(1);
       await plugin.stop();
     });
@@ -1224,6 +1299,11 @@ describe("hostPlugin createPlugin", () => {
       const status = await settledMigration(plugin);
       expect(status.phase).toBe("kept-old");
       expect(status.reason).toMatch(/the rebuild scan failed: .*embeddingEndpoint/);
+      const keptLog = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .find(([, event]) => event === "local_indexer.index_migration.kept-old")?.[2];
+      expect(keptLog?.reason).toMatch(/^the rebuild scan failed: \w+/);
+      expect(keptLog?.reason).not.toContain("embeddingEndpoint");
+      expect(JSON.stringify(keptLog)).not.toContain(hostRoot);
       expect(status.coverage).toBeUndefined();
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await plugin.stop();
@@ -1305,14 +1385,23 @@ describe("hostPlugin createPlugin", () => {
     it("keeps the old index when the old index cannot be read", async () => {
       const legacy = await legacyIndexFixture();
       await savedFolders();
-      legacyIndexManifestMock.mockRejectedValueOnce(new Error("database disk image is malformed"));
+      const corruptAt = join(legacy, "fts5.sqlite");
+      legacyIndexManifestMock.mockRejectedValueOnce(
+        Object.assign(new Error(`database disk image is malformed: ${corruptAt}`), { code: "SQLITE_CORRUPT" }),
+      );
       const { ctx } = makeContext(hostRoot, {}, { pluginDataDir: hostRoot });
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
 
       const status = await settledMigration(plugin);
       expect(status).toMatchObject({ phase: "kept-old", attempt: 1 });
+      // The caller keeps the full cause; the stderr diagnostic names only the error.
       expect(status.reason).toMatch(/old index could not be read: database disk image is malformed/);
+      expect(status.reason).toContain(corruptAt);
+      const keptLog = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
+        .find(([, event]) => event === "local_indexer.index_migration.kept-old")?.[2];
+      expect(keptLog?.reason).toBe("the old index could not be read: Error (SQLITE_CORRUPT)");
+      expect(JSON.stringify(keptLog)).not.toContain(hostRoot);
       expect((await stat(join(legacy, "fts5.sqlite"))).isFile()).toBe(true);
       await expect(stat(manifestCopyDir())).rejects.toMatchObject({ code: "ENOENT" });
       await plugin.stop();
@@ -1334,10 +1423,11 @@ describe("hostPlugin createPlugin", () => {
       const plugin = await createPlugin(ctx);
       await plugin.onPublished?.();
       await settledMigration(plugin);
-      const targets = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls
+      const targets = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls
         .filter(([, event]: [string, string]) => event === "index_scan.target_folders")
         .map(([, , fields]: [string, string, any]) => fields);
-      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: [docs, mount] });
+      expect(targets.at(0)).toMatchObject({ total: 2, pending: 1, scanning: 2 });
+      expect(JSON.stringify(targets.at(0))).not.toContain(hostRoot);
       await plugin.stop();
     });
 
@@ -1356,12 +1446,12 @@ describe("hostPlugin createPlugin", () => {
       });
       await expect(stat(legacy)).rejects.toMatchObject({ code: "ENOENT" });
       await expect(stat(ledgerPath())).rejects.toMatchObject({ code: "ENOENT" });
-      const events = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      const events = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
       expect(events).toContain("local_indexer.index_migration.manual_retry");
       // Once the old index is gone, another manual scan starts no rebuild.
       await plugin.handlers.index_scan();
       await new Promise((r) => setTimeout(r, 20));
-      const after = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      const after = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
       expect(after.filter((e: string) => e === "local_indexer.index_migration.rebuilding")).toHaveLength(1);
       expect(after.filter((e: string) => e === "local_indexer.index_migration.manual_retry")).toHaveLength(1);
       await plugin.stop();
@@ -1377,7 +1467,7 @@ describe("hostPlugin createPlugin", () => {
       await rm(legacy, { recursive: true, force: true }); // the user followed the banner
       await plugin.handlers.index_scan();
       await new Promise((r) => setTimeout(r, 20));
-      const events = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
+      const events = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.map(([, e]: [string, string]) => e);
       expect(events).toContain("local_indexer.index_migration.manual_retry");
       expect(events).not.toContain("local_indexer.index_migration.rebuilding");
       // The stale "kept the old index" status goes with it.
@@ -1577,6 +1667,28 @@ describe("hostPlugin createPlugin", () => {
     });
   });
 
+  it("a model-started single-folder refresh wakes app change waits", async () => {
+    const workspace = join(hostRoot, ".local-indexer-workspace");
+    const folder = join(hostRoot, "model-refresh");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "new.md"), "A model requested this refresh.", "utf-8");
+    await writeFile(join(workspace, "folders.json"), JSON.stringify({ folders: [folder] }), "utf-8");
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    try {
+      await plugin.onPublished?.();
+      const initial = await plugin.handlers.index_wait_changes({ cursor: "", waitMs: 0 });
+      const waiting = plugin.handlers.index_wait_changes({ cursor: initial.cursor, waitMs: 10000 });
+      // Invoke the public server tool directly, without any panel button reload.
+      const result = await plugin.handlers.index_scan({ folder });
+      expect(result.indexed).toBe(1);
+      const wake = await waiting;
+      const remaining = await plugin.handlers.index_wait_changes({ cursor: wake.cursor, waitMs: 0 });
+      expect([...wake.changes, ...remaining.changes]).toContainEqual({ kind: "index.document.updated" });
+    } finally { await plugin.stop(); }
+  });
+
   it("index_folders add blocks sensitive paths", async () => {
     const { ctx } = makeContext(hostRoot);
     const plugin = await createPlugin(ctx);
@@ -1650,6 +1762,78 @@ describe("hostPlugin createPlugin", () => {
       expect(String(changed.at(-1)?.[1]?.message ?? "")).toContain("문서 1개 삭제");
     } finally {
       await rm(safeDir, { recursive: true, force: true });
+    }
+  });
+
+  it("index_folders expands ~/ against userHome, not pluginRoot, and refuses relative / ~user forms", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const documents = join(fixtureUserHome(hostRoot), "Documents");
+    await mkdir(documents, { recursive: true });
+    const foldersJson = join(hostRoot, "plugin-data", ".local-indexer-workspace", "folders.json");
+    try {
+      const addRes = await plugin.handlers.index_folders({ action: "add", folder: "~/Documents" });
+      expect(addRes.added).toBe(true);
+      expect(addRes.folders).toContain(documents);
+      const saved = JSON.parse(await readFile(foldersJson, "utf-8"));
+      expect(saved.folders).toContain(documents);
+      // Nothing may land under the child's cwd (pluginRoot) as a literal `~` segment.
+      expect(saved.folders.filter((f) => f.split(/[\\/]/).includes("~"))).toEqual([]);
+
+      const preview = await plugin.handlers.index_preview_folder({ folder: "~/Documents" });
+      expect(preview.folder).toBe(documents);
+      expect(preview.error).toBeUndefined();
+
+      await expect(
+        plugin.handlers.index_folders({ action: "add", folder: "./Documents" }),
+      ).rejects.toThrow(/상대 경로/);
+      await expect(
+        plugin.handlers.index_folders({ action: "add", folder: "~other/Documents" }),
+      ).rejects.toThrow(/~user/);
+      // The refresh body (index_scan {folder}) must look up the same expanded path.
+      await writeFile(join(documents, "note.md"), "refresh through ~/", "utf-8");
+      indexDocumentMock.mockClear();
+      const refreshed = await plugin.handlers.index_scan({ folder: "~/Documents" });
+      expect(refreshed.folder).toBe(documents);
+      expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(documents, "note.md")]);
+
+      const relPreview = await plugin.handlers.index_preview_folder({ folder: "./Documents" });
+      expect(relPreview.error).toMatch(/상대 경로/);
+
+      const batch = await plugin.handlers.index_folders({
+        action: "add",
+        folders: ["./Documents", "~other/x"],
+      });
+      expect(batch.added).toEqual([]);
+      expect(batch.failures.map((f) => f.folder)).toEqual(["./Documents", "~other/x"]);
+
+      const rmRes = await plugin.handlers.index_folders({ action: "remove", folder: "~/Documents" });
+      expect(rmRes.removed).toBe(true);
+      expect(rmRes.folders).not.toContain(documents);
+    } finally {
+      await plugin.stop();
+    }
+  });
+
+  it("index_scan paths expands ~/ per entry and blocks relative / ~user entries without dropping the rest", async () => {
+    const { ctx, logs } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const drops = join(fixtureUserHome(hostRoot), "Drops");
+    await mkdir(drops, { recursive: true });
+    await writeFile(join(drops, "dropped.md"), "dropped through ~/", "utf-8");
+    try {
+      const res = await plugin.handlers.index_scan({ paths: ["./rel.md", "~/Drops", "~other/x", "rel-bare.md"] });
+      expect(res.indexed).toBe(1);
+      expect(indexDocumentMock.mock.calls.map((call) => call[0])).toEqual([join(drops, "dropped.md")]);
+      // The diagnostic carries a count and the distinct path-free reasons only.
+      const skipped = logs.find(([key]) => key === "warn:document_index_scan.blocked_paths_skipped");
+      expect(skipped?.[1]).toEqual({ count: 3, reasons: ["relative path", "~user form"] });
+      const logged = JSON.stringify(skipped?.[1]);
+      for (const leaked of ["./rel.md", "~other/x", "rel-bare.md", hostRoot, fixtureUserHome(hostRoot)]) {
+        expect(logged).not.toContain(leaked);
+      }
+    } finally {
+      await plugin.stop();
     }
   });
 
@@ -2015,9 +2199,48 @@ describe("hostPlugin createPlugin", () => {
     const res = await plugin.handlers.index_preview_folder({ folder });
     expect(res.folder).toBe(folder);
     expect(res.total).toBe(3);
+    expect(res.truncated).toBe(false);
     expect(res.byType).toMatchObject({ pdf: 2, md: 1 });
     expect(Array.isArray(res.sample)).toBe(true);
     expect(res.sample.length).toBeGreaterThan(0);
+    expect(res.error).toBeUndefined();
+  });
+
+  it("index_preview_folder blocks other users' homes before filesystem access", async () => {
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const target = process.platform === "win32"
+      ? join(hostRoot, "other-user", "documents")
+      : "/Users/another-user/documents";
+    const fs = await import("node:fs/promises");
+    const statSpy = vi.spyOn(fs, "stat");
+    const lstatSpy = vi.spyOn(fs, "lstat");
+    const openSpy = vi.spyOn(fs, "opendir");
+    const res = await plugin.handlers.index_preview_folder({ folder: target });
+    expect(res).toEqual({
+      folder: target, total: 0, byType: {}, sample: [],
+      error: `보안: 다른 사용자 홈 디렉터리는 인덱싱 폴더로 추가할 수 없습니다: ${target}`,
+    });
+    expect(statSpy).not.toHaveBeenCalledWith(target);
+    expect(lstatSpy).not.toHaveBeenCalledWith(target);
+    expect(openSpy).not.toHaveBeenCalledWith(target);
+  });
+
+  it.each([false, true])("index_preview_folder bounds nested traversal, including hidden entries (%s)", async (hidden) => {
+    const folder = join(hostRoot, "bounded-preview");
+    await mkdir(folder);
+    // Nest the files so the budget must be shared across recursive calls.
+    const nested = join(folder, "nested");
+    await mkdir(nested);
+    await Promise.all(Array.from({ length: MAX_PREVIEW_ENTRIES }, (_, i) =>
+      writeFile(join(nested, `${hidden ? "." : ""}file-${i}.md`), "# sample")));
+    const { ctx } = makeContext(hostRoot);
+    const plugin = await createPlugin(ctx);
+    const res = await plugin.handlers.index_preview_folder({ folder });
+    expect(res.truncated).toBe(true);
+    expect(res.total).toBe(hidden ? 0 : MAX_PREVIEW_ENTRIES - 1);
+    expect(res.byType).toEqual(hidden ? {} : { md: MAX_PREVIEW_ENTRIES - 1 });
+    expect(res.sample).toHaveLength(hidden ? 0 : 5);
     expect(res.error).toBeUndefined();
   });
 
@@ -2815,7 +3038,7 @@ describe("hostPlugin createPlugin", () => {
         "",
         "",
       );
-      const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      const keyCaptureLogs = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
       );
       expect(keyCaptureLogs.at(-1)?.[2]).toMatchObject({ hasCaptionKey: false });
@@ -2869,7 +3092,7 @@ describe("hostPlugin createPlugin", () => {
       expect(res).toHaveProperty("indexed");
 
       // Verify key_capture event was emitted with vendor and key presence.
-      const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      const keyCaptureLogs = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
       );
       expect(keyCaptureLogs.length).toBeGreaterThan(0);
@@ -2944,7 +3167,7 @@ describe("hostPlugin createPlugin", () => {
 
       await plugin.handlers.index_scan();
 
-      const keyCaptureLogs = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.filter(
+      const keyCaptureLogs = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.filter(
         ([_level, event]: [string, string]) => event === "index_scan.key_capture",
       );
       expect(keyCaptureLogs.length).toBeGreaterThan(0);
@@ -3194,7 +3417,7 @@ describe("hostPlugin createPlugin", () => {
       expect(healed).not.toContain("/tmp/failed.md");
       // 1 drifted + 55 embed_failed (one shared) = 56; 50 healed, 6 next cycle.
       await vi.waitFor(() => {
-        const done = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.find(
+        const done = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.find(
           ([, event]: [string, string]) => event === "local_indexer.reconcile_healed",
         );
         expect(done?.[2]).toMatchObject({ healed: 50, remaining: 6 });
@@ -3225,7 +3448,7 @@ describe("hostPlugin createPlugin", () => {
       await plugin.handlers.index_scan();
       let done: any;
       await vi.waitFor(() => {
-        done = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.find(
+        done = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.find(
           ([, event]: [string, string]) => event === "local_indexer.reconcile_healed",
         );
         expect(done).toBeTruthy();
@@ -3274,7 +3497,7 @@ describe("hostPlugin createPlugin", () => {
       try { await plugin.handlers.index_scan(); } catch { /* expected: no key */ }
       await vi.waitFor(() => expect(reconcileMock).toHaveBeenCalled(), { timeout: 3000 });
       await vi.waitFor(() => {
-        const deferred = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.find(
+        const deferred = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.find(
           ([, event]: [string, string]) => event === "local_indexer.reconcile_heal_deferred",
         );
         expect(deferred?.[2]).toMatchObject({ drifted: 0, embedFailed: 1 });
@@ -3337,7 +3560,7 @@ describe("hostPlugin createPlugin", () => {
       );
       // Detect ran (key-free), but heal is deferred — no reindex without a key.
       expect(reindexMock).not.toHaveBeenCalled();
-      const logged = (ctx.hostApi.logEvent as ReturnType<typeof vi.fn>).mock.calls.some(
+      const logged = (ctx.stderr as ReturnType<typeof vi.fn>).mock.calls.some(
         ([, event]: [string, string]) => event === "local_indexer.reconcile_heal_deferred",
       );
       expect(logged).toBe(true);

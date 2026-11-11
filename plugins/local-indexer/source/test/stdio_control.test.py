@@ -140,7 +140,7 @@ def test_cancel_withdraws_a_running_request_which_is_still_answered() -> None:
         await hello(host)
         host.send({"jsonrpc": "2.0", "id": 5, "method": "hang"})
         await started.wait()
-        host.send({"jsonrpc": "2.0", "method": "$/ave/cancel", "params": {"id": 5}})
+        host.send({"jsonrpc": "2.0", "method": "$/ai.agent-connector.ave/cancel", "params": {"id": 5}})
         answer = await asyncio.to_thread(host.recv)
         assert answer == {"jsonrpc": "2.0", "id": 5, "error": {"code": -32800, "message": "request cancelled"}}
         assert finished.is_set()
@@ -220,7 +220,7 @@ def test_a_timed_out_worker_request_is_cancelled_and_keeps_its_slot_until_answer
             await asyncio.to_thread(peer.request_blocking, "egress_embedding", {}, 0.2)
         request = await asyncio.to_thread(host.recv)
         cancel = await asyncio.to_thread(host.recv)
-        assert cancel == {"jsonrpc": "2.0", "method": "$/ave/cancel", "params": {"id": request["id"]}}
+        assert cancel == {"jsonrpc": "2.0", "method": "$/ai.agent-connector.ave/cancel", "params": {"id": request["id"]}}
         assert len(peer._pending) == 1  # still counted until the plugin answers
         host.send({"jsonrpc": "2.0", "id": request["id"], "error": {"code": -32800, "message": "cancelled"}})
         for _ in range(50):
@@ -264,7 +264,7 @@ def test_at_most_64_worker_requests_are_outstanding() -> None:
 def test_shutdown_closes_the_channel() -> None:
     async def scenario(peer: sc.StdioPeer, host: Host) -> None:
         await hello(host)
-        host.send({"jsonrpc": "2.0", "method": "$/ave/shutdown"})
+        host.send({"jsonrpc": "2.0", "method": "$/ai.agent-connector.ave/shutdown"})
         assert await peer.wait_closed() == "shutdown"
 
     run(scenario)
@@ -338,7 +338,7 @@ def test_encode_frame_counts_utf8_bytes() -> None:
 
 def test_method_names_follow_the_contract() -> None:
     peer = sc.StdioPeer(read_fd=0, write_fd=1)
-    for bad in ("search.bm25", "search/bm25", "$/ave/x", "1abc", "a" * 129):
+    for bad in ("search.bm25", "search/bm25", "$/ai.agent-connector.ave/x", "1abc", "a" * 129):
         with pytest.raises(ValueError):
             peer.register(bad, lambda _p: None)  # type: ignore[arg-type,return-value]
     peer.register("search_bm25", lambda _p: None)  # type: ignore[arg-type,return-value]
@@ -397,7 +397,7 @@ def test_one_deadline_covers_the_slot_wait_and_the_answer() -> None:
         elapsed = loop.time() - started
         assert 0.9 <= elapsed < 1.4, elapsed
         cancel = await asyncio.to_thread(host.recv)
-        assert cancel == {"jsonrpc": "2.0", "method": "$/ave/cancel", "params": {"id": sent["id"]}}
+        assert cancel == {"jsonrpc": "2.0", "method": "$/ai.agent-connector.ave/cancel", "params": {"id": sent["id"]}}
         for frame in seen[1:] + [sent]:
             host.send({"jsonrpc": "2.0", "id": frame["id"], "result": {"status": 200}})
         await asyncio.gather(*held)
