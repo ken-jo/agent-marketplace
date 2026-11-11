@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "your-plugin-id",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Ave 익스텐션 템플릿입니다. 새 익스텐션을 만들 때 id/name/description/tools를 실제 기능에 맞게 바꾸고, 각 tool은 tools 배열 안에서 사용 시기·사용하지 말아야 할 경우·입력 스키마·반환 형태를 갖춘 MCP Tool 객체로 선언하세요. 파일 인자가 있으면 해당 tool의 _meta[\"ave/pathFields\"]에 선언하세요. (category는 호스트가 직접 분류하므로 선언하지 않습니다)",
   "extensions": {
     "ai.agent-connector.ave": {
@@ -28,7 +28,7 @@
         }
       },
       "requires": {
-        "minAppVersion": "0.14.2",
+        "minAppVersion": "0.15.0",
         "hostProtocol": "5"
       }
     }

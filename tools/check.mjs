@@ -30,6 +30,7 @@ import { checkVendored } from "./vendor.mjs";
 import { checkMarketplaceRepository } from "./vendor/marketplace-check.js";
 import {
   ALERTS_RELEASE_VERSION,
+  PROTOCOL_5_RELEASE_VERSION,
   AVE_EXTENSION,
   DESCRIPTOR,
   INDEX_PATH,
@@ -112,6 +113,10 @@ function checkOfficialPlugins(problems) {
     const manifest = readJson(manifestPath);
     const pkg = readJson(`${dir}/source/package.json`);
     const ave = manifest.extensions?.[AVE_EXTENSION] ?? {};
+    if (ave.requires?.hostProtocol === "5" && typeof ave.requires.minAppVersion === "string"
+      && compareVersions(ave.requires.minAppVersion, PROTOCOL_5_RELEASE_VERSION) < 0) {
+      problems.push(`${subject}: ${manifestPath}: protocol-5 sources require minAppVersion ${PROTOCOL_5_RELEASE_VERSION} or later`);
+    }
     if (manifest.name !== name) problems.push(`${subject}: ${manifestPath} names it ${manifest.name}; the directory must carry the plugin name`);
     if (manifest.version !== pkg.version) problems.push(`${subject}: plugin.json ${manifest.version} and package.json ${pkg.version} must carry one version`);
     if (descriptor && compareVersions(manifest.version, descriptor.version) < 0) {

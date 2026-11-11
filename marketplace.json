@@ -6348,40 +6348,6 @@
       ]
     },
     {
-      "kind": "language",
-      "name": "korean",
-      "path": "languages/korean",
-      "displayName": "한국어 (Korean)",
-      "description": "Korean interface translation for Ave 0.14.2 and later.",
-      "latest": "1.0.8",
-      "versions": [
-        {
-          "version": "1.0.8",
-          "commit": "6fffccef92ad6f8ad981dd2fe5e4f2436d66cfe0",
-          "minAppVersion": "0.14.2",
-          "publishedAt": "2026-11-06T12:57:14Z"
-        },
-        {
-          "version": "1.0.7",
-          "commit": "63f8b87c5708e0bfd3246ccc56a67202c68721f2",
-          "minAppVersion": "0.14.2",
-          "publishedAt": "2026-11-06T09:30:59Z"
-        },
-        {
-          "version": "1.0.6",
-          "commit": "78885672f3528c658cbe9b40c3378c48952d8910",
-          "minAppVersion": "0.14.2",
-          "publishedAt": "2026-11-06T09:30:45Z"
-        },
-        {
-          "version": "1.0.5",
-          "commit": "da967fd711732bafa97be140f0f2f78da334f715",
-          "minAppVersion": "0.14.0",
-          "publishedAt": "2026-10-16T07:19:56Z"
-        }
-      ]
-    },
-    {
       "kind": "provider",
       "name": "aihubmix",
       "path": "providers/aihubmix",

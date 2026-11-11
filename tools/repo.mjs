@@ -26,6 +26,8 @@ export const WITHDRAWN_PATH = "tools/withdrawn.json";
 export const AVE_EXTENSION = "ai.agent-connector.ave";
 /** First stable app release with the full alerts contract. */
 export const ALERTS_RELEASE_VERSION = "0.11.0";
+/** First released app with protocol 5; new extension sources must use this floor. */
+export const PROTOCOL_5_RELEASE_VERSION = "0.15.0";
 /** The manifest fields a descriptor copies as the plugin's authority (design §5.2). */
 export const AUTHORITY_FIELDS = ["capabilities", "networkAccess", "hostSecrets", "pluginAccess", "auth", "requires", "dependencies", "sandbox"];
 
@@ -223,10 +225,10 @@ export function isPrerelease(version) {
 }
 
 /**
- * The host protocol an app line serves, newest first: 0.12.x and 0.13.x serve
- * protocol 2, Ave 0.14.0 serves protocol 3, and Ave 0.14.2 and later serve
- * protocol 5 (the app's `HOST_PROTOCOL_FIRST_APP_VERSION`). A plugin's
- * `minAppVersion` picks the protocol it must declare; below 0.12.0 there was none.
+ * Historical marketplace authority, including immutable releases that declared
+ * protocol 5 at 0.14.2 before the app's release floor was corrected. Keep these
+ * pins readable; checkOfficialPlugins enforces PROTOCOL_5_RELEASE_VERSION for
+ * new sources. Below 0.12.0 there was no protocol declaration.
  */
 export const HOST_PROTOCOL_FLOORS = Object.freeze([["0.14.2", "5"], ["0.14.0", "3"], ["0.12.0", "2"]]);
 

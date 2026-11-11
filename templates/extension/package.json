@@ -1,6 +1,6 @@
 {
   "name": "@ave/plugin-__PLUGIN_NAME__",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Ave extension — __DESCRIPTION__",
   "type": "module",
   "main": "dist/index.cjs",
