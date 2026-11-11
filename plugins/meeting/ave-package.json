@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "meeting",
-  "version": "0.10.3",
-  "minAppVersion": "0.14.2",
+  "version": "0.10.4",
+  "minAppVersion": "0.15.0",
   "hostProtocol": "5",
   "displayName": "Ave Meeting",
   "description": "회의 녹음, 전사, 준비 및 요약. 사용자 또는 에이전트가 시작한 회의록은 로컬에 저장됩니다.",
@@ -31,16 +31,16 @@
         ]
       },
       "requires": {
-        "minAppVersion": "0.14.2",
+        "minAppVersion": "0.15.0",
         "hostProtocol": "5"
       }
     },
     "artifact": {
       "release": {
         "repo": "ken-jo/agent-marketplace",
-        "tag": "meeting-v0.10.3",
-        "asset": "meeting-0.10.3.zip",
-        "sha256": "3234eed207be8698c08166377163603cbe451f125f1dff7be1dd9a932caec159"
+        "tag": "meeting-v0.10.4",
+        "asset": "meeting-0.10.4.zip",
+        "sha256": "bbc756c8f374c397c5df8ef2325543d048e586fadfed929d342dea772895d6a5"
       }
     }
   }
