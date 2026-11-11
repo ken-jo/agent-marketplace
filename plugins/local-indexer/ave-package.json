@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "local-indexer",
-  "version": "0.8.1",
-  "minAppVersion": "0.14.2",
+  "version": "0.8.2",
+  "minAppVersion": "0.15.0",
   "hostProtocol": "5",
   "displayName": "Ave Local Indexer",
   "description": "Local Indexer 문서 파일 자동 인덱싱 및 문서 검색 익스텐션. 폴더 감시(chokidar), PDF/Markdown 파싱, 한국어 형태소 분석(kiwi), FTS5 기반 검색. 인덱스 위치: 색인 워커 전용 상태 디렉터리(또는 사용자가 지정한 인덱스 저장 경로)",
@@ -35,7 +35,7 @@
       },
       "requires": {
         "hostProtocol": "5",
-        "minAppVersion": "0.14.2"
+        "minAppVersion": "0.15.0"
       },
       "sandbox": {
         "read": [
@@ -71,9 +71,9 @@
     "artifact": {
       "release": {
         "repo": "ken-jo/agent-marketplace",
-        "tag": "local-indexer-v0.8.1",
-        "asset": "local-indexer-0.8.1.zip",
-        "sha256": "fec38ffd613adc40e72f2d6a439579e018703612c5a441f611d5b403cd393a6a"
+        "tag": "local-indexer-v0.8.2",
+        "asset": "local-indexer-0.8.2.zip",
+        "sha256": "f5f920ae1ebcd661eba411f0bd8ac6033e82a44135a1b08c0343e902e626f620"
       }
     }
   }
