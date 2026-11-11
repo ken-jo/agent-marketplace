@@ -57,6 +57,13 @@ test("sync reads and builds the requested commit or tag independently of HEAD an
     assert.equal(sources.ref, "test-release");
     assert.equal(sources.commit, ref);
     assert.equal(run("check").status, 0);
+    writeFileSync(join(tools, "ave-release.json"), JSON.stringify({ ref: "test-release" }));
+    const configured = run("sync", "--app", app);
+    assert.equal(configured.status, 0, configured.stderr);
+    assert.equal(run("check").status, 0);
+    writeFileSync(join(tools, "ave-release.json"), JSON.stringify({ ref: "different-release" }));
+    assert.match(run("check").stderr, /ref differs from tools\/ave-release\.json/u);
+    rmSync(join(tools, "ave-release.json"));
     assert.notEqual(run("sync", "--ref", "missing-tag", "--app", app).status, 0);
     git("rm", "-q", "src/marketplace/repository-check.ts");
     git("commit", "-qm", "Remove checker");

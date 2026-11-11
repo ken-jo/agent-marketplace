@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.4] - Unreleased
+
+Require Ave 0.15.0, the first released app with host protocol 5. The existing published descriptor remains pinned until this version has a release asset.
+
 ## [0.10.3] - Unreleased
 
 - Reserve enough initial dock height for the MCP App frame and recorder controls.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "meeting",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "회의 녹음, 전사, 준비 및 요약. 사용자 또는 에이전트가 시작한 회의록은 로컬에 저장됩니다.",
   "extensions": {
     "ai.agent-connector.ave": {
@@ -1618,7 +1618,7 @@
         }
       },
       "requires": {
-        "minAppVersion": "0.14.2",
+        "minAppVersion": "0.15.0",
         "hostProtocol": "5"
       },
       "alerts": {

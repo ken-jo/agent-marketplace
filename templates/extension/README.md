@@ -83,6 +83,6 @@ node tools/vendor.mjs sync --ref <40-hex-commit-or-tag> --app <Ave-checkout>
 node tools/vendor.mjs check
 ```
 
-See [Ave contract](../../README.md#ave-contract) for provenance and build behavior. Declare `requires.hostProtocol: "5"`. Set `minAppVersion` to at least the first released app that supports every contract member you use; the template currently uses 0.14.2 to match the pinned source build. Confirm the first supporting release version before publishing.
+See [Ave contract](../../README.md#ave-contract) for provenance and build behavior. Declare `requires.hostProtocol: "5"` and `minAppVersion: "0.15.0"`, the first released app with protocol 5. Raise the app floor if you use a later contract member.
 
 The validation workflow checks every extension and this template. Protocol changes and their extension migrations land through `integration/protocol5`; integration merges to main once the complete validation is green.

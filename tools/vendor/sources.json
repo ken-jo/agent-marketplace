@@ -1,7 +1,7 @@
 {
   "repository": "ken-jo/ave",
-  "ref": "671a25a54abc2b2105563d13d4ade63267bc71fe",
-  "commit": "671a25a54abc2b2105563d13d4ade63267bc71fe",
+  "ref": "7bf3a7606e0da1309e2cb71c61349bc791f6c4a8",
+  "commit": "7bf3a7606e0da1309e2cb71c61349bc791f6c4a8",
   "files": {
     "agent-plugin-components.js": {
       "build": {

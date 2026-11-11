@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.1] - Unreleased
+
+Require Ave 0.15.0, the first released app with host protocol 5. The existing published descriptor remains pinned until this version has a release asset.
+
 ## [0.4.0] - Unreleased
 
 Serve the sidebar as self-contained MCP Apps HTML and call hello_world through the standard App SDK. Require host protocol 5 and Ave 0.14.2.

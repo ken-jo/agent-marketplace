@@ -497,16 +497,19 @@ describe("repository check", () => {
     assert.doesNotMatch(r.tool("check.mjs").stderr, /hostProtocol/u);
   });
 
-  it("requires protocol 5 from Ave 0.14.2", () => {
+  it("requires protocol 5 from Ave 0.15.0 and rejects the premature source floor", () => {
     const { r } = published();
     const manifestPath = "plugins/alpha/source/plugin.json";
     const manifest = JSON.parse(readFileSync(join(r.root, manifestPath), "utf8"));
-    manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.14.2", hostProtocol: "3" };
+    manifest.extensions["ai.agent-connector.ave"].requires = { minAppVersion: "0.15.0", hostProtocol: "3" };
     r.write(manifestPath, manifest);
-    assert.match(r.tool("check.mjs").stderr, /requires\.hostProtocol must be 5 for minAppVersion 0\.14\.2/u);
+    assert.match(r.tool("check.mjs").stderr, /requires\.hostProtocol must be 5 for minAppVersion 0\.15\.0/u);
     manifest.extensions["ai.agent-connector.ave"].requires.hostProtocol = "5";
     r.write(manifestPath, manifest);
     assert.doesNotMatch(r.tool("check.mjs").stderr, /hostProtocol/u);
+    manifest.extensions["ai.agent-connector.ave"].requires.minAppVersion = "0.14.2";
+    r.write(manifestPath, manifest);
+    assert.match(r.tool("check.mjs").stderr, /protocol-5 sources require minAppVersion 0\.15\.0/u);
   });
 
   it("fails when the base commit is not in the clone instead of skipping the comparison", () => {
