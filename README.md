@@ -26,7 +26,7 @@ An indexed version absent from the published base can be corrected without chang
 
 ## Ave contract
 
-Ave 0.15.0 is the first protocol-5 app release. The release input is [`tools/ave-release.json`](tools/ave-release.json); both `sources.json` files are generated provenance. Until the app is tagged, it pins the reviewed Ave main commit. After tagging, change that file's `ref` to the v0.15.0 tag commit and regenerate from a local Ave checkout:
+Ave 0.15.0 is the first protocol-5 app release. The release input is [`tools/ave-release.json`](tools/ave-release.json), pinned to the annotated `v0.15.0` tag; both `sources.json` files are generated provenance and record its resolved commit. Regenerate from a local Ave checkout that has the tag:
 
 ```sh
 node tools/vendor.mjs sync --app <Ave-checkout>
@@ -71,7 +71,7 @@ See [Connector wave 1](docs/connectors-wave1.md) for connector setup and checks.
 
 Publishing is owner-operated. A merge to `main` publishes catalog changes. Review, git history checks and Ave's permission review protect installs and updates.
 
-For Ave 0.15.0, publish the app first, repoint the [release pin](tools/ave-release.json) to its tag commit and regenerate the contract/checker, then release hello-world 0.4.1, local-indexer 0.8.2 and meeting 0.10.4. Their new sources require Ave 0.15.0 and protocol 5. Existing descriptors and catalog versions retain their immutable release assets and authority until the owner publishes those new assets and merges their generated pin PRs. The Korean language pack is withdrawn because Korean UI is built into Ave.
+Ave 0.15.0 is released and the [contract/checker pin](tools/ave-release.json) names its tag. After [preparation PR #13](https://github.com/ken-jo/agent-marketplace/pull/13) merges, `.github/workflows/release.yml` runs automatically for the extension source changes on `main`. It builds hello-world 0.4.1, local-indexer 0.8.2 and meeting 0.10.4 in parallel, publishes their `<name>-v<version>` tags and zip assets in name order, then opens one combined descriptor-pin PR. The workflow runs `validate.yml` on that PR's head. Review its checks and merge it with a merge commit to publish the new catalog versions. Existing descriptors and catalog versions retain their immutable release assets and authority until that pin PR merges. PR #13 withdraws the Korean language pack when it merges because Korean UI is built into Ave.
 
 For an extension release, raise its `plugin.json` and `package.json` versions together and keep descriptor authority consistent with its manifest. The owner runs the release workflow, which builds and tests with read-only permissions, then creates the release in a separate job and opens a pull request pinning its asset. Merging that pull request publishes the version. Merge commits preserve catalog history.
 
