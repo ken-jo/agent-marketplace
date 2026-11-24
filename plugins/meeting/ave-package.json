@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "meeting",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "minAppVersion": "0.15.0",
   "hostProtocol": "5",
   "displayName": "Ave Meeting",
@@ -11,7 +11,9 @@
     "authority": {
       "capabilities": [
         "meeting-recorder",
-        "external-auth-consumer"
+        "external-auth-consumer",
+        "background:call-llm",
+        "background:spawn-worker"
       ],
       "networkAccess": {
         "allowedDomains": [
@@ -38,9 +40,9 @@
     "artifact": {
       "release": {
         "repo": "ken-jo/agent-marketplace",
-        "tag": "meeting-v0.10.4",
-        "asset": "meeting-0.10.4.zip",
-        "sha256": "bbc756c8f374c397c5df8ef2325543d048e586fadfed929d342dea772895d6a5"
+        "tag": "meeting-v0.10.5",
+        "asset": "meeting-0.10.5.zip",
+        "sha256": "c2aa75c6249aa421a1246cd9edd49ed008a6f09378845dbc1cce86a899206094"
       }
     }
   }
