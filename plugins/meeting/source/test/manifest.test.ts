@@ -46,6 +46,7 @@ type Manifest = {
   eventSubscriptions?: Array<string | { type: string }>;
   configInherits?: Array<{ pluginId: string; to: string; value: unknown }>;
   alerts?: { kinds?: Array<{ id: string; inherits?: Array<{ pluginId: string }> }> };
+  capabilities?: string[];
 };
 
 describe("plugin.json manifest", () => {
@@ -56,6 +57,14 @@ describe("plugin.json manifest", () => {
   const toolByName = new Map(tools.map((t) => [t.name, t]));
   const uiActions = tools.filter((t) => t._meta?.ui?.visibility?.includes("app")).map((t) => t.name);
   const llmTools = tools.filter((t) => t._meta?.ui?.visibility?.includes("model")).map((t) => t.name);
+
+  it("declares exactly the background effects it runs outside a tool call", () => {
+    // Ave refuses an undeclared callLlm/spawnWorker that carries no tool-call
+    // token. Live-capture intermediate summaries and the shutdown final summary
+    // call the model; the post-publish FFmpeg runtime check starts workers.
+    const background = (manifest.capabilities ?? []).filter((c) => c.startsWith("background:")).sort();
+    expect(background).toEqual(["background:call-llm", "background:spawn-worker"]);
+  });
 
   it("does not revive retired keyword-to-tool dispatch", () => {
     expect(manifest).not.toHaveProperty("keywords");

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.10.5] - Unreleased
+
+Declare the two effects the extension runs outside a tool call, so Ave can ask for them once when the extension is enabled instead of refusing them. `background:call-llm` covers the intermediate summaries made while a live recording streams audio, and the final summary written when the extension shuts down with a recording still open. `background:spawn-worker` covers the FFmpeg runtime check and install that starts once the extension is published.
+
 ## [0.10.4] - Unreleased
 
 Require Ave 0.15.0, the first released app with host protocol 5. The existing published descriptor remains pinned until this version has a release asset.

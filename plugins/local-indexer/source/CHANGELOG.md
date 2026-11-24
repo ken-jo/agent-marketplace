@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.3] - Unreleased
+
+Declare `background:spawn-worker`, so Ave can ask once when the extension is enabled for the indexing worker it starts after publication, outside any tool call, instead of refusing it. The extension makes no background model call and declares none.
+
 ## [0.8.2] - Unreleased
 
 Require Ave 0.15.0, the first released app with host protocol 5. The existing published descriptor remains pinned until this version has a release asset.
