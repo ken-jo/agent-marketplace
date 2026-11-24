@@ -553,6 +553,13 @@ describe("manifest contract — runtime/startup hardening", () => {
     expect(manifest.capabilities).toContain("knowledge-index");
   });
 
+  it("declares exactly the background effects it runs outside a tool call", () => {
+    // Ave refuses an undeclared spawnWorker that carries no tool-call token;
+    // onPublished starts the indexing worker. No background callLlm exists.
+    const background = (manifest.capabilities as string[]).filter((c) => c.startsWith("background:")).sort();
+    expect(background).toEqual(["background:spawn-worker"]);
+  });
+
   it("secret-typed config fields keep format: 'secret'", () => {
     const cfg = manifest.configSchema.properties;
     expect(cfg.embeddingApiKey.format).toBe("secret");
