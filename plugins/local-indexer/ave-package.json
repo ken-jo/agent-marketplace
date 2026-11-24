@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "kind": "plugin",
   "name": "local-indexer",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "minAppVersion": "0.15.0",
   "hostProtocol": "5",
   "displayName": "Ave Local Indexer",
@@ -14,7 +14,8 @@
         "document-indexer",
         "external-auth-consumer",
         "host:overlay",
-        "lifecycle-observer"
+        "lifecycle-observer",
+        "background:spawn-worker"
       ],
       "networkAccess": {
         "allowedDomains": [
@@ -71,9 +72,9 @@
     "artifact": {
       "release": {
         "repo": "ken-jo/agent-marketplace",
-        "tag": "local-indexer-v0.8.2",
-        "asset": "local-indexer-0.8.2.zip",
-        "sha256": "f5f920ae1ebcd661eba411f0bd8ac6033e82a44135a1b08c0343e902e626f620"
+        "tag": "local-indexer-v0.8.3",
+        "asset": "local-indexer-0.8.3.zip",
+        "sha256": "fcf41a4cb84b9d907ab0fe2ac96c4102a4408e8aad67df788184b75eaea60e2f"
       }
     }
   }
